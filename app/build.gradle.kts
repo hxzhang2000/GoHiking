@@ -44,7 +44,7 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix = ".debug" // 包名变化 → 高德 Key 必须单独申请 debug Key（DEV §7.1.1 末注）
+            // 不加 applicationIdSuffix：debug/release 共用 com.gohiking.app，高德单 Key 双 SHA1 生效（用户 2026-09-20 决策）
             isMinifyEnabled = false
             manifestPlaceholders["AMAP_KEY"] = localProps.getProperty("AMAP_KEY_DEBUG").orEmpty()
         }

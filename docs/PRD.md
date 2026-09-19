@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 | --- | --- |
 | 产品名称 | 去爬山（GoHiking） |
-| 文档版本 | v1.14 |
+| 文档版本 | v1.15 |
 | 文档状态 | 已评审（Review Complete） |
 | 最后更新 | 2026-09-19 |
 | 代码仓库 | https://github.com/hxzhang2000/GoHiking |
@@ -180,7 +180,7 @@
 **Key 申请与配置要求**：
 
 - 在高德开放平台创建应用，为 Android 平台申请 Key
-- 绑定项：**应用包名** + **SHA1 签名指纹**（Debug 与 Release 各申请一个 Key）
+- 绑定项：**应用包名** + **SHA1 签名指纹**。debug 与 release 变体**共用包名** `com.gohiking.app`（debug 不加 `.debug` 后缀）；**一个 Key 可同时绑定 Debug 与 Release 两个 keystore 的 SHA1**（单 Key 方案，2026-09-20 用户决策），也可选择申请两个 Key 分别绑定——无论哪种方案，Key 绑定的包名必须与变体 `applicationId` 一致，否则地图空白
 - Key 通过 `AndroidManifest.xml` 的 `<meta-data android:name="com.amap.api.v2.apikey">` 注入
 - **开源注意**：仓库中**不得提交真实 Key**。做法：Key 写入 `local.properties` 或 `keystore.properties`（已在 `.gitignore` 中排除），通过 Gradle `manifestPlaceholders` 注入；仓库只保留 `local.properties.example` 模板
 - 隐私合规：必须在**用户同意隐私政策之后**再调用 `AMapLocationClient.updatePrivacyShow/updatePrivacyAgree`，否则 SDK 不工作
@@ -2316,3 +2316,4 @@ Android Studio 内置伪语言环境，用来**自动发现硬编码文案和布
 | v1.12 | 2026-09-19 | — | **只澄清技术背景，需求条数 269 条不变、无需求增减**：6.2.2 的「生成策略待实测裁定」在 **API 层已经查清**——① 算路 SDK V2 的 `RouteSearchV2.AlternativeRoute.ALTERNATIVE_ROUTE_ONE/TWO/THREE` + `setAlternativeRoute(int)`（已从字节码确认）；② V1 的 `RouteSearch.WALK_MULTI_PATH`（已确认，两个构造签名都在）；③ 步行 Web API **v5** 的 `alternative_route`（官方文档明确列出；**v3 没有**）。同时确认导航 SDK 的 `TravelStrategy.SINGLE/MULTIPLE` 与 `getNaviPaths()` 存在。**故本节原「单次只返回一条」的断言正式作废，「构造垂直偏移途经点」由主策略降为兜底**。仍未闭环的只剩「山区实跑能否返回 3 条差异明显的方案」，须真机实测（`docs/DEV-DESIGN.md` §9.2.2）。 |
 | v1.13 | 2026-09-19 | — | **新增 1 条需求：`F-PLAN-46`（计划线路的爬升 / 最高海拔必须标注「估算」），总数 269 → 270**（P0 131 不变 / P1 121→122 / P2 17 不变）。<br>**背景**：`docs/DEV-DESIGN.md` §9.2.1 T-07 在 PC 端实测高程服务时发现——公开 DEM 在陡峭山峰**系统性低估**海拔（泰山玉皇顶 1532.7 m 实测 vs SRTM 报 1479 m，黄山光明顶 1860 m vs 1725 m，偏差 54~135 m），属**偏差而非随机误差**。6.1「高程数据来源」与 6.2.3 原文只在**说明性文字**里写了「必须标注估算」，**没有可追溯、可验收的需求编号**，因此本条把它提升为正式需求（并在 6.2.3 补「需求」表、6.1 与该处说明互相指向）。<br>**归口**：6.2.3「线路评估指标」。同步更新附录数量（F-PLAN 41→42）与里程碑 M2 的验收条目。<br>**对应 DEV-DESIGN v1.5**：登记项 D-12（原误编为重复的 D-10，已订正）。 |
 | v1.14 | 2026-09-19 | — | **按《文档审阅报告-2026-09-19.md》修订（H-5 / H-6 / H-7 + P1~P32 + X3/X4/X5 的 PRD 侧），需求总数 270 条不变；优先级 P1 122→123、P2 17→16（`F-I18N-52` 由 P2 提为 P1，因 `F-HIS-35` 的公式版本写入依赖它）**。<br>**H-5**：7.1 `media_ref` 补 `fileName` / `note` 列、`planned_route` 补 `source` 列、`trip` 补 `avgPaceSecPerKm` 列（对应 DEV-DESIGN v1.7 §9.3 D-13），导出 JSON 的这三个字段不再缺库内来源。<br>**H-6**：里程碑补漏——M1 补登顶点 / 上下山分界 / 手动打点（`F-REC-30~33`、`36/37`、`40~42`）与详情页 P0（`F-HIS-26/27/30/33/34`）；M3 导入补 `F-IO-36/37`；M4 补 `F-MEDIA-43`；§11 增兜底规则「功能域内未列出的 P0 默认归属对应里程碑」。<br>**H-7**：`F-ALERT-29` 由「计入本次记录的爬升/下降统计」改为「**不参与统计累加**」，消除与双累加器口径（6.5.2）的重复累计冲突。<br>**示例与口径**：7.3 示例 `avgSpeedMps` 0.89→0.478、`avgPaceSecPerKm` 1125→2093（按「距离÷运动时长」重算，两值联动）；`segments[].pointCount` 不再与时长同值；P-11 示意时长对齐示例 JSON（3h17m→5h30m、1h46m→2h46m、1h34m→2h34m）；导出补 `hasBarometer` 可选字段；字段说明补 `legs[].durationSec` 口径、`byAltitudeGain.paceSecPerKm` 与空值约定（步数 `-1` 哨兵 vs 派生值 `null`）；卡路里 MET「段」定义（每 100 m 运动距离窗口）；新增计划线路单文件导出 schema（`F-PLAN-43` 落地）。<br>**需求措辞与口径**：6.2.7 验收改「首条候选 ≤3s 上屏 + 3 条候选或降级说明」并补 `F-PLAN-46` 估算验收项，9.1 同步；`F-IO-02` 补两处入口（设置页按钮 v1.0 / 列表多选 P2），设置页三个导出按钮补编号；`F-IO-06` 文件名消毒、`F-IO-12` 去「打开所在文件夹」、`F-IO-09` 可选包含清单补全；`F-MEDIA-09` 增量比对、`F-MEDIA-23` 离线降级；`F-REC-08` 默认命名来源、`F-REC-02` 可跳过、`F-REC-10` 静止判据、6.3.1 补 STOPPED 被杀恢复语义；`F-ALERT-22` 降级行为归口 `F-REC-63`、`F-ALERT-41` 去 v1.1 承诺；`F-PLAN-36` 去程实线 / 返程虚线、难度边界值严格不等号；术语表 Segment 补信号丢失切分；9.2 后台耗电量化（≤ 前台 60%）、9.4 记录页锁定竖屏；3.1 语言切换优先级口径、3.2 偏航报警口径并将无障碍深度适配写入非目标；1.6 竞品表补查证日期；4.3 / 7.2.1「固定偏移」改「非线性偏移（实测 40.9~686.3 m）」；P-01 补隐私政策同意并改媒体权限为按页申请（X5 / P5）；P-17 补超大文件确认（`F-IO-64`）。P33（同色冲突）与 X9（两处待确认项）按报告建议留待产品确认，本版不改；另按修订后回归检查补齐 §11 对 i18n 域 P0（`F-I18N-01、04~07`、`F-I18N-22`、`F-I18N-31`）的里程碑引用（M0 补字符串资源基线、M3 补地图标注与 TTS 文案项）。 |
+| v1.15 | 2026-09-20 | — | **高德 Key 采用单 Key 双 SHA1 方案（用户决策），需求总数 270 条不变、无需求增减**：4.2 原「Debug 与 Release 各申请一个 Key」改为——debug 与 release 变体**共用包名** `com.gohiking.app`（debug 不加 `.debug` 后缀），**一个 Key 可同时绑定 Debug 与 Release 两个 keystore 的 SHA1**（也可选择两 Key 分别绑定，但 Key 绑定包名必须与变体 `applicationId` 一致，否则地图空白）。实现侧同步：DEV-DESIGN §1.4 / §7.1.1 去 `applicationIdSuffix`、§9.3 D-10 登记项废弃。已知代价：同设备 debug 与 release 不能共存（包名相同互相覆盖安装）。 |

@@ -167,8 +167,8 @@ hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 
 | 项 | debug | release |
 | --- | --- | --- |
-| `applicationIdSuffix` | `.debug` | 无 |
-| 高德 Key | `AMAP_KEY_DEBUG` | `AMAP_KEY_RELEASE` |
+| `applicationIdSuffix` | **无（2026-09-20 起）**：与 release 共用包名 `com.gohiking.app`，配合高德单 Key 双 SHA1 | 无 |
+| 高德 Key | `AMAP_KEY_DEBUG` | `AMAP_KEY_RELEASE`（单 Key 方案下与 debug 同值） |
 | 签名 | debug keystore | release keystore（`keystore.properties`） |
 | minify | 关 | 开（R8），保留高德与 serialization 规则 |
 | Timber | 开 | 关 |
@@ -1622,7 +1622,8 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix = ".debug"
+            // 2026-09-20 起：不加 applicationIdSuffix，debug/release 共用包名 com.gohiking.app，
+            // 高德单 Key 同时绑定 Debug/Release 两个 SHA1 即可（PRD 4.2 已同步）。
             isMinifyEnabled = false
             manifestPlaceholders["AMAP_KEY"] = localProps.getProperty("AMAP_KEY_DEBUG").orEmpty()
         }
@@ -2169,7 +2170,7 @@ build/
 | D-07 | `RecordingSession` 单一可变状态源架构 | 避免 Service / ViewModel / 通知各自维护计时器与距离 | 架构补充 |
 | D-08 | 高德定位主 / Fused 备的自动切换（30 秒无回调） | PRD 4.1 提到二者，但未定义切换策略 | 实现补充 |
 | D-09 | 候选线路的偏移量公式与串行请求策略 | PRD 6.2.2 只给思路 | 实现补充（**已降级为兜底策略**，见 §4.8.1） |
-| D-10 | debug 变体 `applicationIdSuffix` 与独立 debug Key | PRD 4.2 说「Debug/Release 各一个 Key」但未说明原因 | 澄清 |
+| ~~D-10~~ | ~~debug 变体 `applicationIdSuffix` 与独立 debug Key~~ | **已废弃（2026-09-20）**：改为单 Key 方案——debug 不加 `.debug` 后缀，debug/release 共用 `com.gohiking.app`，一个 Key 绑定双 SHA1（见 §7.1.1 末注） | — |
 | D-11 | `gohiking://debug/pXX` 直达深链（debug-only） | 便于对照 `prototype/` 与真机做回归（原型已有 `#pXX`） | 开发效率补充 |
 | D-12 | **线路爬升评估标注为「估算」**：DEM 在陡峭山峰**系统性低估**海拔（实测泰山玉皇顶低 54 m、黄山光明顶低 135 m，是偏差不是随机误差），评估值只用于**候选之间排序**，不作为绝对值展示 | 实测发现（`tools/m0-verify/12_elevation_services.py`）；PRD 6.1 只写了「不可用时显示『—』」，**没写「可用但数值偏低」时怎么办** | **✅ 已落地 PRD**：`F-PLAN-46`（PRD v1.13 新增，P1） |
 
