@@ -87,8 +87,12 @@ private fun MapVerifyScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // 同意已在 Root 中先于 MapView 创建执行（MapsInitializer 的隐私接口要求早于地图创建调用）
+    // 隐私合规必须【早于 MapView 创建】调用（3D SDK ≥8.1.0 强制，否则白屏不渲染瓦片）。
+    // 放在 remember 里恰好保证：①先于地图创建；②进程内只调一次；③rememberSaveable 记住同意状态的
+    // 二次启动也覆盖（此时不走弹窗，但「已同意」状态成立，红线只要求同意后调用）。
     val mapView = remember {
+        MapsInitializer.updatePrivacyShow(context, true, true)
+        MapsInitializer.updatePrivacyAgree(context, true)
         MapView(context).apply {
             onCreate(null)
             map.uiSettings.isZoomControlsEnabled = true

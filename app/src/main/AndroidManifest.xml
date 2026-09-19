@@ -2,9 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- 网络（地图瓦片 / 规划 / 高程 API） -->
+    <!-- 网络（地图瓦片 / 规划 / 高程 API）；ACCESS_WIFI_STATE 为高德 SDK 要求（3dmap 10.x 为 jar，权限需 App 自声明） -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
     <!-- 定位（PRD 10 权限清单） -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
