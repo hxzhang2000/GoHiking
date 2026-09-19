@@ -28,4 +28,6 @@ dependencies {
     implementation(libs.amap.location) // 高德定位为主；Fused 备源在 M1 引入
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.javax.inject)
+
+    testImplementation(libs.junit4)
 }
