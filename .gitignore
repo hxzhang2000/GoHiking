@@ -1,0 +1,50 @@
+# ============================================================
+#  去爬山 GoHiking · .gitignore
+#  说明见 docs/DEV-DESIGN.md §7.6
+# ============================================================
+
+# ---------- Android / Gradle ----------
+*.iml
+.gradle/
+build/
+/captures/
+.externalNativeBuild
+.cxx/
+app/release/
+local.properties
+keystore.properties
+*.jks
+*.keystore
+
+# ---------- 高德 SDK（重要，先读注释再动）----------
+# ⚠ 不要在这里无脑排除 app/libs/*.aar。
+#    若采用「下载 aar 放 app/libs」的引入方式（见 DEV-DESIGN §1.3 的 T-01），
+#    一旦排除，新克隆的仓库与 CI 会【直接编译不过】。
+#    二选一（见 DEV-DESIGN §9.5-A4）：
+#      (a) 确认可用 Maven 坐标引入 → 放开下面这行
+#      (b) 保留 aar 且确认可分发性   → 提交进仓库，保持下面这行被注释
+#    若 aar 既不可再分发、又没有 Maven 坐标，必须提供下载脚本或明确的文档指引。
+# app/libs/*.aar
+
+# ---------- IDE / 系统 ----------
+.idea/
+.DS_Store
+Thumbs.db
+
+# ---------- 临时与工具产物 ----------
+.tmp/
+.dumate/
+.ruff_cache/
+__pycache__/
+*.pyc
+# 本机构建调试日志（gradlew 后台跑的 Out-File 输出）
+build_*.log
+build_*_result.txt
+diag.txt
+
+# ---------- AI 助手工作区 ----------
+# 若希望把设计过程与修订历史一并开源，删掉下面两行。
+# 记忆文件的**唯一写入位置**是 .workbuddy/memory/（2026-09-19 起）；
+# .workbuddy-ai/ 是合并前的只读归档，保留忽略只为防误提交。
+.workbuddy/
+.workbuddy-ai/

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GoHiking 产品文档整体评审报告</title>
+<style>
+  :root {
+    --primary: #2F80ED; --track: #E24B4A; --text: #1F2328; --text-2: #57606A;
+    --line: #D8DEE4; --bg: #F6F8FA; --ok: #1A7F37; --warn: #9A6700; --danger: #CF222E;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.7 "PingFang SC","Microsoft YaHei",-apple-system,sans-serif; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 32px 24px 64px; }
+  header { background: linear-gradient(135deg,#1B4F9C,#2F80ED); color: #fff; border-radius: 16px; padding: 26px 30px; margin-bottom: 24px; }
+  header h1 { margin: 0 0 6px; font-size: 24px; }
+  header .sub { opacity: .92; font-size: 13px; }
+  .meta { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 10px; margin-top: 18px; }
+  .meta div { background: rgba(255,255,255,.14); border-radius: 10px; padding: 10px 14px; font-size: 12.5px; }
+  .meta b { display: block; font-size: 11.5px; opacity: .85; font-weight: 600; margin-bottom: 2px; }
+  h2 { font-size: 18px; margin: 34px 0 12px; padding-bottom: 8px; border-bottom: 2px solid var(--line); }
+  h3 { font-size: 15px; margin: 22px 0 8px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin-bottom: 14px; }
+  .verdict { display: flex; gap: 10px; align-items: center; font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+  .pass { color: var(--ok); } .warn { color: var(--warn); }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+  .b-pass { background: #DDF4E4; color: var(--ok); }
+  .b-fix { background: #FFF1E5; color: var(--warn); }
+  .b-open { background: #FFEBE9; color: var(--danger); }
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; font-size: 13px; }
+  th { background: #F0F3F6; text-align: left; padding: 10px 12px; font-size: 12.5px; }
+  td { border-top: 1px solid var(--line); padding: 10px 12px; vertical-align: top; }
+  .lvl { font-weight: 700; white-space: nowrap; }
+  .lvl-p0 { color: var(--danger); } .lvl-p1 { color: var(--warn); } .lvl-p2 { color: var(--text-2); }
+  code { background: #EFF3F6; border: 1px solid #E1E6EB; border-radius: 5px; padding: 1px 6px; font-size: 12px; font-family: Consolas,Menlo,monospace; }
+  ul { margin: 6px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 6px; font-weight: 600; margin-right: 4px; }
+  .tag-done { background: #DDF4E4; color: var(--ok); }
+  .tag-doc { background: #DDF4FF; color: #0550AE; }
+  .tag-code { background: #F0F3F6; color: #57606A; }
+  .foot { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--text-2); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>去爬山 GoHiking — 产品文档整体评审报告</h1>
+  <div class="sub">四维度评审：功能完善性 · 描述准确性 · UI 合理性 · 操作流程完备性</div>
+  <div class="meta">
+    <div><b>评审日期</b>2026-09-19</div>
+    <div><b>评审对象</b>PRD v1.7 · FEASIBILITY v1.0 · prototype 三件套</div>
+    <div><b>评审后版本</b>PRD <b>v1.8</b> · FEASIBILITY <b>v1.1</b> · prototype 同日修订</div>
+    <div><b>评审人</b>DuMate（AI 审阅 + 原型交叉核对）</div>
+  </div>
+</header>
+
+<div class="card">
+  <div class="verdict pass">总体结论：评审通过，可作为 v1.0 开发基线</div>
+  <p>PRD <b>v1.8</b> 需求编号 257 条自洽（P0 127 / P1 113 / P2 17），与 <code>FEASIBILITY-TERRAIN.md</code> v1.1、原型 <code>prototype/</code>（index.html 95 行 / styles.css 573 行 / app.js 1575 行）逐项交叉核对：页面编号 P-01~P-18 与 PRD 8.1 一一对应，8.4 视觉规范与原型 CSS token 完全吻合，核心业务逻辑均已复现。</p>
+  <p>本轮评审新发现问题 <b>6 项</b>（P2 ×5、P3 ×1），其中 5 项已在评审当场修复（代码 4 项 + 文档 2 处口径），1 项（P2）属 P-14 设置页交互反馈缺失，已修复；遗留低风险 1 项。<span class="badge b-pass">通过</span></p>
+</div>
+
+<h2>一、维度一：产品功能完善性</h2>
+<div class="card">
+  <div class="verdict pass"><span class="badge b-pass">通过</span>&nbsp;九大功能域覆盖完整，无缺页</div>
+  <ul>
+    <li><b>功能域齐全</b>：F-MAP 8 条 / F-PLAN 41 / F-REC 43（含已废弃占位）/ F-MEDIA 31 / F-HIS 23 / F-ALERT 33 / F-SET 5 / F-IO 47 / F-I18N 26，合计 257 条，编号不连续系废弃占位刻意保留，与 v1.1~v1.7 修订历史吻合。</li>
+    <li><b>生命周期闭环</b>：计划（选点 → 推荐/手动 → 保存）→ 执行（记录/提醒/打点）→ 复盘（详情/图表/照片）→ 管理（导入导出/设置）首尾贯通，导出与导入对称（F-IO 47 条在 v1.4 确立对称原则后无缺口）。</li>
+    <li><b>降级兜底完整</b>：无气压计五道防线、无计步传感器四级降级、DEM 三级降级、地图选点"永远可用"、导入单条失败隔离——高风险场景均有明确兜底。</li>
+    <li><b>原型覆盖度</b>：P-01~P-18 全部 18 页有对应页面；P-18 导入结果 38 成功 + 3 跳过 + 1 失败 = 42 ✓（上轮订正后自洽）；P-16 导出 42 记录 / 5 线路与 P-17 预览口径一致 ✓。</li>
+  </ul>
+</div>
+
+<h2>二、维度二：功能描述准确性</h2>
+<div class="card">
+  <div class="verdict warn"><span class="badge b-fix">有修订</span>&nbsp;本轮发现 6 处描述不一致，已全部处理</div>
+  <p><b>上轮 7 项订正复核：全部到位 ✓</b>（P-18 计数、P-13 标题 /14、去冗余三元、ALERT_DESCENT 可触发、里程碑需求锚点、性能表 ≤3s、FEASIBILITY 工时口径与过渡策略）。</p>
+  <p><b>本轮新发现：</b></p>
+  <ul>
+    <li><b>Q1（P2，已修复）</b>：P-16 导出进度未完成态硬编码英文 <code>'trips/ 28 of 42'</code>——未走 i18n 字典（违反 9.7 双语要求），且计数 28 与百分比 pct 不联动。已改为 <code>pct/100×42</code> 动态计数 + <code>t('p17_cnt_t')</code> 双语（中：28 / 42 运动记录；英：28 / 42 Trips）。</li>
+    <li><b>Q2（P2，已修复）</b>：FEASIBILITY 结论速览表「坡度着色 建议 v1.2」与第 6 节阶段二「v1.3 — 坡度着色」口径冲突。已在 v1.1 统一为「v1.3（如需可并入 v1.2）」，备注保留"与山体阴影共用 90% 代码"。</li>
+    <li><b>Q3（P2，已修复）</b>：P-11 海拔图表峰值点坐标与标注写死（<code>vals[41]</code>、944 m、'@ 5.5 km'），与记录 dist 动态值脱节——换一条行程较短的记录会出现标注错位。已改为动态计算峰值 <code>pk/pi</code>，横轴公里数随 <code>x.dist</code> 缩放。</li>
+    <li><b>Q4（P2，已修复）</b>：P-11 详情顶部地图固定渲染 4 类 marker，缺 ALERT_DESCENT（上轮已补模拟触发，但详情图未同步展示）。已补第 5 个打点展示。</li>
+    <li><b>Q5（P2，已修复）</b>：P-14 设置页 sel/num 类型项（定位模式/单位/地图样式/坐标系/GPX/冲突策略/两个阈值）点击无任何反馈——与全局「未接线 → toast 提示」策略不一致。已补 <code>data-act="nop"</code> + 指针样式。</li>
+    <li><b>Q6（P3，已修复）</b>：P-05 finishwp 三元两分支同值冗余。已清理。</li>
+  </ul>
+  <p><b>遗留低风险</b>：附录 F-I18N 26 条与 9.7.9 汇总表的手工逐条复核尚未做（上轮起遗留，不影响 v1.0 基线判定，建议开发期以 Lint 门禁覆盖）。</p>
+</div>
+
+<h2>三、维度三：UI 设计合理性</h2>
+<div class="card">
+  <div class="verdict pass"><span class="badge b-pass">通过</span>&nbsp;视觉规范与原型逐项吻合</div>
+  <ul>
+    <li><b>色板 token 一致</b>：原型 <code>:root</code> 变量与 PRD 8.4 完全对应——主色 <code>#2F80ED</code>（去程）/<code>#1B4F9C</code>（返程）/轨迹 <code>#E24B4A</code>/爬升提醒 <code>#639922</code>/下降提醒 <code>#EF9F27</code>；语义色（成功/警告/危险）与 tag 色系一致。</li>
+    <li><b>规格统一</b>：手机框架 393×852、状态栏/底部导航栏 56px、appbar 52px、圆角/间距 token 体系完整；两列按钮网格用 <code>minmax(0,1fr)</code> 防溢出，处理了中英文长文案挤压问题。</li>
+    <li><b>信息层级合理</b>：记录页大数字主指标 + 次级指标分层；设置页按「通用/提醒/记录/单位/地图/数据/关于」7 组分组；详情页 5 Tab（概览/海拔/分段/打点/照片）密度适中。</li>
+    <li><b>状态表达</b>：6 类打点图标（登顶旗/爬升/下降/距离/手动/WP）样式可区分；暂停遮罩、地图 WGS-84→GCJ-02 转换标注、无网络降级提示均有视觉呈现。</li>
+  </ul>
+</div>
+
+<h2>四、维度四：界面操作流程完备性</h2>
+<div class="card">
+  <div class="verdict pass"><span class="badge b-pass">通过</span>&nbsp;主流程闭环，关键逻辑复现</div>
+  <ul>
+    <li><b>主流程闭环</b>：P-01 权限 → P-02 首页 → 计划（P-03 选点 → P-04 推荐 / P-05 手动打点 → P-06 保存）→ P-07 列表；记录（P-08 → P-09 保存）→ P-10 列表 → P-11 详情；照片（P-12 地图 → P-13 查看器 → 底部 sheet）；设置（P-14 → P-15 关于 / P-16 导出 / P-17 导入预览 → P-18 结果），无断链。</li>
+    <li><b>核心逻辑复现</b>：阈值整数倍触发提醒（距离/爬升/下降各自独立计数）、语音开关与打点解耦、暂停时不计距离不计步（timer 中 paused 直接 return）、手动打点上限 50 有 toast、记录保存 desc 用真实累计值。</li>
+    <li><b>空态与兜底</b>：P-07/P-10 空列表均有引导；删除记录、取消导出带确认对话框；未接线按钮统一 toast「演示：原型中未接线」。</li>
+    <li><b>边界操作</b>：搜索无结果降级到点选（F-PLAN-09）、手动打点不足 2 点禁完成、交换起终点、语言实时切换均可用。</li>
+  </ul>
+</div>
+
+<h2>五、问题清单与处置状态</h2>
+<table>
+  <tr><th style="width:56px">编号</th><th style="width:52px">级别</th><th>问题描述</th><th style="width:76px">位置</th><th style="width:120px">处置</th></tr>
+  <tr><td><b>Q1</b></td><td class="lvl lvl-p2">P2</td><td>P-16 导出进度未完成态硬编码英文 'trips/ 28 of 42'，未走 i18n 且计数与百分比不联动</td><td>app.js P-16</td><td><span class="tag tag-done">已修复</span><br><span class="tag tag-code">代码</span></td></tr>
+  <tr><td><b>Q2</b></td><td class="lvl lvl-p2">P2</td><td>FEASIBILITY 坡度着色建议版本（v1.2）与阶段二（v1.3）口径冲突</td><td>FEASIBILITY §0</td><td><span class="tag tag-done">已修复</span><br><span class="tag tag-doc">文档 v1.1</span></td></tr>
+  <tr><td><b>Q3</b></td><td class="lvl lvl-p2">P2</td><td>P-11 海拔图表峰值点/最高海拔/横轴公里数写死，与记录 dist 不联动</td><td>app.js P-11 ch</td><td><span class="tag tag-done">已修复</span><br><span class="tag tag-code">代码</span></td></tr>
+  <tr><td><b>Q4</b></td><td class="lvl lvl-p2">P2</td><td>P-11 详情地图缺 ALERT_DESCENT 打点展示（模拟已支持但 UI 未同步）</td><td>app.js P-11</td><td><span class="tag tag-done">已修复</span><br><span class="tag tag-code">代码</span></td></tr>
+  <tr><td><b>Q5</b></td><td class="lvl lvl-p2">P2</td><td>P-14 设置页 sel/num 项点击无反馈，与全局「未接线 toast」策略不一致</td><td>app.js P-14</td><td><span class="tag tag-done">已修复</span><br><span class="tag tag-code">代码</span></td></tr>
+  <tr><td><b>Q6</b></td><td class="lvl lvl-p3">P3</td><td>P-05 finishwp 三元两分支同值冗余</td><td>app.js P-05</td><td><span class="tag tag-done">已修复</span><br><span class="tag tag-code">代码</span></td></tr>
+  <tr><td><b>Q7</b></td><td class="lvl lvl-p2">P2</td><td>附录 F-I18N 26 条与 9.7.9 汇总表逐条人工核对未完成（低风险遗留）</td><td>PRD 13 / 9.7.9</td><td><span class="tag tag-open">遗留</span><br>建议开发期以 Lint 门禁覆盖</td></tr>
+</table>
+
+<h2>六、本轮订正清单</h2>
+<table>
+  <tr><th style="width:180px">对象</th><th>订正内容</th></tr>
+  <tr><td>docs/PRD.md<br><b>v1.7 → v1.8</b></td><td>头部：文档状态「待评审」→「已评审」，最后更新保持 2026-09-19；文末修订记录追加 v1.8 条目（四维度评审结论 + 本轮订正摘要），确认作为 v1.0 开发基线</td></tr>
+  <tr><td>docs/FEASIBILITY-TERRAIN.md<br><b>v1.0 → v1.1</b></td><td>结论速览表坡度着色建议版本改为「v1.3（如需可并入 v1.2）」消除与阶段二口径冲突；文末新增「修订记录」区（该文档此前缺失）</td></tr>
+  <tr><td>prototype/app.js<br>（代码，不升版本）</td><td>9 处修订：P-16 双语进度计数、P-11 图表动态峰值与公里标注、P-11 详情图补 ALERT_DESCENT、P-14 设置项点击反馈 ×2、P-05 去冗余三元；<code>node --check</code> 通过</td></tr>
+</table>
+
+<div class="foot">本报告与源文档同目录存放。评审依据：docs/PRD.md（v1.8，2137 行）、docs/FEASIBILITY-TERRAIN.md（v1.1，344 行）、prototype/index.html + styles.css + app.js（2026-09-19 修订版）。</div>
+
+</div>
+</body>
+</html>

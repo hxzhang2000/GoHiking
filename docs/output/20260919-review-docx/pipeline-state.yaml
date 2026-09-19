@@ -1,0 +1,33 @@
+# Pipeline State - 文档审阅报告 md -> docx
+request_id: 20260919-review-docx
+created_at: "2026-09-19T19:56:00+08:00"
+current_stage: 2
+entry_type: beautify_only
+user_query_len: 27   # "针对以下文档，做完整的审阅"（后续按惯例出 Word 版）
+notes: "用户惯例：md 初稿完成后同目录出 docx。内容来源 = docs/文档审阅报告-2026-09-19.md"
+
+output_docx_path: "D:\\hxzhang\\MyGithubSoftware\\GoHiking\\docs\\文档审阅报告-2026-09-19.docx"
+output_docx_user_specified: true   # 按用户既有惯例（与 md 同目录同名），视为显式指定
+
+stage_2:
+  status: completed
+  completed_at: "2026-09-19T20:05:00+08:00"
+  content_doc_path: "D:\\hxzhang\\MyGithubSoftware\\GoHiking\\docs\\文档审阅报告-2026-09-19.md"
+  intermediate_dir: "D:\\hxzhang\\MyGithubSoftware\\GoHiking\\docs\\output\\20260919-review-docx\\stage2\\intermediate"
+  route: html
+  html_sub: template
+  genre: business-report
+  template_used: business-report
+  output_path: "stage2/formatted-文档审阅报告.html"
+  output_format: html
+  skills_invoked: [design-token, doc-typeset, html-review]
+  html_review_attempts: 1
+  fallback: false
+  fallback_reason: null
+
+stage_3:
+  status: in_progress
+  executor: doc-converter
+  input_format: html
+  html_output_path: "D:\\hxzhang\\MyGithubSoftware\\GoHiking\\docs\\output\\20260919-review-docx\\stage2\\formatted-文档审阅报告.html"
+  output_docx_path: "D:\\hxzhang\\MyGithubSoftware\\GoHiking\\docs\\文档审阅报告-2026-09-19.docx"

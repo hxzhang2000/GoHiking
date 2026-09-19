@@ -1,0 +1,8 @@
+# 复制本文件为 local.properties 并填入真实 Key（该文件已被 .gitignore 排除，不得提交）。
+# 高德开放平台 https://console.amap.com/dev/key/app：
+#   - Debug  Key 绑定：包名 com.gohiking.app.debug（debug 变体带 .debug 后缀！）+ Debug keystore SHA1
+#   - Release Key 绑定：包名 com.gohiking.app + Release keystore SHA1
+# 两个 Key 必须分开申请，否则 Debug 包地图空白（DEV-DESIGN §7.1.1 末注）。
+sdk.dir=C\:\\Users\\<你>\\AppData\\Local\\Android\\Sdk
+AMAP_KEY_DEBUG=你的debug key
+AMAP_KEY_RELEASE=你的release key

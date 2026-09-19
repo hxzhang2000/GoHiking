@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 简体中文。键集合必须与 values/strings.xml 完全一致（checkStringKeys 门禁，F-I18N-09）。 -->
+<resources>
+    <string name="app_name">去爬山</string>
+
+    <!-- 通用动作 common_action_* -->
+    <string name="common_action_confirm">确认</string>
+    <string name="common_action_cancel">取消</string>
+    <string name="common_action_save">保存</string>
+    <string name="common_action_delete">删除</string>
+    <string name="common_action_retry">重试</string>
+    <string name="common_action_close">关闭</string>
+
+    <!-- 底部导航 common_tab_* -->
+    <string name="common_tab_map">地图</string>
+    <string name="common_tab_plan">计划</string>
+    <string name="common_tab_history">记录</string>
+    <string name="common_tab_me">我的</string>
+
+    <!-- 通用占位 -->
+    <string name="common_stat_unknown">--</string>
+
+    <!-- 错误 error_*（必须可操作，PRD F-IO-34） -->
+    <string name="error_generic">出了点问题，请重试。</string>
+</resources>

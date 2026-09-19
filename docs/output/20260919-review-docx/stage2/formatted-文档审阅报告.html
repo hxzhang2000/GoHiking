@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="docx-page-size" content="A4">
+  <title>GoHiking 文档审阅报告</title>
+  <style>
+  @page { @bottom-center { content: counter(page); } }
+  @page cover { @bottom-center { content: none; } }
+  section[role="cover"] { page: cover; }
+
+  :root {
+    --typography-fontFamily-heading: 微软雅黑, Microsoft YaHei, PingFang SC;
+    --typography-fontFamily-body: 微软雅黑, Microsoft YaHei, PingFang SC;
+    --typography-fontFamily-bodyLatin: Calibri, Helvetica Neue, sans-serif;
+    --typography-fontFamily-code: Consolas, Source Code Pro, monospace;
+    --typography-fontSize-title: 28pt;
+    --typography-fontSize-subtitle: 18pt;
+    --typography-fontSize-h1: 20pt;
+    --typography-fontSize-coverTitle: 22pt;
+    --typography-fontSize-coverCategory: 14pt;
+    --typography-fontSize-sectionHeader: 13pt;
+    --typography-fontSize-h2: 11pt;
+    --typography-fontSize-h3: 10pt;
+    --typography-fontSize-body: 9pt;
+    --typography-fontSize-small: 8pt;
+    --typography-fontSize-tiny: 7pt;
+    --typography-lineHeight-title: 1.3;
+    --typography-lineHeight-body: 1.6;
+    --typography-fontWeight-heading: 600;
+    --typography-fontWeight-body: 400;
+    --typography-fontWeight-emphasis: 500;
+    --color-primary: #1565C0;
+    --color-secondary: #0288D1;
+    --color-accent: #00897B;
+    --color-text: #212121;
+    --color-textSecondary: #616161;
+    --color-heading: #1A237E;
+    --color-divider: #E0E0E0;
+    --color-background: #FFFFFF;
+    --color-surface: #F5F7FA;
+    --color-high: #C62828;
+    --color-medium: #E65100;
+    --fs-data: 20pt;
+    --spacing-xs: 0.3em;
+    --spacing-sm: 0.4em;
+    --spacing-md: 0.5em;
+    --spacing-lg: 0.6em;
+    --spacing-xl: 0.8em;
+    --spacing-list: 1.5em;
+    --pad-cell: 0.45em 0.6em;
+    --pad-quote: 0.6em 1em;
+    --pad-card: 0.8em 1em;
+    --pad-code: 0.1em 0.35em;
+    --spacing-paragraph: 0.75em;
+    --spacing-sectionGap: 2.5em;
+    --spacing-cardPadding: 1.5em;
+    --fs-h1: var(--typography-fontSize-h1);
+    --fs-h2: var(--typography-fontSize-h2);
+    --fs-h3: var(--typography-fontSize-h3);
+    --fs-body: var(--typography-fontSize-body);
+    --fs-small: var(--typography-fontSize-small);
+    --ff-heading: var(--typography-fontFamily-heading);
+    --ff-body: var(--typography-fontFamily-body);
+    --ff-code: var(--typography-fontFamily-code);
+    --lh-body: var(--typography-lineHeight-body);
+    --fw-bold: var(--typography-fontWeight-heading);
+    --color-muted: var(--color-textSecondary);
+    --color-border: var(--color-divider);
+    --color-bg: var(--color-background);
+    --color-highlight: var(--color-surface);
+    --color-summary-bg: var(--color-surface);
+    --color-summary-border: var(--color-primary);
+    --summary-border-width: 4px;
+    --radius-card: 8px;
+    --spacing-paragraph: var(--spacing-paragraph);
+    --spacing-section: var(--spacing-sectionGap);
+    --spacing-block: 1em;
+    --margin-page: 2.5cm;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--ff-body); font-size: var(--fs-body); line-height: var(--lh-body); color: var(--color-text); background: var(--color-bg); }
+
+  .report-cover {
+    display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
+    min-height: 60vh; padding: var(--margin-page); background: var(--color-surface);
+  }
+  .cover-category { font-size: var(--typography-fontSize-coverCategory); font-family: var(--ff-heading); font-weight: var(--fw-bold); color: var(--color-primary); letter-spacing: 0.08em; margin-bottom: var(--spacing-xl); }
+  .cover-title { font-size: var(--typography-fontSize-coverTitle); font-family: var(--ff-heading); font-weight: var(--fw-bold); color: var(--color-heading); margin-bottom: var(--spacing-md); }
+  .cover-subtitle { font-size: var(--typography-fontSize-sectionHeader); color: var(--color-muted); margin-bottom: var(--spacing-section); }
+  .cover-meta { font-size: var(--fs-small); color: var(--color-muted); }
+
+  .doc-toc { padding: var(--spacing-block) var(--margin-page); background: var(--color-bg); border-bottom: 1px solid var(--color-border); }
+  .toc-title { font-weight: var(--fw-bold); margin-bottom: var(--spacing-md); font-size: var(--typography-fontSize-h3); }
+  .toc-list, .toc-list ol, .toc-list ul { list-style: none; list-style-type: none; padding-left: var(--spacing-list); }
+  .toc-list li { margin-bottom: var(--spacing-xs); text-indent: 0; font-size: var(--fs-small); }
+  .toc-list a { color: var(--color-primary); text-decoration: none; }
+
+  .executive-summary {
+    margin: var(--spacing-section) var(--margin-page);
+    padding: var(--spacing-cardPadding);
+    border-left: var(--summary-border-width) solid var(--color-summary-border);
+    background: var(--color-summary-bg);
+    border-radius: 0 var(--radius-card) var(--radius-card) 0;
+  }
+  .summary-header { margin-bottom: var(--spacing-block); }
+  .summary-header h2 { font-size: var(--typography-fontSize-h2); font-family: var(--ff-heading); color: var(--color-heading); }
+  .summary-badge { font-size: var(--fs-small); color: var(--color-muted); font-style: italic; margin-left: var(--spacing-md); }
+  .summary-highlights { display: flex; gap: var(--spacing-block); flex-wrap: wrap; margin-bottom: var(--spacing-block); }
+  .summary-note { font-size: var(--fs-small); color: var(--color-muted); }
+
+  .data-card {
+    flex: 1 1 120px; background: var(--color-bg); border: 1px solid var(--color-border);
+    border-radius: var(--radius-card); padding: var(--pad-card); text-align: center;
+  }
+  .data-card-value { font-family: var(--ff-code); font-size: var(--fs-data); font-weight: 700; line-height: 1.2; }
+  .data-card-label { font-size: var(--fs-small); color: var(--color-muted); margin-top: var(--spacing-xs); }
+  .data-card-high { color: var(--color-high); }
+  .data-card-medium { color: var(--color-medium); }
+  .data-card-low { color: var(--color-primary); }
+  .data-card-total { color: var(--color-heading); }
+
+  .report-body { padding: var(--spacing-section) var(--margin-page); }
+  .report-body h1 { font-size: var(--typography-fontSize-h1); font-family: var(--ff-heading); color: var(--color-heading); margin-bottom: var(--spacing-paragraph); }
+  .report-body h2 {
+    font-size: var(--typography-fontSize-h2); font-family: var(--ff-heading); font-weight: var(--fw-bold);
+    color: var(--color-heading); margin-top: var(--spacing-section); margin-bottom: var(--spacing-paragraph);
+    border-left: 4px solid var(--color-primary); padding-left: var(--spacing-lg);
+  }
+  .report-body h3 {
+    font-size: var(--typography-fontSize-h3); font-family: var(--ff-heading); font-weight: var(--fw-bold);
+    color: var(--color-text); margin-top: var(--spacing-block); margin-bottom: var(--spacing-paragraph);
+  }
+  .report-body p { margin-bottom: var(--spacing-paragraph); }
+  .report-body strong { font-weight: 600; }
+  .report-body code { font-family: var(--ff-code); font-size: var(--fs-small); background: var(--color-surface); padding: var(--pad-code); border-radius: 3px; }
+  .report-body hr { border: none; border-top: 1px solid var(--color-border); margin: var(--spacing-block) 0; }
+
+  .report-body table { width: 100%; border-collapse: collapse; margin: var(--spacing-block) 0; font-size: var(--fs-small); }
+  .report-body th, .report-body td { border: 1px solid var(--color-border); padding: var(--pad-cell); text-align: left; vertical-align: top; }
+  .report-body th { background: var(--color-surface); font-weight: 600; color: var(--color-heading); }
+
+  .report-body blockquote {
+    margin: var(--spacing-block) 0; padding: var(--pad-quote);
+    border-left: 3px solid var(--color-accent); background: var(--color-surface);
+    color: var(--color-muted); font-size: var(--fs-small);
+  }
+  .report-body blockquote p { margin-bottom: var(--spacing-sm); }
+  .report-body ul, .report-body ol { margin: 0 0 var(--spacing-paragraph) var(--spacing-list); }
+  .report-body li { margin-bottom: 0.3em; }
+
+  .appendix { padding: var(--spacing-section) var(--margin-page); border-top: 1px solid var(--color-border); }
+  </style>
+</head>
+<body>
+  <section role="cover" class="report-cover">
+    <p class="cover-category">技术文档审阅</p>
+    <h1 class="cover-title">GoHiking 文档审阅报告</h1>
+    <p class="cover-subtitle">PRD v1.13 · DEV-DESIGN v1.6 · FEASIBILITY-TERRAIN v1.1</p>
+    <div class="cover-meta">
+      <p>汤圆（AI 协作审阅） | 2026-09-19 | V1.0</p>
+    </div>
+  </section>
+
+  <section role="body" class="report-body" data-page-restart="1">
+    <nav class="doc-toc" aria-label="文档目录">
+      <p class="toc-title">目录</p>
+      <ol class="toc-list"><li>一、机器化检查结果（全部通过项）</li><li>二、已核实的高危问题（7 条，建议动工前必修）</li><li>三、PRD.md 发现（中低危）</li><li>四、DEV-DESIGN.md 发现（中低危）</li><li>五、跨文档一致性发现</li><li>六、FEASIBILITY-TERRAIN.md 专项（结论性文档的时效性）</li><li>七、做得扎实的地方（保持住）</li><li>八、修复路线图建议</li><li>九、统计</li></ol>
+    </nav>
+
+    <div class="executive-summary">
+      <div class="summary-header">
+        <h2>执行摘要</h2><span class="summary-badge">Executive Summary</span>
+      </div>
+      <div class="summary-highlights"><div class="data-card"><div class="data-card-value data-card-high">7</div><div class="data-card-label">High 高危（已核实）</div></div><div class="data-card"><div class="data-card-value data-card-medium">21</div><div class="data-card-label">Medium 中危</div></div><div class="data-card"><div class="data-card-value data-card-low">42</div><div class="data-card-label">Low 低危</div></div><div class="data-card"><div class="data-card-value data-card-total">70</div><div class="data-card-label">发现合计</div></div></div>
+      <div class="summary-body">
+<p><strong>**体系整体质量高，可以此动工**；但有 **7 条已核实的高危问题**（2 条会让代码照抄即错、1 条会让统计翻倍、1 条会让验收漏项）需要先修，另有约 40 条中低危建议</strong></p>
+<p>① 脚本机器化检查（编号/计数/引用/链接/围栏/缩进）→ ② 三路并行精读（PRD / DEV-DESIGN / 跨文档一致性）→ ③ 全部 High 级发现逐条回读原文复核</p>
+<p class="summary-note">本报告取代同目录早前的 `REVIEW-2026-09-19.html`（那份基于旧版 PRD，已过时）</p>
+</div>
+    </div>
+
+    <main><hr />
+<h2>一、机器化检查结果（全部通过项）</h2>
+<p>以下硬指标由脚本逐行核验，<strong>全部一致</strong>，无需人工复查：</p>
+<ul>
+<li><strong>需求数量</strong>：PRD 按表逐行实数 <strong>270 条</strong>（P0 131 / P1 122 / P2 17），与声明完全一致；附录九个功能域的分域数量（F-MAP 8 / F-PLAN 42 / F-REC 44 / F-MEDIA 32 / F-HIS 27 / F-ALERT 33 / F-SET 6 / F-IO 52 / F-I18N 26）与正文实数一致。</li>
+<li><strong>需求编号</strong>：全文 270 个定义无重复；三份文档间的编号引用（DEV 引 PRD、FEASIBILITY 引 PRD）除一条「待评审提案」外全部可解析。</li>
+<li><strong>版本控制</strong>：三份文档头部版本号与修订记录最新行一致，修订记录版本号严格递增。</li>
+<li><strong>结构</strong>：PRD 目录与实际标题一致；三份文档内部章节引用（§x.y）与跨文档引用（指向 DEV 的 §x.y）全部指向存在的标题；Markdown 链接目标全部存在；代码围栏全部闭合。</li>
+<li><strong>排版</strong>：全部表格行首无缩进空白（符合 Obsidian 顶格要求）。</li>
+</ul>
+<blockquote>
+<p>两条「疑似问题」经复核为<strong>有意设计</strong>，不算缺陷：① FEASIBILITY §8 的 <code>F-MAP-10 ~ F-MAP-1x</code> 是「⬜ 待评审」提案行，提议新增而非引用既有编号；② PRD 的 <code>F-REC-20 ~ 25</code> 是已废弃编号保留占位（6.3 有编号说明）。</p>
+</blockquote>
+<hr />
+<h2>二、已核实的高危问题（7 条，建议动工前必修）</h2>
+<blockquote>
+<p>每条均已由我本人回读原文行号确认，非转述 agent 的判断。</p>
+</blockquote>
+<h3>H-1 【DEV】记录期分批落库与保存期全量重插互相矛盾 —— 同一批点会写两遍</h3>
+<ul>
+<li><strong>位置</strong>：<code>DEV-DESIGN.md</code> L658 vs L659 / L666–671</li>
+<li><strong>问题</strong>：L658 规定「记录中写轨迹点：每批 10 点 / 每 5 秒一次事务 <code>insertBatch(points)</code>」，即<strong>点在记录期间就已落库</strong>；而 L659 与 L666–671 的 <code>saveFinishedTrip(trip, points, markers)</code> 在保存时又把内存中的 <code>points</code> 全量重插一遍。同一批点写两次：主键冲突，或（若无主键约束）距离与统计翻倍。</li>
+<li><strong>佐证</strong>：L1550「丢弃 → 删除<strong>已落库的轨迹点</strong>」也印证记录期点已在库中。</li>
+<li><strong>建议</strong>：二选一并写死——① 记录期只写内存/临时表，保存时一次性入库（则 L658 应改为「写内存缓冲」，且崩溃恢复会丢最近一批点，需评估）；② 记录期分批入库、保存时只补 <code>trip</code> 行与 <code>marker</code>（<code>saveFinishedTrip</code> 去掉 <code>points</code> 重插，改为 <code>update trip</code> + 关联校验）。<strong>倾向 ②</strong>，与崩溃恢复语义（L1548 沿用 tripId）自洽。</li>
+</ul>
+<h3>H-2 【DEV】<code>ksp { arg("room.schemaLocation", ...) }</code> 写在 <code>android {}</code> 块内 —— 照抄直接编译失败</h3>
+<ul>
+<li><strong>位置</strong>：<code>DEV-DESIGN.md</code> L1612（处于 L1560 <code>android {</code> 与 L1614 <code>}</code> 之间）</li>
+<li><strong>问题</strong>：KSP 扩展注册在<strong>项目级</strong>，<code>android</code> 扩展上没有 <code>ksp</code> 访问器。本文档自称「可直接照写」，照抄会 <code>Unresolved reference: ksp</code>，且 schema 不导出会连带 §3.1 的「schema 提交仓库 + <code>MigrationTestHelper</code> 迁移测试」整条链路失效。</li>
+<li><strong>建议</strong>：<code>ksp { arg(...) }</code> 移到与 <code>android {}</code> 平级的顶层块。</li>
+</ul>
+<h3>H-3 【DEV】含「每场记录」状态的 AltitudeFuser / AlertEngine 被 @Singleton 注入 RecordingSession —— 第二场记录沿用第一场的基准</h3>
+<ul>
+<li><strong>位置</strong>：<code>DEV-DESIGN.md</code> L1397–1401（构造注入 <code>altitudeFuser</code>、<code>alertEngine</code>）vs §4.3（altRef 标定窗口「开始后前 10 秒」）、§4.9（<code>distanceAcc</code>、三个 <code>lastXxxMarkM</code> 基准）</li>
+<li><strong>问题</strong>：<code>RecordingSession</code> 是 <code>@Singleton</code>（冻结决策），直接持有这两个<strong>有逐场可变状态</strong>的协作者。第二场记录会继承上一场的 <code>altRef</code>、气压基准、距离/海拔打点基准 —— 首场记录一切正常，测试极难发现。</li>
+<li><strong>建议</strong>：改为注入<strong>工厂</strong>（<code>AltitudeFuserFactory</code> / <code>AlertEngineFactory</code>），<code>start()</code> 时新建实例；或显式定义强制 <code>reset()</code> 生命周期并纳入 §6.6 恢复流程。同时修正 L1548「<strong>重建</strong> RecordingSession」的措辞（单例无法重建，应为 <code>rebind(tripId)</code>），并为两者补 <code>restore(state)</code> 接口（恢复需回灌基准，否则恢复后提醒会重复触发）。</li>
+</ul>
+<h3>H-4 【DEV】「逐段运动时长必须落库」没有任何承载结构 —— 冻结决策在数据层落不了地</h3>
+<ul>
+<li><strong>位置</strong>：<code>DEV-DESIGN.md</code> L1236 vs L400–421（<code>recording_state</code> 表）</li>
+<li><strong>问题</strong>：§4.12 明文「必须由 <code>RecordingSession</code> 在暂停时逐段记下时长并<strong>随记录落库</strong>」，<code>TripStatsCalculator.compute</code> 也要求入参 <code>movingSecBySegment</code>；但 <code>recording_state</code> 只有<strong>总量</strong> <code>accumulatedPausedMs</code>，全篇无逐段时长字段、无 segment 表，§9.3 的 D-01~D-03 也没登记。</li>
+<li><strong>影响</strong>：保存时可用内存值，但<strong>崩溃恢复后</strong>中断前各段运动时长永久丢失，平均速度/配速（C3 裁定的口径）只能退化成「首尾点差」。</li>
+<li><strong>建议</strong>：<code>recording_state</code> 增 <code>movingSecBySegmentJson TEXT</code>（逐段序列化），或新增段时长表；崩溃恢复路径同步补「读回逐段时长」。</li>
+</ul>
+<h3>H-5 【DEV/PRD】导出 JSON 的三个字段在 Room 表中无来源列 —— 「导出与导入对称」接不住</h3>
+<ul>
+<li><strong>位置</strong>：PRD L1270–1279（<code>media_ref</code> 表）、L1241–1248（<code>planned_route</code> 表）vs PRD L1542/1544（JSON <code>media[].fileName</code>、<code>media[].note</code>）、L1495（<code>plannedRoute.source: "AUTO"</code>）</li>
+<li><strong>问题</strong>：<code>media_ref</code> 只有 <code>uri</code> 没有 <code>fileName</code>/<code>note</code>（content:// URI 解析不出原始文件名）；<code>planned_route</code> 没有 <code>source</code> 列（只有 waypoint 级 <code>source</code>，语义不等价）。导出实现时要么临时加列（Room 版本 +1），要么导出缺字段破坏 7.3 schema。DEV §9.3 也未为此登记 D-xx。</li>
+<li><strong>建议</strong>：<code>media_ref</code> 补 <code>fileName</code>、<code>note</code>，<code>planned_route</code> 补 <code>source</code>；或在 7.3 声明该字段由 waypoint source 派生。</li>
+</ul>
+<h3>H-6 【PRD/跨文档】里程碑枚举漏掉约 15 条 P0 —— 按 §11 走查会漏验</h3>
+<ul>
+<li><strong>位置</strong>：PRD L2152–2216（M0–M4）对照 L709–727、L863–871、L1124</li>
+<li><strong>问题</strong>（已逐条核对优先级）：</li>
+<li>M1 只列 <code>F-REC-01~10、15~18、50~54、60~66、70~75</code>，漏掉同为 P0 的 <strong>F-REC-30~33（登顶点）、F-REC-36/37（上下山分界）、F-REC-40~42（手动打点）</strong> 共 9 条；</li>
+<li><strong>F-HIS-26（上山/下山分段统计）、F-HIS-27（标记列表）、F-HIS-30（操作栏）、F-HIS-33/34（平均速度/配速口径）</strong> 5 条 P0 无处安放（M1 只到 <code>F-HIS-01~10、20~22</code>，M4 只到 <code>23~25</code>）；</li>
+<li>M3 导入只列 <code>F-IO-20~35、40~44</code>，漏掉 P0 的 <strong>F-IO-36</strong>（settings.json 默认不导入）。</li>
+<li><strong>影响</strong>：PRD 是「测试验收基线」，DEV §9.4 DoD 又只要求 §9.1 的<strong>域级</strong>映射逐条可追 —— 按现文走查，这批 P0 会被漏验，v1.0 可能带着「无标记列表、无上下山统计」的详情页通过验收。</li>
+<li><strong>建议</strong>：用脚本反扫 M0–M4 的编号并集与「全部 P0」承诺的差集，补齐区间；并在 M1/M3/M4 加兜底句「域内未列出的 P0 默认归属本里程碑」。</li>
+</ul>
+<h3>H-7 【PRD】F-ALERT-29「计入本次记录的爬升/下降统计」与双累加器口径冲突</h3>
+<ul>
+<li><strong>位置</strong>：PRD L979 vs L888</li>
+<li><strong>问题</strong>：L888 明确「累计爬升用阈值法自己的累加器（3m/10m），与海拔打点累加器（100m）<strong>完全独立，不要合并</strong>」；而 L979 说标记「<strong>计入</strong>本次记录的爬升/下降统计」。照字面实现会把打点值再累加进统计，造成重复累计。</li>
+<li><strong>建议</strong>：改为「标记及其累计量在标记列表中可见，<strong>不参与</strong>统计累加（统计口径见 6.5.2）」。</li>
+</ul>
+<hr />
+<h2>三、PRD.md 发现（中低危）</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>严重度</th>
+<th>行号</th>
+<th>问题</th>
+<th>影响</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P1</td>
+<td>Medium</td>
+<td>1088 / 848 / 1048</td>
+<td>F-IO-02 批量导出 P0，但列表多选入口（F-HIS-09）是 P2，设置页的批量导出按钮（L1048）无需求编号</td>
+<td>P0 能力依赖无编号/P2 的入口，验收口径不清</td>
+<td>给设置页按钮补编号并挂接 F-IO-02；或提升 F-HIS-09</td>
+</tr>
+<tr>
+<td>P2</td>
+<td>Medium</td>
+<td>1382</td>
+<td>导出示例 <code>avgSpeedMps: 0.89</code> 与「距离÷运动时长」公式矛盾（8234.5÷17230≈0.478）</td>
+<td>示例会误导实现与测试断言</td>
+<td>改为 0.478</td>
+</tr>
+<tr>
+<td>P3</td>
+<td>Medium</td>
+<td>614</td>
+<td>验收「3 秒内返回至少 1 条线路」弱于 F-PLAN-10「返回 3 条」</td>
+<td>验收基线与需求不一致</td>
+<td>改为「3 条候选，或给出降级说明」</td>
+</tr>
+<tr>
+<td>P4</td>
+<td>Medium</td>
+<td>441/558/564/612</td>
+<td>6.1 与 6.2.3 用「必须标注估算」的强制措辞，但 F-PLAN-46 定为 P1，且 6.2.7 验收标准无对应条目</td>
+<td>措辞与优先级/验收不一致</td>
+<td>二选一：提为 P0，或保留 P1 并在 6.2.7 补验收条目</td>
+</tr>
+<tr>
+<td>P5</td>
+<td>Medium</td>
+<td>1726 vs 权限清单</td>
+<td>P-01 首启申请媒体权限，与权限清单「进入照片地图页时申请」矛盾</td>
+<td>权限申请时机两处依据不同</td>
+<td>统一为按页申请并修订 P-01 描述</td>
+</tr>
+<tr>
+<td>P6</td>
+<td>Medium</td>
+<td>2188</td>
+<td>M3 写「F-SET 全部设置项（01~05）」，漏掉 F-SET-06（体重，P1）</td>
+<td>体重设置漏排期</td>
+<td>引用改为 F-SET-01~06</td>
+</tr>
+<tr>
+<td>P7</td>
+<td>Medium</td>
+<td>2194</td>
+<td>M3 的「GPX 可选导出」引用了 F-IO-32 —— F-IO-32 实为 <strong>GPX 导入</strong>（P2）</td>
+<td>引用错位，交付项混淆</td>
+<td>GPX 导出引用 F-IO-04/14~16</td>
+</tr>
+<tr>
+<td>P8</td>
+<td>Low</td>
+<td>1048</td>
+<td>设置页「批量导出」「导出全量备份」按钮无需求编号与优先级</td>
+<td>无验收依据</td>
+<td>补编号（可并入 F-IO-02/03 的入口说明）</td>
+</tr>
+<tr>
+<td>P9</td>
+<td>Low</td>
+<td>1189</td>
+<td>trip 表缺 <code>avgPaceSecPerKm</code>（导出 stats 含此值）</td>
+<td>库内来源未定义</td>
+<td>补列或注明「派生值，导出时实时计算」</td>
+</tr>
+<tr>
+<td>P10</td>
+<td>Low</td>
+<td>1359</td>
+<td>7.3 导出 trip 对象缺 <code>hasBarometer</code> 字段</td>
+<td>导入端无法还原设备能力上下文</td>
+<td>补可选字段</td>
+</tr>
+<tr>
+<td>P11</td>
+<td>Low</td>
+<td>608</td>
+<td>计划线路单独导出（F-PLAN-43）的文件格式未定义</td>
+<td>无法落地与验收</td>
+<td>7.3 补 planned_route 独立 schema</td>
+</tr>
+<tr>
+<td>P12</td>
+<td>Low</td>
+<td>554</td>
+<td>难度评级边界值（恰 5km/300m）归属不明</td>
+<td>实现判定可能不一致</td>
+<td>明确开闭区间</td>
+</tr>
+<tr>
+<td>P13</td>
+<td>Low</td>
+<td>597</td>
+<td>F-PLAN-36「均以虚线/实线区分方向」措辞含糊</td>
+<td>线型理解可能分歧</td>
+<td>明确「去程实线、返程虚线」</td>
+</tr>
+<tr>
+<td>P14</td>
+<td>Low</td>
+<td>1095</td>
+<td>F-IO-09 可选包含项未含 splits/提醒设置，「默认全含」范围不明</td>
+<td>导出内容范围不清</td>
+<td>补全清单</td>
+</tr>
+<tr>
+<td>P15</td>
+<td>Low</td>
+<td>1912</td>
+<td>信号丢失新建 segment 与术语表「暂停切分」矛盾</td>
+<td>segment 语义边界不清</td>
+<td>术语表补「信号丢失亦切分」</td>
+</tr>
+<tr>
+<td>P16</td>
+<td>Low</td>
+<td>664/605</td>
+<td>未关联计划线路时记录默认名的「山名」来源未定义</td>
+<td>命名规则缺口</td>
+<td>补「无 POI 名称时以日期时间命名」</td>
+</tr>
+<tr>
+<td>P17</td>
+<td>Low</td>
+<td>74 vs 658</td>
+<td>「一次点击开始」与 F-REC-02「开始前弹关联/命名弹窗」有张力</td>
+<td>与 1.5 产品原则冲突</td>
+<td>注明弹窗可一键跳过</td>
+</tr>
+<tr>
+<td>P18</td>
+<td>Low</td>
+<td>118 vs 2037</td>
+<td>3.1 承诺 v1.0 可切语言，但 F-I18N-11 是 P1</td>
+<td>承诺与优先级口径不一</td>
+<td>统一</td>
+</tr>
+<tr>
+<td>P19</td>
+<td>Low</td>
+<td>274 vs 972</td>
+<td>「无气压计阈值下限 30m」一处 P0（F-REC-63）一处 P1（F-ALERT-22）</td>
+<td>同一行为两个优先级</td>
+<td>统一或一处改引用</td>
+</tr>
+<tr>
+<td>P20</td>
+<td>Low</td>
+<td>129 vs 610</td>
+<td>3.2 说偏航报警 v1.1 候选，F-PLAN-45 却是 P2</td>
+<td>口径不一</td>
+<td>统一</td>
+</tr>
+<tr>
+<td>P21</td>
+<td>Low</td>
+<td>1004</td>
+<td>F-ALERT-41 定 P2 却承诺「v1.1 支持」</td>
+<td>优先级与承诺冲突</td>
+<td>改 P1 或删承诺</td>
+</tr>
+<tr>
+<td>P22</td>
+<td>Low</td>
+<td>2122</td>
+<td>README.txt 生成规则 P2，却被 P1 的 F-HIS-35 依赖（公式版本写入）</td>
+<td>依赖链断裂</td>
+<td>提升 F-I18N-52 或解耦</td>
+</tr>
+<tr>
+<td>P23</td>
+<td>Low</td>
+<td>80</td>
+<td>竞品功能对照结论无查证日期与依据</td>
+<td>结论可能过时</td>
+<td>标注查证时间与来源</td>
+</tr>
+<tr>
+<td>P24</td>
+<td>Low</td>
+<td>1847–1928</td>
+<td>全文无任何无障碍（a11y）需求：图标按钮 contentDescription、TalkBack 语义、动态字号</td>
+<td>类别要求检查此项</td>
+<td>补一条 P1 需求或写入 3.2 非目标</td>
+</tr>
+<tr>
+<td>P25</td>
+<td>Low</td>
+<td>1816/1821 vs 1374+</td>
+<td>P-11 示意数值与 7.3 示例 JSON 不符；segment 的 <code>pointCount</code>（9977/9253）与 <code>durationSec</code> 同值，疑似拿时长当点数填</td>
+<td>实现者可能误解「点数≈秒数」</td>
+<td>统一示例数据</td>
+</tr>
+<tr>
+<td>P26</td>
+<td>Low</td>
+<td>1564/889</td>
+<td>byAltitudeGain 段缺 <code>paceSecPerKm</code>；<code>steps</code> 不可用用 <code>-1</code> 而 pace/calories 用 <code>null</code>，同文件两种空值约定</td>
+<td>空值语义不一致</td>
+<td>统一为 <code>null</code>（或注明 -1 为历史约定）</td>
+</tr>
+<tr>
+<td>P27</td>
+<td>Low</td>
+<td>1389+</td>
+<td>导出 <code>legs</code> 的 <code>durationSec</code> 未注明含不含暂停</td>
+<td>与全文严格口径不符</td>
+<td>补口径说明</td>
+</tr>
+<tr>
+<td>P28</td>
+<td>Low</td>
+<td>797/643+</td>
+<td>F-MEDIA-23 逆地理编码离线降级未定义；F-MEDIA-09 扫描缓存对媒体库增删的失效策略未定义</td>
+<td>离线/变更场景行为不明</td>
+<td>补降级与增量比对规则</td>
+</tr>
+<tr>
+<td>P29</td>
+<td>Low</td>
+<td>1092/1098</td>
+<td>导出文件名含用户输入名称，非法字符与超长的消毒规则未定义；F-IO-12「打开所在文件夹」在 SAF 下语义不成立</td>
+<td>文件名可能非法/功能不可实现</td>
+<td>定义消毒白名单；改为「打开文件/分享」</td>
+</tr>
+<tr>
+<td>P30</td>
+<td>Low</td>
+<td>666/643+</td>
+<td>F-REC-10「静止」判据未定义；会话 STOPPED（已停未保存）被杀时会按 RECORDING 恢复，计时语义冲突</td>
+<td>恢复语义漏洞</td>
+<td>定义静止判据；恢复时检测 endTime</td>
+</tr>
+<tr>
+<td>P31</td>
+<td>Low</td>
+<td>1867/1893</td>
+<td>「明显低于前台」不可测试；未定义横屏/旋转行为</td>
+<td>非功能项无法验收</td>
+<td>量化（如 ≤60%）；记录页锁定竖屏</td>
+</tr>
+<tr>
+<td>P32</td>
+<td>Low</td>
+<td>894+</td>
+<td>卡路里 MET 判定的「段」粒度未定义（逐点？每 100m？）</td>
+<td>斜率结果随粒度剧变</td>
+<td>补「段」定义（建议每 100m 运动距离窗口）</td>
+</tr>
+<tr>
+<td>P33</td>
+<td>Low</td>
+<td>726/989</td>
+<td>手动标记与海拔下降提醒点同为橙色 <code>#EF9F27</code></td>
+<td>色觉障碍用户靠形状区分</td>
+<td>待确认是否错开色相</td>
+</tr>
+</tbody>
+</table>
+<h2>四、DEV-DESIGN.md 发现（中低危）</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>严重度</th>
+<th>行号</th>
+<th>问题</th>
+<th>影响</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D1</td>
+<td>Medium</td>
+<td>1171</td>
+<td>Haversine 测试期望 111.32km 与 <code>EARTH_R=6371008.8</code> 算得的 111.195km 不符</td>
+<td>容差内也可能假红/掩盖回归</td>
+<td>期望改 ≈111.195 或注明常量与容差来源</td>
+</tr>
+<tr>
+<td>D2</td>
+<td>Medium</td>
+<td>1055</td>
+<td>AlertEngine 距离打点同时用 ThresholdAccumulator 与 <code>lastDistanceMarkM</code> 双轨判定</td>
+<td>暂停恢复后锚点与 n×interval 基准可能分叉</td>
+<td>明确以 lastMarkM 为持久基准</td>
+</tr>
+<tr>
+<td>D3</td>
+<td>Medium</td>
+<td>611</td>
+<td><code>ElevationCacheDao</code> 的 <code>IN(lat)×IN(lng)</code> 会返回跨点错配行，正文只谈性能未谈配对正确性</td>
+<td>高程配错坐标，爬升评估出脏数据</td>
+<td>补硬规则「结果按 (latKey,lngKey) 精确回配」+ 单测</td>
+</tr>
+<tr>
+<td>D4</td>
+<td>Medium</td>
+<td>658 vs 1241+</td>
+<td><code>track_point</code> 记录期分批落库，但 <code>trip</code> 行停止时才创建，外键策略全文未声明</td>
+<td>若建 FK 则记录期每批写入即违例</td>
+<td>明确「无 FK，生命周期由显式事务管理」或先插占位 trip</td>
+</tr>
+<tr>
+<td>D5</td>
+<td>Medium</td>
+<td>1548</td>
+<td>崩溃恢复「重建 RecordingSession」与 @Singleton 单例语义冲突</td>
+<td>恢复路径无法落地或携带旧状态</td>
+<td>改为 <code>rebind(tripId)</code> / <code>reset()</code></td>
+</tr>
+<tr>
+<td>D6</td>
+<td>Medium</td>
+<td>1542</td>
+<td>恢复需回灌 altRef/气压基准/三打点基准，但 AltitudeFuser 与 AlertEngine 均无 restore 接口</td>
+<td>恢复后基准清零、提醒重复触发</td>
+<td>补 <code>restore(state)</code> 并纳入恢复单测</td>
+</tr>
+<tr>
+<td>D7</td>
+<td>Medium</td>
+<td>409</td>
+<td><code>recording_state</code> 存累加值与三基准，但缺双累加器的 anchor（锚点海拔/距离）</td>
+<td>恢复后锚点重置，暂停边界统计有偏差</td>
+<td>增 <code>statAnchorM</code>/距离锚点列</td>
+</tr>
+<tr>
+<td>D8</td>
+<td>Medium</td>
+<td>966</td>
+<td>聚类公式入参是像素 <code>cellPx=60f</code>，参数表与 UI 约定是 60dp，未做密度换算</td>
+<td>高密度屏格子过小</td>
+<td>补 density 换算或入参直接用 dp</td>
+</tr>
+<tr>
+<td>D9</td>
+<td>Medium</td>
+<td>1162</td>
+<td><code>gcjToWgs_迭代收敛</code> 用例名重复出现，断言口径不一（≤4/≤6 vs &lt;5）</td>
+<td>同名用例互相覆盖，门槛无法审计</td>
+<td>合并为一条并写清两组取值</td>
+</tr>
+<tr>
+<td>D10</td>
+<td>Medium</td>
+<td>349</td>
+<td>AltitudeFuser 不在 §2.3 可替身清单，§8.8 也无 FakeAltitudeFuser</td>
+<td>海拔融合无法做替身单测</td>
+<td>补 Fake 并列入硬性清单</td>
+</tr>
+<tr>
+<td>D11</td>
+<td>Low</td>
+<td>317</td>
+<td>「8+2 个 DAO」与 §3.2 实际 7 个接口、§3.1.1 新增 3 表均对不上</td>
+<td>模块接口清单失真</td>
+<td>按实际重写并说明合并口径</td>
+</tr>
+<tr>
+<td>D12</td>
+<td>Low</td>
+<td>711</td>
+<td><code>manual_altitude_calibration_m</code> 声明为 <code>Double?</code>，超出 Preferences DataStore 原生类型；且全局键与「本场偏移」语义不明</td>
+<td>实现需哨兵值；下一场继承上一座山的校准</td>
+<td>注明「null=键缺席」；明确本场有效或随 trip 落库</td>
+</tr>
+<tr>
+<td>D13</td>
+<td>Low</td>
+<td>1175</td>
+<td>计步预热「20–30 步」区间与断言「前 25 步输出 0」取值不唯一</td>
+<td>测试结果不稳定</td>
+<td>定死单一值并同步参数表</td>
+</tr>
+<tr>
+<td>D14</td>
+<td>Low</td>
+<td>1497–1512</td>
+<td>MapView 生命周期双重 onDestroy、<code>DisposableEffect</code> 引用 factory 局部变量无法编译、缺 onSaveInstanceState 桥接</td>
+<td>照写编译不过或泄漏/旋转丢状态</td>
+<td><code>remember</code> 持有、销毁只在一处</td>
+</tr>
+<tr>
+<td>D15</td>
+<td>Low</td>
+<td>1462/1408</td>
+<td>定位 Channel 未给容量与溢出策略（<code>trySend</code> 失败即静默丢点）；<code>samples: SharedFlow</code> 未给 buffer</td>
+<td>记录场景丢点=数据永久缺失</td>
+<td>显式声明策略 + 丢点计数告警</td>
+</tr>
+<tr>
+<td>D16</td>
+<td>Low</td>
+<td>1938</td>
+<td>§8.2 称「29 个必写用例」实列 30 行且含 1 条 TODO</td>
+<td>用例基线计数不实</td>
+<td>重数并写明「29 可写 + 1 待 M0」</td>
+</tr>
+<tr>
+<td>D17</td>
+<td>Low</td>
+<td>1639</td>
+<td>proguard <code>keepattributes</code> 与 L1634 重复声明</td>
+<td>收紧时易漏改一处</td>
+<td>合并为一条</td>
+</tr>
+<tr>
+<td>D18</td>
+<td>Low</td>
+<td>446</td>
+<td><code>media_index(latGcj02,lngGcj02)</code> 索引无任何查询消费</td>
+<td>白付写入与存储成本</td>
+<td>删除或补范围查询使其有消费方</td>
+</tr>
+<tr>
+<td>D19</td>
+<td>Low</td>
+<td>94</td>
+<td>toml 头注仍写「待验证的初始值」，与 T-14/B1「已全部核实」未同步</td>
+<td>读者误判基线状态</td>
+<td>改为「已核实存在、待锁定」</td>
+</tr>
+<tr>
+<td>D20</td>
+<td>Low</td>
+<td>160</td>
+<td>「Vico v2 不稳则降级 MPAndroidChart」残留，与 T-10「直接用 v3」相反</td>
+<td>选型结论两处相反</td>
+<td>删除降级句</td>
+</tr>
+<tr>
+<td>D21</td>
+<td>Low</td>
+<td>236</td>
+<td>「updatePrivacy* 集中在一个类」却列出两个 Gate 类</td>
+<td>「只此一处」自相矛盾</td>
+<td>改为「每 SDK 一个 Gate 类」</td>
+</tr>
+<tr>
+<td>D22</td>
+<td>Low</td>
+<td>923+</td>
+<td>track_point 的索引清单未在 §3 声明，§8.3 却拿它做 EXPLAIN 断言；<code>chartPoints</code> 过滤列 quality 不在索引内</td>
+<td>断言依赖未文档化的索引</td>
+<td>§3 补各表索引清单</td>
+</tr>
+</tbody>
+</table>
+<h2>五、跨文档一致性发现</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>严重度</th>
+<th>位置</th>
+<th>问题</th>
+<th>影响</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>X1</td>
+<td>Medium</td>
+<td>PRD L1857/L614 vs DEV L1027–1031</td>
+<td>路径规划时限冲突：PRD 要求 3 秒返回候选，DEV 规格是「单次超时 8 秒 × 串行最多 5 次」，最坏首条候选约 40 秒</td>
+<td>MA-1 验收大概率失败</td>
+<td>DEV 明确「首条候选 ≤3s 展示，其余后台补齐；8s 仅用于补齐阶段」</td>
+</tr>
+<tr>
+<td>X2</td>
+<td>Medium</td>
+<td>PRD L608 vs DEV L1284 / prototype</td>
+<td>F-PLAN-43（计划线路导出，P1）在 DEV P-07 契约与原型中均无落点</td>
+<td>P1 需求静默丢失</td>
+<td>P-07 补 <code>Export(id)</code> Event</td>
+</tr>
+<tr>
+<td>X3</td>
+<td>Medium</td>
+<td>PRD L1166 vs DEV 全文</td>
+<td>F-IO-64（导入 &gt;500MB 前提示确认，P1）在 DEV 无编号引用、无契约字段、无测试</td>
+<td>1GB ZIP 导入无确认环节</td>
+<td>P-17 补 <code>oversizeWarning</code> + 用例</td>
+</tr>
+<tr>
+<td>X4</td>
+<td>Medium</td>
+<td>PRD L200/L1315</td>
+<td>「几百米的<strong>固定</strong>偏移」措辞与事实矛盾（实测 40.9~686.3m 非线性变化，FEASIBILITY §3 正是论证这一点）</td>
+<td>新读者可能误解为可加固定 offset</td>
+<td>两处改为「非线性偏移（实测 40.9~686.3m）」</td>
+</tr>
+<tr>
+<td>X5</td>
+<td>Low</td>
+<td>PRD L1722–1743 vs DEV L222/L1278</td>
+<td>隐私政策页不在 PRD 8.1 页面清单，DEV 却把它塞进 P-01 契约</td>
+<td>合规页面在需求侧无定义</td>
+<td>PRD 8.1 P-01 描述补「含隐私政策同意」</td>
+</tr>
+<tr>
+<td>X6</td>
+<td>Low</td>
+<td>DEV §9.1/§5.2</td>
+<td>五条 P2（F-HIS-29、F-ALERT-31/41、F-MEDIA-42、F-IO-32）在 DEV 完全无落点也未标注暂缓</td>
+<td>DoD-1「逐条可追」对这五条不成立</td>
+<td>§9.1 加「P2 暂缓」一列</td>
+</tr>
+<tr>
+<td>X7</td>
+<td>Low</td>
+<td>PRD L1384 vs L1199+</td>
+<td><code>avgPaceSecPerKm</code> 导出有、trip 表无，与「汇总统计落库、只读不算」表述冲突</td>
+<td>派生值来源无说法</td>
+<td>DEV §4.12 注明为派生字段</td>
+</tr>
+<tr>
+<td>X8</td>
+<td>Low</td>
+<td>prototype P-04/P-11</td>
+<td>原型未同步 F-PLAN-46 的「估算」标注</td>
+<td>原型继续传递「计划爬升=精确值」的旧认知</td>
+<td>两页爬升值补「(估算)」</td>
+</tr>
+<tr>
+<td>X9</td>
+<td>待确认</td>
+<td>PRD L1092 / L598</td>
+<td>F-IO-09 的落点是否由 ExportEngine options 隐性承载；F-PLAN-42 的「编辑」是否等于重命名</td>
+<td>影响契约完整性</td>
+<td>产品确认</td>
+</tr>
+</tbody>
+</table>
+<h2>六、FEASIBILITY-TERRAIN.md 专项（结论性文档的时效性）</h2>
+<p>该文档本身逻辑自洽、结论明确，但<strong>已落后于今天的实测进展</strong>，建议出 v1.2：</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>严重度</th>
+<th>位置</th>
+<th>问题</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F1</td>
+<td>Medium</td>
+<td>L270</td>
+<td>§6 过渡策略把「OpenTopoData / Open-Elevation」列为 v1.0 路径 A 代表，而 DEV §4.10 实测：OpenTopoData 的 <code>aster30m</code> 超时、需按数据集逐个探测；当前首选是 <strong>Open-Meteo（GLO-90）</strong>，FEASIBILITY 全文未提</td>
+<td>§6 改为「Open-Meteo（GLO-90）首选 + 指数退避」，引用 DEV §4.10</td>
+</tr>
+<tr>
+<td>F2</td>
+<td>Medium</td>
+<td>L57–66</td>
+<td>§2.1 数据源表全部按 30m/12.5m 展开，缺 GLO-90（90m）行，也未记录「90m DEM 系统性低估山峰 54~135m」——这直接影响该文档自己论证的等高线<strong>海拔标注</strong>可信度</td>
+<td>§2.1 补 GLO-90 行与低估实测</td>
+</tr>
+<tr>
+<td>F3</td>
+<td>Medium</td>
+<td>L271 vs L281</td>
+<td>同节内两句话矛盾：先说「切换时缓存 Key 需保持一致（按 XYZ 瓦片编号）」，后说「Cache Key 以坐标块+缩放级别为准、两条路径不互用」；且 DEV §3.1.1 已定坐标 5 位小数键，与「XYZ 编号」完全不同</td>
+<td>按 DEV 统一为「高程查询缓存共用坐标键；瓦片层规格不互用」</td>
+</tr>
+<tr>
+<td>F4</td>
+<td>Low</td>
+<td>L271/L282</td>
+<td>v1.0（路径 A，约 90m）→ v1.2（自建 GLO-30，30m）切换后<strong>高程数值会整体变化</strong>（分辨率提升让低估变小），「切换注意事项」未提示用户可见的爬升值会变</td>
+<td>补一条「切换后历史查询缓存失效重建、同一线路爬升估算可能变小」</td>
+</tr>
+<tr>
+<td>F5</td>
+<td>Low</td>
+<td>头部</td>
+<td>缺「文档状态」字段（PRD/DEV 都有）；修订记录交叉核对基线停在 PRD v1.8</td>
+<td>补状态字段；出 v1.2 时更新基线到 v1.13</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>七、做得扎实的地方（保持住）</h2>
+<ol>
+<li><strong>数值口径高度一致</strong>：海拔阈值 10–1000m/步进 10、距离阈值 50–5000m/步进 50、双累加器（3m/10m vs 100m）、采样 1s/3s、批量 10 点/5s、状态持久化 10s、照片关联 ±30min/500m、MET 公式、难度边界、ZIP 防护（2GB/10000 条）——在 PRD/DEV 两侧逐项比对<strong>全部吻合，无一漂移</strong>。</li>
+<li><strong>双向追溯链闭环</strong>：DEV 全文只用编号引用 PRD；§9.3 的 D-12 → PRD F-PLAN-46 的「设计发现→需求落地」路径在两份文档修订记录中互相咬合、可逐帧回放。</li>
+<li><strong>统计口径唯一权威表</strong>（PRD 6.5.2）：十项指标一处定义、边界（&lt;50m 显示「—」、导出 null）写死到可直接做测试断言。</li>
+<li><strong>硬件降级链完备且对用户诚实</strong>：气压计五道防线 + 精度对照表、计步四级降级 + 五个已知坑，降级结果落进导出元数据。</li>
+<li><strong>i18n 深度罕见</strong>：英文兜底目录、TTS 文案独立、枚举存协议值、<code>marker.label</code> 语言快照、伪本地化 + Lint 门禁进 CI，形成闭环。</li>
+<li><strong>FEASIBILITY §8 的状态纪律</strong>：三条 ✅ 已核对确实落地 PRD；五条 ⬜ 确实未污染需求基线。</li>
+<li><strong>元控制度文档化</strong>：§9.5 四类自查、「新增编号前先扫全表最大号」的教训条目、附录「每加需求必须重算」的脚本复核要求，构成自我纠错机制。</li>
+</ol>
+<hr />
+<h2>八、修复路线图建议</h2>
+<table>
+<thead>
+<tr>
+<th>批次</th>
+<th>内容</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>P0（动工前必改）</strong></td>
+<td>H-1（双写）、H-2（ksp 位置）、H-3（单例状态）、H-4（逐段时长落库）、H-6（里程碑漏 P0）</td>
+<td>两个照抄即错、一个统计翻倍、一个冻结决策落不了地、一个验收漏项</td>
+</tr>
+<tr>
+<td><strong>P1（M0/M1 期间改）</strong></td>
+<td>H-5、H-7、D1–D10、X1、X2、X3、P1–P7</td>
+<td>数据层与契约层缺口，编码期就会撞上</td>
+</tr>
+<tr>
+<td><strong>P2（随手修）</strong></td>
+<td>其余 Low 与措辞类（X4、X5、F1–F5）</td>
+<td>一次性小改，建议出 DEV v1.7 / PRD v1.14 / FEASIBILITY v1.2 时顺带清掉</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>九、统计</h2>
+<table>
+<thead>
+<tr>
+<th>来源</th>
+<th>High</th>
+<th>Medium</th>
+<th>Low</th>
+<th>合计</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>机器化检查（复核后）</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>PRD 精读</td>
+<td>2</td>
+<td>5</td>
+<td>26</td>
+<td>33</td>
+</tr>
+<tr>
+<td>DEV-DESIGN 精读</td>
+<td>4</td>
+<td>9</td>
+<td>10</td>
+<td>23</td>
+</tr>
+<tr>
+<td>跨文档一致性</td>
+<td>1</td>
+<td>4</td>
+<td>4</td>
+<td>9</td>
+</tr>
+<tr>
+<td>FEASIBILITY 专项</td>
+<td>0</td>
+<td>3</td>
+<td>2</td>
+<td>5</td>
+</tr>
+<tr>
+<td><strong>合计（去重后）</strong></td>
+<td><strong>7</strong></td>
+<td><strong>21</strong></td>
+<td><strong>42</strong></td>
+<td><strong>70</strong></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>注：同一问题被多个视角命中时已合并（如「导出 JSON 字段缺口」由 DEV 与跨文档两路共同命中，计 1 条 High）；个别 agent 的原始判断在复核后做了严重度修正（批量导出入口 High→Medium，F-MAP-10 判为有意设计不计入）。</p>
+</blockquote></main>
+  </section>
+</body>
+</html>
