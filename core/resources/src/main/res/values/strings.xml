@@ -26,6 +26,12 @@
 
     <!-- M0 地图验证页 -->
     <string name="map_verify_badge">M0 map verification</string>
+    <string name="map_test_switch_language">Switch map language</string>
+    <string name="map_test_hint">Tap a base-map POI or any spot to test the POI-click conflict; use the button to test setMapLanguage.</string>
+    <string name="map_test_log_poi">POI clicked: %1$s</string>
+    <string name="map_test_log_map">Map clicked: %1$s, %2$s</string>
+    <string name="map_test_log_both">⚠ onPOIClick + OnMapClickListener fired together</string>
+    <string name="map_test_log_language">Map language switched (re-tessellating tiles…)</string>
 
     <!-- 通用占位 -->
     <string name="common_stat_unknown">--</string>

@@ -2175,6 +2175,7 @@ build/
 | D-12 | **线路爬升评估标注为「估算」**：DEM 在陡峭山峰**系统性低估**海拔（实测泰山玉皇顶低 54 m、黄山光明顶低 135 m，是偏差不是随机误差），评估值只用于**候选之间排序**，不作为绝对值展示 | 实测发现（`tools/m0-verify/12_elevation_services.py`）；PRD 6.1 只写了「不可用时显示『—』」，**没写「可用但数值偏低」时怎么办** | **✅ 已落地 PRD**：`F-PLAN-46`（PRD v1.13 新增，P1） |
 
 | D-13 | `media_ref` 增列 `fileName` / `note`、`planned_route` 增列 `source`、`trip` 增列 `avgPaceSecPerKm` | 导出 JSON（PRD 7.3）引用了这些字段，但 PRD 7.1 的表无对应列——导出实现时要么临时加列（Room 版本 +1）、要么破坏 schema（审阅 H-5 / P9） | **影响 PRD：✅ 已落地**（PRD v1.14 在 7.1 补列） |
+| D-14 | `planned_waypoint` 列 `order`（PRD 7.1）落库为 **`orderIndex`** | `order` 是 SQLite 关键字，Room 手写查询里每次都要转义、易踩坑；实体属性 `orderIndex` + `@ColumnInfo(name = "orderIndex")`。导出 JSON 字段名不受影响（按 7.3 schema 独立命名） | 实现补充（2026-09-20，M1 数据层落地时） |
 
 **登记规则**：任何实现层新增项都要在此登记。若某项实质上改变了用户可感知的行为，**必须先回改 PRD**，不能只登记在这里。
 

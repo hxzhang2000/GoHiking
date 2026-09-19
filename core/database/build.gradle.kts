@@ -34,4 +34,8 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
+
+    // DI：DatabaseModule 提供 GhDatabase 与各 DAO（DEV §2.2）
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
 }

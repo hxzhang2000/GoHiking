@@ -25,6 +25,12 @@
 
     <!-- M0 地图验证页 -->
     <string name="map_verify_badge">M0 地图验证页</string>
+    <string name="map_test_switch_language">切换地图语言</string>
+    <string name="map_test_hint">点底图 POI 或任意位置验证点击冲突；按钮测试 setMapLanguage。</string>
+    <string name="map_test_log_poi">点击到 POI：%1$s</string>
+    <string name="map_test_log_map">点击地图：%1$s, %2$s</string>
+    <string name="map_test_log_both">⚠ onPOIClick 与 OnMapClickListener 同时触发</string>
+    <string name="map_test_log_language">已切换地图语言（瓦片重绘中…）</string>
 
     <!-- 通用占位 -->
     <string name="common_stat_unknown">--</string>
