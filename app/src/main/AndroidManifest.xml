@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- 网络（地图瓦片 / 规划 / 高程 API） -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -20,9 +21,11 @@
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- 媒体读取（照片地图；按页申请，见 PRD 10） -->
+    <!-- 媒体读取（照片地图；按页申请，见 PRD 10）。
+         READ_MEDIA_VISUAL_USER_SELECTED：Android 14+ 部分照片访问（系统「选择照片」模式），F-MEDIA 落地时按页申请 -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
@@ -30,13 +33,16 @@
     <application
         android:name=".GhApplication"
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:localeConfig="@xml/locales_config"
         android:supportsRtl="false"
-        android:theme="@style/Theme.Gohiking">
+        android:theme="@style/Theme.Gohiking"
+        tools:targetApi="34">
 
-        <!-- 高德 Key：local.properties 注入（debug/release 各一个） -->
+        <!-- 高德 Key：local.properties 注入（单 Key 方案：debug/release 共用，2026-09-20） -->
         <meta-data
             android:name="com.amap.api.v2.apikey"
             android:value="${AMAP_KEY}" />

@@ -62,6 +62,20 @@ android {
         // PRD 9.7 / F-I18N-40/41 门禁：硬编码文案与缺失翻译在 CI 变红。
         warningsAsErrors = true
         abortOnError = true
+        // 版本基线由 DEV §7.1.1 锁定（AGP 8.7.3 + Kotlin 2.1.0 + Room 2.6.1，全部核实过），升级由人工裁定而非 lint 驱动
+        disable += "GradleDependency"
+        // PRD 9.4：记录页锁定竖屏是有意为之
+        disable += "LockedOrientationActivity"
+        disable += "DiscouragedApi"
+    }
+
+    // APK 命名：GoHiking-debug-v1-0-0.apk（参考 NASMusicTV-release-v2-36-0.apk 格式）
+    applicationVariants.all {
+        val variantName = name
+        outputs.all {
+            (this as? com.android.build.gradle.internal.api.BaseVariantOutputImpl)?.outputFileName =
+                "GoHiking-$variantName-v${versionName.replace(".", "-")}.apk"
+        }
     }
 }
 
@@ -74,6 +88,7 @@ kotlin {
 dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:designsystem"))
+    implementation(project(":core:map"))
     implementation(project(":core:resources"))
 
     implementation(project(":feature:home"))

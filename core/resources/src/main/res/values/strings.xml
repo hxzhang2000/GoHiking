@@ -18,6 +18,15 @@
     <string name="common_tab_history">History</string>
     <string name="common_tab_me">Me</string>
 
+    <!-- 隐私同意（DEV §1.5：高德 SDK 必须在用户同意后才初始化） -->
+    <string name="common_privacy_title">Privacy Notice</string>
+    <string name="common_privacy_message">To display maps and record your hikes, this app uses the AMap SDK (map rendering and location). The SDK initializes only after you agree. Location data is used solely for track recording and stays on your device unless you export it.</string>
+    <string name="common_privacy_agree">Agree and continue</string>
+    <string name="common_privacy_decline">Exit</string>
+
+    <!-- M0 地图验证页 -->
+    <string name="map_verify_badge">M0 map verification</string>
+
     <!-- 通用占位 -->
     <string name="common_stat_unknown">--</string>
 

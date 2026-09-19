@@ -17,6 +17,15 @@
     <string name="common_tab_history">记录</string>
     <string name="common_tab_me">我的</string>
 
+    <!-- 隐私同意（DEV §1.5：高德 SDK 必须在用户同意后才初始化） -->
+    <string name="common_privacy_title">隐私政策提示</string>
+    <string name="common_privacy_message">为了显示地图和记录登山轨迹，本应用使用高德地图 SDK（地图渲染与定位）。SDK 仅在您同意后才会初始化；定位数据只用于轨迹记录，除非您主动导出，否则不会离开您的设备。</string>
+    <string name="common_privacy_agree">同意并继续</string>
+    <string name="common_privacy_decline">退出</string>
+
+    <!-- M0 地图验证页 -->
+    <string name="map_verify_badge">M0 地图验证页</string>
+
     <!-- 通用占位 -->
     <string name="common_stat_unknown">--</string>
 
