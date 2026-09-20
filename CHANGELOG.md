@@ -21,6 +21,9 @@
 ## [Unreleased]
 
 ### Added
+- 提醒触发引擎（M3-A，F-ALERT-01~26）：距离/海拔打点与上下山判定，三基线随 recording_state 持久化，进程被杀恢复后不重复触发（DEV §4.9）；同时修复 `RecordingSession.start()` 未置 Active 导致记录页永不进入的 P0 缺陷
+- TTS 语音播报（M3-B，F-ALERT-40~44）：跟随系统语言、音频焦点让行、未就绪静默；记录页提醒开关指示（F-ALERT-04）
+- 设置页 + DataStore 设置存储（M3-C，F-SET-01~06）：6 分组 27 键即时读写，阈值范围/步进校验（F-ALERT-12/22、F-SET-05）、无气压计海拔间隔下限 30m 提示（F-REC-63）、语言切换重启生效（F-I18N-11）、恢复默认（F-SET-03）
 - 计划线路方向箭头（F-PLAN-37）：候选/选定/返程/手动线沿线 chevron 箭头指示行进方向；记录页关联蓝线同步（D-23）
 - 记录中关联计划线路（F-PLAN-44）：蓝线与红线同屏对比，可更换/取消关联；关联后未命名记录采用计划名（F-REC-08）
 - CI：GitHub Actions 打 `v*` tag 自动构建 release APK 并创建 GitHub Release，Release 说明自动取自 CHANGELOG 对应小节（参照 NASMusicTV）；另含 test / lint 两个阻塞门禁 job

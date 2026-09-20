@@ -30,6 +30,12 @@ dependencies {
     implementation(project(":core:designsystem"))
     implementation(project(":core:model"))
     implementation(project(":core:resources"))
+    implementation(project(":core:datastore")) // SettingsRepository（F-SET-01）
+    implementation(project(":core:common")) // ApplicationScope
+
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.javax.inject)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

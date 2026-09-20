@@ -2,7 +2,9 @@ package com.gohiking.core.data.di
 
 import com.gohiking.core.common.coroutine.ApplicationScope
 import com.gohiking.core.data.alert.AlertSettingsProvider
-import com.gohiking.core.data.alert.DefaultAlertSettingsProvider
+import com.gohiking.core.data.alert.DataStoreAlertSettingsProvider
+import com.gohiking.core.datastore.DataStoreSettingsRepository
+import com.gohiking.core.datastore.SettingsRepository
 import com.gohiking.core.location.LocationProvider
 import com.gohiking.core.location.source.AmapLocationSource
 import com.gohiking.core.location.source.FusedLocationSource
@@ -29,6 +31,12 @@ object AppModule {
     @ApplicationScope
     fun provideApplicationScope(): CoroutineScope =
         CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /** 设置仓储（F-SET-01）：DataStore 实现需要 @ApplicationContext（裸 Context 在 datastore 模块无 hilt 注解依赖） */
+    @Provides
+    @Singleton
+    fun provideSettingsRepository(@ApplicationContext context: Context): SettingsRepository =
+        DataStoreSettingsRepository(context)
 
     /** 主备切换定位（DEV D-08）：高德主 + Fused 备（GMS 不可用时备源为 null，运行时降级） */
     @Provides
@@ -60,5 +68,5 @@ abstract class AlertBindModule {
 
     @Binds
     @Singleton
-    abstract fun bindAlertSettingsProvider(impl: DefaultAlertSettingsProvider): AlertSettingsProvider
+    abstract fun bindAlertSettingsProvider(impl: DataStoreAlertSettingsProvider): AlertSettingsProvider
 }

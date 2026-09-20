@@ -82,6 +82,14 @@ android {
 
     testOptions { unitTests.isReturnDefaultValues = true }
 
+    // F-I18N-11 语言切换用 attachBaseContext 动态换 locale（非 Play Core 下载）：
+    // AAB 须关闭按语言拆分，否则 lint AppBundleLocaleChanges 报错（APK 分发同样受益——双语言随包）
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
+
     lint {
         // PRD 9.7 / F-I18N-40/41 门禁：硬编码文案与缺失翻译在 CI 变红。
         warningsAsErrors = true
@@ -119,6 +127,7 @@ dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:data"))
+    implementation(project(":core:datastore")) // readLanguageBlocking（F-I18N-11 语言重启生效）
     implementation(project(":core:map"))
     implementation(project(":core:location")) // LocationProvider 注入（F-PLAN-07 计划页当前位置）
     implementation(project(":core:database")) // PlannedRouteDao 注入（F-PLAN-14 计划线路落库）

@@ -163,4 +163,64 @@
 
     <!-- 计划 plan_*（P-03 选点与搜索，F-PLAN-01~09） -->
     <string name="error_generic">Something went wrong. Please try again.</string>
+
+    <!-- 设置 set_*（P-14，F-SET-01~06 / PRD 6.7；分组顺序与 SettingsViewModel.buildGroups 一致） -->
+    <string name="set_title">Settings</string>
+    <string name="set_group_general">General</string>
+    <string name="set_group_alert">Alerts</string>
+    <string name="set_group_record">Recording</string>
+    <string name="set_group_unit">Units</string>
+    <string name="set_group_map">Map</string>
+    <string name="set_group_data">Data</string>
+    <string name="set_language">Language</string>
+    <string name="set_lang_system">System default</string>
+    <string name="set_lang_zh">中文</string>
+    <string name="set_lang_en">English</string>
+    <string name="set_language_restart">Language will take effect after the app restarts.</string>
+    <string name="set_body_weight">Body weight</string>
+    <string name="set_alert_master">Alerts enabled</string>
+    <string name="set_alert_voice">Voice announcements</string>
+    <string name="set_alert_distance">Distance markers</string>
+    <string name="set_alert_distance_interval">Distance interval</string>
+    <string name="set_alert_altitude">Elevation markers</string>
+    <string name="set_alert_altitude_interval">Elevation interval</string>
+    <string name="set_alert_vibrate">Vibration feedback</string>
+    <string name="set_record_location_mode">Location mode</string>
+    <string name="set_loc_high">High accuracy</string>
+    <string name="set_loc_power">Power saving</string>
+    <string name="set_record_auto_pause">Auto pause</string>
+    <string name="set_record_keep_screen_on">Keep screen on</string>
+    <string name="set_record_background">Background recording</string>
+    <string name="set_unit_distance">Distance unit</string>
+    <string name="set_unit_km">Kilometers (km)</string>
+    <string name="set_unit_mi">Miles (mi)</string>
+    <string name="set_unit_altitude">Elevation unit</string>
+    <string name="set_unit_m">Meters (m)</string>
+    <string name="set_unit_ft">Feet (ft)</string>
+    <string name="set_unit_pace_display">Pace display</string>
+    <string name="set_unit_pace">Pace (min/km)</string>
+    <string name="set_unit_speed">Speed (km/h)</string>
+    <string name="set_unit_kg">kg</string>
+    <string name="set_map_type">Map type</string>
+    <string name="set_map_normal">Standard</string>
+    <string name="set_map_satellite">Satellite</string>
+    <string name="set_map_track_width">Track line width</string>
+    <string name="set_width_thin">Thin</string>
+    <string name="set_width_medium">Medium</string>
+    <string name="set_width_thick">Thick</string>
+    <string name="set_map_media_cluster">Cluster photos on map</string>
+    <string name="set_io_export_crs">Export coordinate system</string>
+    <string name="set_crs_gcj">GCJ-02 (China)</string>
+    <string name="set_crs_wgs">WGS-84 (GPS)</string>
+    <string name="set_io_gpx">Also export GPX</string>
+    <string name="set_io_backup_media">Include photos in backup</string>
+    <string name="set_io_backup_checksum">Include checksum in backup</string>
+    <string name="set_io_conflict_policy">Import conflict policy</string>
+    <string name="set_conflict_skip">Skip</string>
+    <string name="set_conflict_overwrite">Overwrite</string>
+    <string name="set_conflict_duplicate">Keep both</string>
+    <string name="set_conflict_ask">Ask every time</string>
+    <string name="set_reset_default">Restore default settings</string>
+    <string name="set_reset_confirm">Restore all settings to their default values?</string>
+    <string name="set_barometer_hint">No barometer detected: elevation interval lower limit is 30 m (F-REC-63).</string>
 </resources>

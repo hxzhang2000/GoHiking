@@ -3,8 +3,11 @@ package com.gohiking.app
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
+import java.util.Locale
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -52,6 +55,9 @@ import com.gohiking.core.data.recording.RecordingService
 import com.gohiking.core.data.recording.RecordingSession
 import com.gohiking.core.data.recording.SessionState
 import com.gohiking.core.data.repository.TripRepository
+import com.gohiking.core.datastore.AppSettings
+import com.gohiking.core.datastore.SettingsRepository
+import com.gohiking.core.datastore.readLanguageBlocking
 import com.gohiking.core.database.dao.PlannedRouteDao
 import com.gohiking.core.elevation.ElevationRepository
 import com.gohiking.core.designsystem.theme.GhTheme
@@ -64,6 +70,7 @@ import com.gohiking.feature.history.TripDetailScreen
 import com.gohiking.feature.plan.PlanListScreen
 import com.gohiking.feature.plan.PlanScreen
 import com.gohiking.feature.recording.RecordingScreen
+import com.gohiking.feature.settings.SettingsScreen
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -80,6 +87,23 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var locationProvider: LocationProvider
     @Inject lateinit var plannedRouteDao: PlannedRouteDao
     @Inject lateinit var elevationRepository: ElevationRepository
+    @Inject lateinit var settingsRepository: SettingsRepository
+
+    /** F-I18N-11：语言在 Activity 重建（重启）时经 attachBaseContext 生效 */
+    override fun attachBaseContext(newBase: android.content.Context) {
+        val lang = readLanguageBlocking(newBase)
+        super.attachBaseContext(
+            if (lang == AppSettings.LANGUAGE_SYSTEM) {
+                newBase
+            } else {
+                newBase.createConfigurationContext(
+                    Configuration(newBase.resources.configuration).apply {
+                        setLocale(Locale.forLanguageTag(lang))
+                    },
+                )
+            },
+        )
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -92,6 +116,7 @@ class MainActivity : ComponentActivity() {
                     locationProvider = locationProvider,
                     plannedRouteDao = plannedRouteDao,
                     elevationRepository = elevationRepository,
+                    settingsRepository = settingsRepository,
                 )
             }
         }
@@ -105,6 +130,7 @@ private fun Root(
     locationProvider: LocationProvider,
     plannedRouteDao: PlannedRouteDao,
     elevationRepository: ElevationRepository,
+    settingsRepository: SettingsRepository,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -113,9 +139,14 @@ private fun Root(
     var openTripId by rememberSaveable { mutableStateOf<String?>(null) }
     var showPlan by rememberSaveable { mutableStateOf(false) }
     var showPlanList by rememberSaveable { mutableStateOf(false) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
     val sessionState by session.state.collectAsStateWithLifecycle()
     val searchClient = remember { AmapSearchClient(context) }
     val routeClient = remember { RouteSearchClient(context) }
+    // F-REC-63：气压计探测（海拔打点间隔下限 30m 的提示依据）
+    val hasBarometer = remember {
+        context.packageManager.hasSystemFeature(PackageManager.FEATURE_SENSOR_BAROMETER)
+    }
 
     if (!agreed) {
         PrivacyGate(
@@ -156,6 +187,18 @@ private fun Root(
             onBack = { showPlan = false },
             modifier = modifier,
         )
+    } else if (showSettings) {
+        SettingsScreen(
+            settingsRepository = settingsRepository,
+            hasBarometer = hasBarometer,
+            onLanguageChanged = { lang ->
+                // F-I18N-11：偏好已写入 DataStore，重启后 attachBaseContext 生效
+                Toast.makeText(context, context.getString(CoreR.string.set_language_restart), Toast.LENGTH_SHORT).show()
+                if (lang != AppSettings.LANGUAGE_SYSTEM) (context as? Activity)?.recreate()
+            },
+            onBack = { showSettings = false },
+            modifier = modifier,
+        )
     } else if (showHistory) {
         HistoryListScreen(
             tripRepository = tripRepository,
@@ -170,6 +213,7 @@ private fun Root(
             onOpenHistory = { showHistory = true },
             onOpenPlan = { showPlan = true },
             onOpenPlanList = { showPlanList = true },
+            onOpenSettings = { showSettings = true },
         )
     }
 }
@@ -196,6 +240,7 @@ private fun MapVerifyScreen(
     onOpenHistory: () -> Unit = {},
     onOpenPlan: () -> Unit = {},
     onOpenPlanList: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -357,6 +402,12 @@ private fun MapVerifyScreen(
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             ) {
                 Text(stringResource(CoreR.string.plan_list_title))
+            }
+            Button(
+                onClick = onOpenSettings, // P-14 设置页（M3-C）
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            ) {
+                Text(stringResource(CoreR.string.set_title))
             }
         }
     }

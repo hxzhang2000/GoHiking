@@ -27,4 +27,6 @@ dependencies {
     implementation(project(":core:common"))
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.javax.inject) // JSR-330 @Inject（Hilt 可识别，模块内不引 hilt-android）
+    testImplementation(libs.junit4)
 }

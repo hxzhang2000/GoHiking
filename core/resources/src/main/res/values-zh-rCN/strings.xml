@@ -162,4 +162,64 @@
 
     <!-- 计划 plan_*（P-03 选点与搜索，F-PLAN-01~09） -->
     <string name="error_generic">出了点问题，请重试。</string>
+
+    <!-- 设置 set_*（P-14，F-SET-01~06 / PRD 6.7；分组顺序与 SettingsViewModel.buildGroups 一致） -->
+    <string name="set_title">设置</string>
+    <string name="set_group_general">通用</string>
+    <string name="set_group_alert">提醒</string>
+    <string name="set_group_record">记录</string>
+    <string name="set_group_unit">单位</string>
+    <string name="set_group_map">地图</string>
+    <string name="set_group_data">数据</string>
+    <string name="set_language">语言</string>
+    <string name="set_lang_system">跟随系统</string>
+    <string name="set_lang_zh">中文</string>
+    <string name="set_lang_en">English</string>
+    <string name="set_language_restart">语言将在应用重启后生效。</string>
+    <string name="set_body_weight">体重</string>
+    <string name="set_alert_master">开启提醒</string>
+    <string name="set_alert_voice">语音播报</string>
+    <string name="set_alert_distance">距离打点</string>
+    <string name="set_alert_distance_interval">距离打点间隔</string>
+    <string name="set_alert_altitude">海拔打点</string>
+    <string name="set_alert_altitude_interval">海拔打点间隔</string>
+    <string name="set_alert_vibrate">打点震动反馈</string>
+    <string name="set_record_location_mode">定位模式</string>
+    <string name="set_loc_high">高精度</string>
+    <string name="set_loc_power">省电</string>
+    <string name="set_record_auto_pause">自动暂停</string>
+    <string name="set_record_keep_screen_on">记录时保持亮屏</string>
+    <string name="set_record_background">后台记录</string>
+    <string name="set_unit_distance">距离单位</string>
+    <string name="set_unit_km">公里 (km)</string>
+    <string name="set_unit_mi">英里 (mi)</string>
+    <string name="set_unit_altitude">海拔单位</string>
+    <string name="set_unit_m">米 (m)</string>
+    <string name="set_unit_ft">英尺 (ft)</string>
+    <string name="set_unit_pace_display">配速显示</string>
+    <string name="set_unit_pace">配速 (分钟/公里)</string>
+    <string name="set_unit_speed">速度 (公里/小时)</string>
+    <string name="set_unit_kg">公斤</string>
+    <string name="set_map_type">地图类型</string>
+    <string name="set_map_normal">标准</string>
+    <string name="set_map_satellite">卫星</string>
+    <string name="set_map_track_width">轨迹线宽</string>
+    <string name="set_width_thin">细</string>
+    <string name="set_width_medium">中</string>
+    <string name="set_width_thick">粗</string>
+    <string name="set_map_media_cluster">地图照片聚合</string>
+    <string name="set_io_export_crs">导出坐标系</string>
+    <string name="set_crs_gcj">GCJ-02（国内）</string>
+    <string name="set_crs_wgs">WGS-84（GPS）</string>
+    <string name="set_io_gpx">同时导出 GPX</string>
+    <string name="set_io_backup_media">备份包含照片</string>
+    <string name="set_io_backup_checksum">备份包含校验文件</string>
+    <string name="set_io_conflict_policy">导入冲突策略</string>
+    <string name="set_conflict_skip">跳过</string>
+    <string name="set_conflict_overwrite">覆盖</string>
+    <string name="set_conflict_duplicate">保留两者</string>
+    <string name="set_conflict_ask">每次询问</string>
+    <string name="set_reset_default">恢复默认设置</string>
+    <string name="set_reset_confirm">将所有设置恢复为默认值？</string>
+    <string name="set_barometer_hint">未检测到气压计：海拔打点间隔下限为 30 米（F-REC-63）。</string>
 </resources>
