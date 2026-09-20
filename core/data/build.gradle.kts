@@ -41,4 +41,5 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.timber)
     testImplementation(libs.junit4)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

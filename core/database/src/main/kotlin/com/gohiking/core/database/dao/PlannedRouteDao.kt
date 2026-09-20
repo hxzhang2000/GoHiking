@@ -8,6 +8,7 @@ import androidx.room.Update
 import com.gohiking.core.database.entity.PlannedLegEntity
 import com.gohiking.core.database.entity.PlannedRouteEntity
 import com.gohiking.core.database.entity.PlannedRouteWithLegs
+import com.gohiking.core.database.entity.PlannedWaypointEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -42,4 +43,12 @@ interface PlannedRouteDao {
     /** 「原路返回」用：把去程折线反向 */
     @Query("SELECT polylineJson FROM planned_leg WHERE id = :legId")
     suspend fun polylineOf(legId: String): String?
+
+    /** 导入冲突判定（F-IO-40）用：全量 id */
+    @Query("SELECT id FROM planned_route")
+    suspend fun allIds(): List<String>
+
+    /** 导入重建途经点（F-IO-21；M2 规划链路暂不写该表，导入端先支持） */
+    @Insert
+    suspend fun insertWaypoints(items: List<PlannedWaypointEntity>)
 }
