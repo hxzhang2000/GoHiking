@@ -61,6 +61,7 @@ import com.gohiking.core.map.search.AmapSearchClient
 import com.gohiking.core.resources.R as CoreR
 import com.gohiking.feature.history.HistoryListScreen
 import com.gohiking.feature.history.TripDetailScreen
+import com.gohiking.feature.plan.PlanListScreen
 import com.gohiking.feature.plan.PlanScreen
 import com.gohiking.feature.recording.RecordingScreen
 import dagger.hilt.android.AndroidEntryPoint
@@ -111,6 +112,7 @@ private fun Root(
     var showHistory by rememberSaveable { mutableStateOf(false) }
     var openTripId by rememberSaveable { mutableStateOf<String?>(null) }
     var showPlan by rememberSaveable { mutableStateOf(false) }
+    var showPlanList by rememberSaveable { mutableStateOf(false) }
     val sessionState by session.state.collectAsStateWithLifecycle()
     val searchClient = remember { AmapSearchClient(context) }
     val routeClient = remember { RouteSearchClient(context) }
@@ -131,6 +133,12 @@ private fun Root(
             tripId = openTripId!!,
             onBack = { openTripId = null },
             onDeleted = { openTripId = null },
+            modifier = modifier,
+        )
+    } else if (showPlanList) {
+        PlanListScreen(
+            plannedRouteDao = plannedRouteDao,
+            onBack = { showPlanList = false },
             modifier = modifier,
         )
     } else if (showPlan) {
@@ -156,6 +164,7 @@ private fun Root(
             session = session,
             onOpenHistory = { showHistory = true },
             onOpenPlan = { showPlan = true },
+            onOpenPlanList = { showPlanList = true },
         )
     }
 }
@@ -181,6 +190,7 @@ private fun MapVerifyScreen(
     modifier: Modifier = Modifier,
     onOpenHistory: () -> Unit = {},
     onOpenPlan: () -> Unit = {},
+    onOpenPlanList: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -336,6 +346,12 @@ private fun MapVerifyScreen(
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             ) {
                 Text(stringResource(CoreR.string.plan_entry))
+            }
+            Button(
+                onClick = onOpenPlanList, // F-PLAN-41 计划列表管理
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            ) {
+                Text(stringResource(CoreR.string.plan_list_title))
             }
         }
     }

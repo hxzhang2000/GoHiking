@@ -146,6 +146,10 @@
     <string name="plan_return_toggle">Return same way</string>
     <string name="plan_save_plan">Save plan</string>
     <string name="plan_replan_return">Replan return</string>
+    <string name="plan_list_title">Planned routes</string>
+    <string name="plan_list_empty">No planned routes yet. Create one from the map.</string>
+    <string name="plan_list_rename">Rename route</string>
+    <string name="plan_list_delete">Delete</string>
 
     <!-- 计划 plan_*（P-03 选点与搜索，F-PLAN-01~09） -->
     <string name="error_generic">Something went wrong. Please try again.</string>
