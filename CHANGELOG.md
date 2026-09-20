@@ -21,6 +21,7 @@
 ## [Unreleased]
 
 ### Added
+- 记录中关联计划线路（F-PLAN-44）：蓝线与红线同屏对比，可更换/取消关联；关联后未命名记录采用计划名（F-REC-08）
 - CI：GitHub Actions 打 `v*` tag 自动构建 release APK 并创建 GitHub Release，Release 说明自动取自 CHANGELOG 对应小节（参照 NASMusicTV）；另含 test / lint 两个阻塞门禁 job
 
 ### Changed

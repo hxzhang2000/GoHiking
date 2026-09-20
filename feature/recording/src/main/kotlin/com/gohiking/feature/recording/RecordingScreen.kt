@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -52,10 +54,12 @@ import com.amap.api.maps.model.LatLng
 import com.amap.api.maps.model.Polyline
 import com.amap.api.maps.model.PolylineOptions
 import com.gohiking.core.common.format.Formatters
+import com.gohiking.core.common.geo.PolylineJson
 import com.gohiking.core.data.recording.RecordingSession
 import com.gohiking.core.data.recording.SessionState
 import com.gohiking.core.data.recording.TripDraft
 import com.gohiking.core.data.repository.TripRepository
+import com.gohiking.core.database.dao.PlannedRouteDao
 import com.gohiking.core.resources.R as CoreR
 import kotlinx.coroutines.launch
 
@@ -69,11 +73,13 @@ import kotlinx.coroutines.launch
  */
 private const val STOP_HOLD_MS = 1500L
 private val TRACK_RED = 0xFFE24B4A.toInt() // PRD F-REC-03 权威色值
+private val PLANNED_BLUE = 0xFF2F80ED.toInt() // F-PLAN-44 计划线路蓝（同 PlanScreen 选中色）
 
 @Composable
 fun RecordingScreen(
     session: RecordingSession,
     tripRepository: TripRepository,
+    plannedRouteDao: PlannedRouteDao,
     modifier: Modifier = Modifier,
 ) {
     val state by session.state.collectAsStateWithLifecycle()
@@ -84,6 +90,8 @@ fun RecordingScreen(
     var showMarkerDialog by remember { mutableStateOf(false) }
     var markerNote by remember { mutableStateOf("") }
     var holdingStop by remember { mutableStateOf(false) }
+    var showPlanPicker by remember { mutableStateOf(false) }
+    val savedPlans by plannedRouteDao.observeAllWithLegs().collectAsStateWithLifecycle(initialValue = emptyList())
 
     val active = state as? SessionState.Active
 
@@ -131,7 +139,7 @@ fun RecordingScreen(
             val existing = polylines[seg]
             if (existing == null) {
                 polylines[seg] = aMap.addPolyline(
-                    PolylineOptions().add(ll).width(trackWidthPx).color(TRACK_RED),
+                    PolylineOptions().add(ll).width(trackWidthPx).color(TRACK_RED).zIndex(10f),
                 )
             } else {
                 val pts = ArrayList(existing.points)
@@ -147,6 +155,27 @@ fun RecordingScreen(
         }
         session.samples.collect { s ->
             if (s.quality == 0) appendPoint(s.segmentIndex, LatLng(s.lat, s.lng), follow = true)
+        }
+    }
+
+
+    // F-PLAN-44：关联计划线路 → 蓝线（6dp）与红线同屏；取消/更换关联即重绘。
+    // 不能 aMap.clear()（会清掉红色轨迹），只管理自己的 polyline 引用。
+    val planWidthPx = with(LocalDensity.current) { 6.dp.toPx() }
+    val planPolylines = remember { mutableListOf<Polyline>() }
+    LaunchedEffect(active?.plannedRouteId) {
+        val aMap = mapView.map
+        planPolylines.forEach { it.remove() }
+        planPolylines.clear()
+        val routeId = active?.plannedRouteId ?: return@LaunchedEffect
+        val withLegs = plannedRouteDao.withLegs(routeId) ?: return@LaunchedEffect
+        withLegs.legs.forEach { leg ->
+            val pts = PolylineJson.decode(leg.polylineJson).map { LatLng(it.latitude, it.longitude) }
+            if (pts.size >= 2) {
+                planPolylines += aMap.addPolyline(
+                    PolylineOptions().addAll(pts).width(planWidthPx).color(PLANNED_BLUE).zIndex(5f),
+                )
+            }
         }
     }
 
@@ -192,6 +221,18 @@ fun RecordingScreen(
             )
 
             if (active != null) {
+                // F-PLAN-44：关联计划入口（显示当前关联，点击选择/更换/取消）
+                TextButton(onClick = { showPlanPicker = true }) {
+                    Text(
+                        text = active.plannedRouteId?.let { id ->
+                            stringResource(
+                                CoreR.string.rec_plan_linked,
+                                savedPlans.firstOrNull { it.route.id == id }?.route?.name ?: "",
+                            )
+                        } ?: stringResource(CoreR.string.rec_plan_associate),
+                    )
+                }
+
                 listOf(
                     stringResource(CoreR.string.rec_stat_distance) to Formatters.distanceText(active.distanceM),
                     stringResource(CoreR.string.rec_stat_duration) to Formatters.durationText(active.movingDurationSec),
@@ -308,6 +349,44 @@ fun RecordingScreen(
                         pendingDraft = null
                     }
                 }) { Text(stringResource(CoreR.string.rec_action_discard)) }
+            },
+        )
+    }
+
+    // F-PLAN-44：计划线路选择弹窗（关联 / 更换 / 取消关联）
+    if (showPlanPicker && active != null) {
+        AlertDialog(
+            onDismissRequest = { showPlanPicker = false },
+            title = { Text(stringResource(CoreR.string.rec_plan_pick_title)) },
+            text = {
+                if (savedPlans.isEmpty()) {
+                    Text(stringResource(CoreR.string.rec_plan_empty))
+                } else {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        savedPlans.forEach { item ->
+                            TextButton(onClick = {
+                                session.associatePlan(item.route.id, item.route.name)
+                                showPlanPicker = false
+                            }) {
+                                Text(item.route.name, maxLines = 1)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                Row {
+                    if (active.plannedRouteId != null) {
+                        TextButton(onClick = {
+                            session.associatePlan(null, null)
+                            showPlanPicker = false
+                        }) { Text(stringResource(CoreR.string.rec_plan_unlink)) }
+                    }
+                    TextButton(onClick = { showPlanPicker = false }) {
+                        Text(stringResource(CoreR.string.common_action_cancel))
+                    }
+                }
             },
         )
     }

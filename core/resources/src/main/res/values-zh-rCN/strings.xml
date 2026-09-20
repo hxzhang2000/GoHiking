@@ -63,6 +63,11 @@
 
     <!-- 手动打点（F-REC-40~42） -->
     <string name="rec_action_marker">打点</string>
+    <string name="rec_plan_associate">关联计划线路</string>
+    <string name="rec_plan_linked">已关联：%1$s</string>
+    <string name="rec_plan_pick_title">选择要关联的计划线路</string>
+    <string name="rec_plan_unlink">取消关联</string>
+    <string name="rec_plan_empty">暂无已保存的计划线路</string>
     <string name="rec_marker_dialog_title">添加标记</string>
     <string name="rec_marker_note_hint">备注（如：补水点、危险路段）</string>
     <string name="rec_start_dialog_title">开始记录</string>

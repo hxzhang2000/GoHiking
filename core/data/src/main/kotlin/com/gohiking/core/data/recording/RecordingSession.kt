@@ -68,6 +68,7 @@ class RecordingSession @Inject constructor(
     // —— 逐场可变状态（start() 时重建，绝不跨场继承）——
     private var tripId: String? = null
     private var plannedRouteId: String? = null
+    private var planName: String? = null // F-PLAN-44：关联计划名（F-REC-08 未命名时采用）
     private var name: String = ""
     private var startedAtMs: Long = 0
     private var currentSegment: Int = 0
@@ -118,6 +119,7 @@ class RecordingSession @Inject constructor(
 
         tripId = UUID.randomUUID().toString()
         this.plannedRouteId = plannedRouteId
+        this.planName = null
         this.name = name
         startedAtMs = System.currentTimeMillis()
         currentSegment = 0
@@ -200,6 +202,15 @@ class RecordingSession @Inject constructor(
     /** —— 手动打点（F-REC-40）—— */
     fun dropMarker(note: String) = addMarker("MANUAL", note, extraJson = null)
 
+    /** —— 关联计划线路（F-PLAN-44）：记录中可关联/更换/取消；会话期元数据，崩溃不恢复（同 name，D-22）—— */
+    fun associatePlan(routeId: String?, planName: String?) {
+        val s = _state.value as? SessionState.Active ?: return
+        this.plannedRouteId = routeId
+        this.planName = planName
+        _state.value = s.copy(plannedRouteId = routeId)
+        Timber.i("关联计划 routeId=%s", routeId)
+    }
+
     /** —— 停止（F-REC-06/07）：产出 TripDraft；save 落库 / discard 丢弃 —— */
     suspend fun stop(): TripDraft? {
         val s = _state.value as? SessionState.Active ?: return null
@@ -234,9 +245,9 @@ class RecordingSession @Inject constructor(
         }
         val trip = TripEntity(
             id = s.tripId,
-            // F-REC-08：未命名（空）→ 日期 + 时间命名；关联计划线路取计划名（M2 接入）
+            // F-REC-08：未命名（空）→ 关联计划线路取计划名，否则日期 + 时间命名（F-PLAN-44）
             name = s.name.ifBlank {
-                DATE_TIME_FORMAT.format(
+                planName ?: DATE_TIME_FORMAT.format(
                     java.time.Instant.ofEpochMilli(startedAtMs).atZone(java.time.ZoneId.systemDefault())
                 )
             },
@@ -317,6 +328,7 @@ class RecordingSession @Inject constructor(
         tripId = snap.tripId
         name = ""
         plannedRouteId = null
+        planName = null
         startedAtMs = snap.startedAt
         currentSegment = snap.currentSegment + 1 // 恢复即新建 segment（DEV §3.1.1：绝不把恢复点与中断点连线）
         seqInSegment = 0

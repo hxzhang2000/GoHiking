@@ -126,7 +126,12 @@ private fun Root(
     }
 
     if (sessionState !is SessionState.Idle) {
-        RecordingScreen(session = session, tripRepository = tripRepository, modifier = modifier)
+        RecordingScreen(
+            session = session,
+            tripRepository = tripRepository,
+            plannedRouteDao = plannedRouteDao,
+            modifier = modifier,
+        )
     } else if (openTripId != null) {
         TripDetailScreen(
             tripRepository = tripRepository,

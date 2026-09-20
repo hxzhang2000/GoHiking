@@ -64,6 +64,11 @@
 
     <!-- 手动打点（F-REC-40~42） -->
     <string name="rec_action_marker">Marker</string>
+    <string name="rec_plan_associate">Link a planned route</string>
+    <string name="rec_plan_linked">Linked: %1$s</string>
+    <string name="rec_plan_pick_title">Select a planned route</string>
+    <string name="rec_plan_unlink">Unlink</string>
+    <string name="rec_plan_empty">No saved routes yet</string>
     <string name="rec_marker_dialog_title">Drop a marker</string>
     <string name="rec_marker_note_hint">Note (e.g. water spot, hazard)</string>
     <string name="rec_start_dialog_title">Start recording</string>
