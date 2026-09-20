@@ -104,5 +104,22 @@
     <string name="common_stat_unknown">--</string>
 
     <!-- 错误 error_*（必须可操作，PRD F-IO-34） -->
+    <string name="plan_entry">计划线路</string>
+    <string name="plan_back">返回</string>
+    <string name="plan_search_hint">搜索起点或终点地名</string>
+    <string name="plan_target_start">起点</string>
+    <string name="plan_target_end">终点</string>
+    <string name="plan_point_unset">未设置</string>
+    <string name="plan_both_set">起终点已选定，线路推荐即将可用</string>
+    <string name="plan_use_current">以当前位置为起点</string>
+    <string name="plan_reset">重选</string>
+    <string name="plan_poi_dialog_message">将此位置设为起点还是终点？</string>
+    <string name="plan_poi_set_start">设为起点</string>
+    <string name="plan_poi_set_end">设为终点</string>
+    <string name="plan_hint_no_result">未找到相关地点，试试其他关键词或换个城市</string>
+    <string name="plan_hint_offline">搜索暂不可用，请直接在地图上点选</string>
+    <string name="plan_hint_locate_failed">定位失败，请重试或直接在地图上点选</string>
+
+    <!-- 计划 plan_*（P-03 选点与搜索，F-PLAN-01~09） -->
     <string name="error_generic">出了点问题，请重试。</string>
 </resources>

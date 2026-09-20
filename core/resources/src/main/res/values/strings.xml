@@ -105,5 +105,22 @@
     <string name="common_stat_unknown">--</string>
 
     <!-- 错误 error_*（必须可操作，PRD F-IO-34） -->
+    <string name="plan_entry">Plan route</string>
+    <string name="plan_back">Back</string>
+    <string name="plan_search_hint">Search start or end place</string>
+    <string name="plan_target_start">Start</string>
+    <string name="plan_target_end">End</string>
+    <string name="plan_point_unset">Not set</string>
+    <string name="plan_both_set">Start and end selected. Route recommendation coming next.</string>
+    <string name="plan_use_current">Use current location as start</string>
+    <string name="plan_reset">Reset</string>
+    <string name="plan_poi_dialog_message">Set this place as the start or the end?</string>
+    <string name="plan_poi_set_start">Set as start</string>
+    <string name="plan_poi_set_end">Set as end</string>
+    <string name="plan_hint_no_result">No result found. Try another keyword or a different city.</string>
+    <string name="plan_hint_offline">Search unavailable. Tap the map to pick points instead.</string>
+    <string name="plan_hint_locate_failed">Failed to get current location. Try again or pick on the map.</string>
+
+    <!-- 计划 plan_*（P-03 选点与搜索，F-PLAN-01~09） -->
     <string name="error_generic">Something went wrong. Please try again.</string>
 </resources>

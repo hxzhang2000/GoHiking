@@ -53,9 +53,12 @@ import com.gohiking.core.data.recording.RecordingSession
 import com.gohiking.core.data.recording.SessionState
 import com.gohiking.core.data.repository.TripRepository
 import com.gohiking.core.designsystem.theme.GhTheme
+import com.gohiking.core.location.LocationProvider
+import com.gohiking.core.map.search.AmapSearchClient
 import com.gohiking.core.resources.R as CoreR
 import com.gohiking.feature.history.HistoryListScreen
 import com.gohiking.feature.history.TripDetailScreen
+import com.gohiking.feature.plan.PlanScreen
 import com.gohiking.feature.recording.RecordingScreen
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -70,25 +73,33 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var session: RecordingSession
     @Inject lateinit var tripRepository: TripRepository
+    @Inject lateinit var locationProvider: LocationProvider
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             GhTheme {
-                Root(session = session, tripRepository = tripRepository)
+                Root(session = session, tripRepository = tripRepository, locationProvider = locationProvider)
             }
         }
     }
 }
 
 @Composable
-private fun Root(session: RecordingSession, tripRepository: TripRepository, modifier: Modifier = Modifier) {
+private fun Root(
+    session: RecordingSession,
+    tripRepository: TripRepository,
+    locationProvider: LocationProvider,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     var agreed by rememberSaveable { mutableStateOf(false) }
     var showHistory by rememberSaveable { mutableStateOf(false) }
     var openTripId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showPlan by rememberSaveable { mutableStateOf(false) }
     val sessionState by session.state.collectAsStateWithLifecycle()
+    val searchClient = remember { AmapSearchClient(context) }
 
     if (!agreed) {
         PrivacyGate(
@@ -108,6 +119,13 @@ private fun Root(session: RecordingSession, tripRepository: TripRepository, modi
             onDeleted = { openTripId = null },
             modifier = modifier,
         )
+    } else if (showPlan) {
+        PlanScreen(
+            searchClient = searchClient,
+            locationProvider = locationProvider,
+            onBack = { showPlan = false },
+            modifier = modifier,
+        )
     } else if (showHistory) {
         HistoryListScreen(
             tripRepository = tripRepository,
@@ -116,7 +134,12 @@ private fun Root(session: RecordingSession, tripRepository: TripRepository, modi
             modifier = modifier,
         )
     } else {
-        MapVerifyScreen(modifier = modifier, session = session, onOpenHistory = { showHistory = true })
+        MapVerifyScreen(
+            modifier = modifier,
+            session = session,
+            onOpenHistory = { showHistory = true },
+            onOpenPlan = { showPlan = true },
+        )
     }
 }
 
@@ -136,7 +159,12 @@ private fun PrivacyGate(onAgree: () -> Unit, onDecline: () -> Unit) {
 }
 
 @Composable
-private fun MapVerifyScreen(session: RecordingSession, modifier: Modifier = Modifier, onOpenHistory: () -> Unit = {}) {
+private fun MapVerifyScreen(
+    session: RecordingSession,
+    modifier: Modifier = Modifier,
+    onOpenHistory: () -> Unit = {},
+    onOpenPlan: () -> Unit = {},
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -285,6 +313,12 @@ private fun MapVerifyScreen(session: RecordingSession, modifier: Modifier = Modi
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             ) {
                 Text(stringResource(CoreR.string.common_tab_history))
+            }
+            Button(
+                onClick = onOpenPlan,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            ) {
+                Text(stringResource(CoreR.string.plan_entry))
             }
         }
     }

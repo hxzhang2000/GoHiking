@@ -90,6 +90,7 @@ dependencies {
     implementation(project(":core:designsystem"))
     implementation(project(":core:data"))
     implementation(project(":core:map"))
+    implementation(project(":core:location")) // LocationProvider 注入（F-PLAN-07 计划页当前位置）
     implementation(project(":core:resources"))
 
     implementation(project(":feature:home"))
