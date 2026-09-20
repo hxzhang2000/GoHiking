@@ -159,6 +159,7 @@
     <string name="plan_list_empty">还没有计划线路，去地图上创建一个吧</string>
     <string name="plan_list_rename">重命名线路</string>
     <string name="plan_list_delete">删除</string>
+    <string name="plan_export_route">导出 JSON</string>
 
     <!-- 计划 plan_*（P-03 选点与搜索，F-PLAN-01~09） -->
     <string name="error_generic">出了点问题，请重试。</string>

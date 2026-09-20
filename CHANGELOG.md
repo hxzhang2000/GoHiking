@@ -21,6 +21,7 @@
 ## [Unreleased]
 
 ### Added
+- 计划线路单文件导出（M3-E，F-PLAN-43）：计划列表页每条线路可导出为 gohiking.planned_route JSON（含两段折线与途经点，坐标系随导出设置）
 - 导出/导入引擎 + 设置页数据操作入口（M3-D，PRD 7.2~7.5）：批量导出全部记录 JSON（SAF 选目录）、全量 ZIP 备份（manifest + SHA-256 校验和 + settings.json）、GPX 1.1 恒 WGS-84 导出（F-IO-04/14/15）；导入 JSON/ZIP 多选，预览（数量/冲突/坐标系转换告知）、四种冲突策略、逐条事务、结果报告（F-IO-20~31/40~44）；ZIP Slip / Zip Bomb / 流式解压三道安全防线（F-IO-60~63）；settings.json 默认不导入（F-IO-36/37）
 - 提醒触发引擎（M3-A，F-ALERT-01~26）：距离/海拔打点与上下山判定，三基线随 recording_state 持久化，进程被杀恢复后不重复触发（DEV §4.9）；同时修复 `RecordingSession.start()` 未置 Active 导致记录页永不进入的 P0 缺陷
 - TTS 语音播报（M3-B，F-ALERT-40~44）：跟随系统语言、音频焦点让行、未就绪静默；记录页提醒开关指示（F-ALERT-04）

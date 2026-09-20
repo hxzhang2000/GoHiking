@@ -242,6 +242,26 @@ private fun Root(
         }
     }
 
+    // 计划线路单文件导出（F-PLAN-43）：CreateDocument 输入 = 建议文件名
+    var pendingRouteExport by rememberSaveable { mutableStateOf<String?>(null) } // "routeId"
+    val routeExportDoc = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        val routeId = pendingRouteExport
+        pendingRouteExport = null
+        if (uri == null || routeId == null) return@rememberLauncherForActivityResult
+        ioRun {
+            val crs = ioRepository.currentExportCrs()
+            val resolver = context.contentResolver
+            resolver.openOutputStream(uri)?.use { out ->
+                if (!ioRepository.writePlannedRoute(routeId, crs, generator, out)) {
+                    error("计划线路不存在：$routeId")
+                }
+            } ?: error("无法写入所选文件")
+            ioDoneMsg = "1"
+        }
+    }
+
     // 多选导入（F-IO-20/21/22）→ 先解析预览（F-IO-24）
     val importDocs = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
@@ -288,6 +308,10 @@ private fun Root(
         PlanListScreen(
             plannedRouteDao = plannedRouteDao,
             onBack = { showPlanList = false },
+            onExportRoute = { routeId, routeName ->
+                pendingRouteExport = routeId
+                routeExportDoc.launch(FileNamer.routeFileName(routeName, System.currentTimeMillis()))
+            },
             modifier = modifier,
         )
     } else if (showPlan) {

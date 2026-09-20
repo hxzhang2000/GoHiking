@@ -160,6 +160,7 @@
     <string name="plan_list_empty">No planned routes yet. Create one from the map.</string>
     <string name="plan_list_rename">Rename route</string>
     <string name="plan_list_delete">Delete</string>
+    <string name="plan_export_route">Export JSON</string>
 
     <!-- 计划 plan_*（P-03 选点与搜索，F-PLAN-01~09） -->
     <string name="error_generic">Something went wrong. Please try again.</string>

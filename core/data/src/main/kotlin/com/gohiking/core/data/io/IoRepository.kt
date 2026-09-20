@@ -43,6 +43,32 @@ class IoRepository @Inject constructor(
         trips.size
     }
 
+    /** 计划线路单文件导出（F-PLAN-43）：gohiking.planned_route 信封；流不关闭 */
+    suspend fun writePlannedRoute(
+        routeId: String,
+        crs: String,
+        generator: GeneratorInfo?,
+        output: OutputStream,
+    ): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val withLegs = db.plannedRouteDao().withLegs(routeId) ?: return@withContext false
+        val waypoints = if (withLegs.legs.isEmpty()) {
+            emptyList()
+        } else {
+            db.plannedRouteDao().waypointsOfLegs(withLegs.legs.map { it.id })
+        }
+        val envelope = TripJsonExporter.exportPlannedRoute(
+            route = withLegs.route,
+            legs = withLegs.legs,
+            waypoints = waypoints,
+            crs = crs,
+            generator = generator,
+        )
+        output.buffered().use {
+            it.write(IoCodecs.json.encodeToString(PlannedRouteEnvelope.serializer(), envelope).toByteArray(Charsets.UTF_8))
+        }
+        true
+    }
+
     /** 导出坐标系取当前设置（GPX 不受此设置影响，冻结决策 15） */
     suspend fun currentExportCrs(): String =
         settingsRepository.settings.first().ioExportCrs

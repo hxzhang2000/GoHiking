@@ -44,6 +44,7 @@ import java.util.Locale
 fun PlanListScreen(
     plannedRouteDao: com.gohiking.core.database.dao.PlannedRouteDao,
     onBack: () -> Unit,
+    onExportRoute: ((routeId: String, routeName: String) -> Unit)? = null, // F-PLAN-43（M3-E 接线；文件名由壳层生成）
     modifier: Modifier = Modifier,
 ) {
     val viewModel: PlanListViewModel = viewModel(
@@ -100,6 +101,11 @@ fun PlanListScreen(
                         )
                         TextButton(onClick = { deleteTarget = item }) {
                             Text(stringResource(CoreR.string.plan_list_delete))
+                        }
+                        onExportRoute?.let { export ->
+                            TextButton(onClick = { export(item.id, item.name) }) {
+                                Text(stringResource(CoreR.string.plan_export_route))
+                            }
                         }
                     }
                     if (i < items.size - 1) HorizontalDivider()
