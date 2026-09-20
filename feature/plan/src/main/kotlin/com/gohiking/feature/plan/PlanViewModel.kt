@@ -78,6 +78,12 @@ data class PlanUiState(
     val highlightIndex: Int = -1, // F-PLAN-13 点击卡片高亮
     val chosenIndex: Int = -1, // F-PLAN-14 已选定为计划线路（蓝实线）
     val chosenRouteId: String? = null,
+    // ── 计划确认态（F-PLAN-30/34/36/38）──
+    val confirming: Boolean = false, // 选定去程后的确认/编辑态（保存前）
+    val returnEnabled: Boolean = true, // F-PLAN-34 原路返回开关
+    val returnPath: PlannedPath? = null, // 返程折线（原路返回 = 去程反向；独立规划在 C2b）
+    val returnMetrics: RouteMetrics? = null, // 爬升/下降相对去程已互换
+    val returnDifficulty: Difficulty? = null,
     // ── 手动打点（F-PLAN-20~29）──
     val manualMode: Boolean = false,
     val manualWaypoints: List<PlanPoint> = emptyList(),
@@ -217,22 +223,47 @@ class PlanViewModel(
         _state.update { it.copy(highlightIndex = index) }
     }
 
-    /** F-PLAN-14：选择此线路 → 落库为计划线路（蓝实线，F-PLAN-15） */
+    /** F-PLAN-14：选择此线路 → 进入计划确认态（F-PLAN-30~38），保存动作见 savePlan */
     fun chooseCandidate(index: Int) {
         val s = _state.value
         val c = s.candidates.getOrNull(index) ?: return
-        if (s.chosenRouteId != null) return // 已选定，防重复落库
+        if (s.confirming || s.chosenRouteId != null) return
+        // F-PLAN-34：返程默认「原路返回」——去程折线反向；同一折线反向不重跑评估，
+        // 爬升/下降互换（上坡变下坡）、最高/最低海拔不变
+        val returnPath = PlannedPath(
+            distanceM = c.path.distanceM,
+            durationS = c.path.durationS,
+            points = c.path.points.asReversed(),
+        )
+        val returnMetrics = c.metrics?.let { it.copy(ascentM = it.descentM, descentM = it.ascentM) }
+        _state.update {
+            it.copy(
+                confirming = true,
+                chosenIndex = index,
+                returnEnabled = true,
+                returnPath = returnPath,
+                returnMetrics = returnMetrics,
+                returnDifficulty = c.difficulty,
+            )
+        }
+    }
+
+    /** F-PLAN-34：原路返回开关（关闭则只保存去程单段） */
+    fun setReturnEnabled(enabled: Boolean) {
+        _state.update { it.copy(returnEnabled = enabled) }
+    }
+
+    /** 确认态保存计划（F-PLAN-40 命名由 UI 对话框传入；OUTBOUND + RETURN 两段同事务落库） */
+    fun savePlan(name: String?) {
+        val s = _state.value
+        val c = s.candidates.getOrNull(s.chosenIndex) ?: return
+        if (s.chosenRouteId != null) return // 已落库，防重复
         viewModelScope.launch {
             val routeId = UUID.randomUUID().toString()
-            val legId = UUID.randomUUID().toString()
-            val now = System.currentTimeMillis()
-            // polylineJson 存抽稀后折线（PRD 7.1）；记录轨迹的「原始点入库」规则不适用于计划线
-            val simplified = PolylineSimplifier.simplify(
-                c.path.points.map { LatLngValue(it.latitude, it.longitude) },
-                POLYLINE_EPSILON_M,
-            )
-            val leg = PlannedLegEntity(
-                id = legId,
+            val legs = ArrayList<PlannedLegEntity>(2)
+            // 去程（polylineJson 存抽稀后折线，PRD 7.1；记录轨迹「原始点入库」规则不适用于计划线）
+            legs += PlannedLegEntity(
+                id = UUID.randomUUID().toString(),
                 plannedRouteId = routeId,
                 legType = "OUTBOUND",
                 distanceM = c.path.distanceM.toDouble(),
@@ -240,20 +271,45 @@ class PlanViewModel(
                 descentM = c.metrics?.descentM ?: 0.0,
                 estimatedMin = (c.path.durationS / 60).toInt(),
                 difficulty = (c.difficulty ?: Difficulty.MODERATE).name,
-                polylineJson = PolylineJson.encode(simplified),
+                polylineJson = PolylineJson.encode(
+                    PolylineSimplifier.simplify(
+                        c.path.points.map { LatLngValue(it.latitude, it.longitude) },
+                        POLYLINE_EPSILON_M,
+                    ),
+                ),
             )
+            // F-PLAN-30：返程段（原路返回 = 去程折线反向；独立规划返程在 C2b）
+            if (s.returnEnabled && s.returnPath != null) {
+                val rp = s.returnPath
+                legs += PlannedLegEntity(
+                    id = UUID.randomUUID().toString(),
+                    plannedRouteId = routeId,
+                    legType = "RETURN",
+                    distanceM = rp.distanceM.toDouble(),
+                    ascentM = s.returnMetrics?.ascentM ?: 0.0,
+                    descentM = s.returnMetrics?.descentM ?: 0.0,
+                    estimatedMin = (rp.durationS / 60).toInt(),
+                    difficulty = (s.returnDifficulty ?: Difficulty.MODERATE).name,
+                    polylineJson = PolylineJson.encode(
+                        PolylineSimplifier.simplify(
+                            rp.points.map { LatLngValue(it.latitude, it.longitude) },
+                            POLYLINE_EPSILON_M,
+                        ),
+                    ),
+                )
+            }
             val route = PlannedRouteEntity(
                 id = routeId,
-                name = routeName(s),
+                name = name ?: routeName(s),
                 note = null,
                 source = "AUTO",
-                createdAt = now,
-                totalDistanceM = c.path.distanceM.toDouble(),
-                totalAscentM = c.metrics?.ascentM ?: 0.0,
-                totalDescentM = c.metrics?.descentM ?: 0.0,
+                createdAt = System.currentTimeMillis(),
+                totalDistanceM = legs.sumOf { it.distanceM },
+                totalAscentM = legs.sumOf { it.ascentM },
+                totalDescentM = legs.sumOf { it.descentM },
             )
-            routeDao.saveWithLegs(route, listOf(leg))
-            _state.update { it.copy(chosenIndex = index, chosenRouteId = routeId) }
+            routeDao.saveWithLegs(route, legs)
+            _state.update { it.copy(chosenRouteId = routeId) }
         }
     }
 
@@ -495,6 +551,11 @@ class PlanViewModel(
                     highlightIndex = -1,
                     chosenIndex = -1,
                     chosenRouteId = null,
+                    confirming = false,
+                    returnEnabled = true,
+                    returnPath = null,
+                    returnMetrics = null,
+                    returnDifficulty = null,
                 )
             }
             val paths = routeClient.walkRoutes(start, end)

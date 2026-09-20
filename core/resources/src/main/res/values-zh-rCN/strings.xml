@@ -142,6 +142,8 @@
     <string name="plan_manual_waypoint_limit">最多 50 个途经点</string>
     <string name="plan_manual_delete_waypoint">删除途经点</string>
     <string name="plan_poi_add_waypoint">添加途经点</string>
+    <string name="plan_return_toggle">原路返回</string>
+    <string name="plan_save_plan">保存计划</string>
 
     <!-- 计划 plan_*（P-03 选点与搜索，F-PLAN-01~09） -->
     <string name="error_generic">出了点问题，请重试。</string>

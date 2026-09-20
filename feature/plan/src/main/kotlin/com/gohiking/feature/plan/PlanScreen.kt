@@ -127,6 +127,8 @@ private fun PlanContent(
     // 手动模式：途经点 marker→序号（拖动/删除回调定位用）+ 折线引用
     val waypointMarkers = remember { mutableMapOf<Marker, Int>() }
     val manualPolylines = remember { mutableListOf<Polyline>() }
+    // 返程折线引用（F-PLAN-36 深蓝虚线；单条）
+    var returnPolyline by remember { mutableStateOf<Polyline?>(null) }
 
     // 隐私合规必须早于 MapView 创建（红线，重复调用幂等；与首页/记录页同一模式）
     val mapView = remember {
@@ -287,6 +289,26 @@ private fun PlanContent(
             val builder = LatLngBounds.Builder()
             focusPts.forEach { builder.include(it) }
             aMap.moveCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), BOUNDS_PADDING_PX))
+        }
+    }
+
+    // F-PLAN-36：返程折线——深蓝 #1B4F9C 虚线（原路返回 = 去程反向）
+    LaunchedEffect(state.returnEnabled, state.returnPath, densityPx) {
+        val aMap = mapView.map
+        returnPolyline?.remove()
+        returnPolyline = null
+        if (state.returnEnabled) {
+            state.returnPath?.let { rp ->
+                if (rp.points.isNotEmpty()) {
+                    returnPolyline = aMap.addPolyline(
+                        PolylineOptions()
+                            .addAll(rp.points)
+                            .width(RETURN_WIDTH_DP * densityPx)
+                            .color(RETURN_COLOR)
+                            .setDottedLine(true),
+                    )
+                }
+            }
         }
     }
 
@@ -529,10 +551,62 @@ private fun PlanContent(
                     items(state.candidates.size) { i ->
                         CandidateCard(
                             candidate = state.candidates[i],
-                            chosen = i == state.chosenIndex,
+                            chosen = state.confirming && i == state.chosenIndex,
+                            saved = state.chosenRouteId != null,
                             onSelect = { viewModel.chooseCandidate(i) },
+                            onSave = { showSaveDialog = true }, // F-PLAN-40 命名保存
                             onClick = { viewModel.onCandidateClicked(i) },
                         )
+                    }
+                }
+                if (state.confirming) {
+                    // F-PLAN-34/38：确认面板——原路返回开关 + 全程汇总
+                    Surface(
+                        tonalElevation = 4.dp,
+                        shadowElevation = 2.dp,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                FilterChip(
+                                    selected = state.returnEnabled,
+                                    onClick = { viewModel.setReturnEnabled(!state.returnEnabled) },
+                                    label = { Text(stringResource(CoreR.string.plan_return_toggle)) },
+                                )
+                                if (state.chosenRouteId != null) {
+                                    Text(
+                                        stringResource(CoreR.string.plan_saved),
+                                        style = MaterialTheme.typography.labelLarge,
+                                    )
+                                }
+                            }
+                            val outbound = state.candidates.getOrNull(state.chosenIndex)
+                            val ret = if (state.returnEnabled) state.returnPath else null
+                            val totalDist = (outbound?.path?.distanceM ?: 0f) + (ret?.distanceM ?: 0f)
+                            val totalDur = (outbound?.path?.durationS ?: 0L) + (ret?.durationS ?: 0L)
+                            val ascentSum = (outbound?.metrics?.ascentM ?: 0.0) +
+                                if (state.returnEnabled) (state.returnMetrics?.ascentM ?: 0.0) else 0.0
+                            Text(
+                                text = Formatters.distanceText(totalDist.toDouble()) +
+                                    " · " + Formatters.durationText(totalDur),
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                            Text(
+                                text = if (outbound?.metrics?.ascentM != null) {
+                                    stringResource(CoreR.string.plan_estimated_ascent, ascentSum.toInt())
+                                } else {
+                                    stringResource(CoreR.string.common_stat_unknown)
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                     }
                 }
             } else if (state.start != null && state.end != null) {
@@ -665,7 +739,8 @@ private fun PlanContent(
             confirmButton = {
                 TextButton(onClick = {
                     showSaveDialog = false
-                    viewModel.saveManual(nameInput.trim().ifEmpty { null })
+                    val name = nameInput.trim().ifEmpty { null }
+                    if (state.manualMode) viewModel.saveManual(name) else viewModel.savePlan(name)
                 }) { Text(stringResource(CoreR.string.common_action_confirm)) }
             },
             dismissButton = {
@@ -712,7 +787,9 @@ private fun mapCenterOf(mapView: MapView): LatLng? =
 private fun CandidateCard(
     candidate: RouteCandidate,
     chosen: Boolean,
+    saved: Boolean,
     onSelect: () -> Unit,
+    onSave: () -> Unit,
     onClick: () -> Unit,
 ) {
     Surface(
@@ -747,11 +824,15 @@ private fun CandidateCard(
                     ?: stringResource(CoreR.string.common_stat_unknown),
                 style = MaterialTheme.typography.bodySmall,
             )
-            if (chosen) {
+            if (saved) {
                 Text(
                     text = stringResource(CoreR.string.plan_saved),
                     style = MaterialTheme.typography.labelLarge,
                 )
+            } else if (chosen) {
+                Button(onClick = onSave) {
+                    Text(stringResource(CoreR.string.plan_save_plan))
+                }
             } else {
                 Button(onClick = onSelect) {
                     Text(stringResource(CoreR.string.plan_select_this))
@@ -789,6 +870,10 @@ private const val SELECTED_WIDTH_DP = 8f
 /** 手动线路（F-PLAN-23/24）：紫色系与推荐色板区分；直线段虚线 */
 private val MANUAL_COLOR = 0xFF9B51E0.toInt()
 private const val MANUAL_WIDTH_DP = 6f
+
+/** 返程（F-PLAN-36）：深蓝 #1B4F9C 虚线，与去程蓝实线同色系不同明度 */
+private val RETURN_COLOR = 0xFF1B4F9C.toInt()
+private const val RETURN_WIDTH_DP = 6f
 
 /** F-PLAN-22：途经点序号圆图标（自绘 bitmap，64px 足够 marker 缩放） */
 private fun numberedMarkerBitmap(number: Int): android.graphics.Bitmap {
