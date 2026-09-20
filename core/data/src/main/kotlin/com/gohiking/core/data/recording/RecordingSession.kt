@@ -9,6 +9,7 @@ import com.gohiking.core.database.entity.MarkerEntity
 import com.gohiking.core.database.entity.RecordingStateEntity
 import com.gohiking.core.database.entity.TrackPointEntity
 import com.gohiking.core.database.entity.TripEntity
+import com.gohiking.core.data.stats.CalorieCalculator
 import com.gohiking.core.location.LocationProvider
 import com.gohiking.core.location.altitude.AltitudeFuser
 import com.gohiking.core.location.altitude.ThresholdAccumulator
@@ -35,6 +36,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import timber.log.Timber
 
 /**
@@ -68,6 +73,9 @@ class RecordingSession @Inject constructor(
     private var currentSegment: Int = 0
     private var lastPausedAtMs: Long? = null
     private var accumulatedPausedMs: Long = 0
+    private var movingSecBySegment = mutableMapOf<Int, Long>() // 逐段运动秒数（DEV 决策 14 / §4.12）
+    private var lastSampleTsMs: Long? = null
+    private var maxSpeedMps: Double? = null
 
     private var sampler = TrackSampler()
     private var statAccumulator = ThresholdAccumulator(10.0) // 无气压计阈值 10m；有气压计 3m（§4.3.1）
@@ -112,6 +120,9 @@ class RecordingSession @Inject constructor(
         currentSegment = 0
         lastPausedAtMs = null
         accumulatedPausedMs = 0
+        movingSecBySegment = mutableMapOf()
+        lastSampleTsMs = null
+        maxSpeedMps = null
         seqInSegment = 0
         pointCount = 0
         distanceM = 0.0
@@ -144,6 +155,7 @@ class RecordingSession @Inject constructor(
         val s = _state.value as? SessionState.Active ?: return
         if (!s.isRecording) return
         lastPausedAtMs = System.currentTimeMillis()
+        lastSampleTsMs = null // 暂停后的时间差不计入任何段
         locationProvider.stop()
         tickJob?.cancel()
         altitudeFuser?.onSessionPause()
@@ -166,6 +178,7 @@ class RecordingSession @Inject constructor(
         }
         currentSegment += 1
         seqInSegment = 0
+        lastSampleTsMs = null // 新 segment 从第一个点起算
         stepSource?.resume()
         if (hasBarometer) registerPressureListener()
         startLocationCollection()
@@ -194,10 +207,21 @@ class RecordingSession @Inject constructor(
         } else {
             accumulatedPausedMs += lastPausedAtMs?.let { System.currentTimeMillis() - it } ?: 0
         }
+        flushBuffer(force = true) // 暂停态停止也要把缓冲点落库（卡路里计算依赖全部点）
         val now = System.currentTimeMillis()
         val totalDurationSec = ((now - startedAtMs) / 1000).coerceAtLeast(0)
-        val movingDurationSec = (totalDurationSec - accumulatedPausedMs / 1000).coerceAtLeast(0)
+        // 运动时长：优先用逐段累计（DEV 决策 14）。暂停必然新建 segment、崩溃空窗不属于
+        // 任何段，二者都不会被计入运动；无逐段数据时退化为「总时长 − 暂停」。
+        val movingDurationSec = if (movingSecBySegment.isEmpty()) {
+            (totalDurationSec - accumulatedPausedMs / 1000).coerceAtLeast(0)
+        } else {
+            movingSecBySegment.values.sum()
+        }
         val distance = distanceM
+        // 卡路里与最高速度：保存时算一次落库（DEV §4.12「汇总统计要落库」）；体重默认 65kg（M3 接设置）
+        val allPoints = withContext(Dispatchers.IO) { db.trackPointDao().allOf(s.tripId) }
+        val kcal = CalorieCalculator.estimate(allPoints, bodyWeightKg = 65)
+        val maxSpd = maxSpeedMps
         // F-HIS-33/34：分母用运动时长（不含暂停）；distance < 50m → null（导出写 null）
         val avgSpeedMps = if (distance >= 50 && movingDurationSec > 0) distance / movingDurationSec else null
         val avgPaceSecPerKm = if (distance >= 50 && movingDurationSec > 0) {
@@ -214,7 +238,7 @@ class RecordingSession @Inject constructor(
             endTime = now,
             durationSec = totalDurationSec,
             movingDurationSec = movingDurationSec,
-            pausedDurationSec = accumulatedPausedMs / 1000,
+            pausedDurationSec = (totalDurationSec - movingDurationSec).coerceAtLeast(0),
             distanceM = distance,
             totalAscentM = statAccumulator.ascent,
             totalDescentM = statAccumulator.descent,
@@ -222,10 +246,10 @@ class RecordingSession @Inject constructor(
             minAltitudeM = minAltitudeM,
             avgSpeedMps = avgSpeedMps,
             avgPaceSecPerKm = avgPaceSecPerKm,
-            maxSpeedMps = null, // M1 下一批：接受点 max speed
+            maxSpeedMps = maxSpd,
             steps = currentSteps,
             stepSource = stepSource?.wire ?: StepWire.UNAVAILABLE,
-            caloriesKcal = null, // MET 分段估算（F-HIS-35）下一批接入
+            caloriesKcal = kcal,
             altitudeSource = altitudeFuser?.source?.name ?: "GPS_ONLY",
             hasBarometer = hasBarometer,
             status = "FINISHED",
@@ -286,10 +310,15 @@ class RecordingSession @Inject constructor(
         name = ""
         plannedRouteId = null
         startedAtMs = snap.startedAt
-        currentSegment = snap.currentSegment
-        lastPausedAtMs = snap.lastPausedAt
-        accumulatedPausedMs = snap.accumulatedPausedMs
+        currentSegment = snap.currentSegment + 1 // 恢复即新建 segment（DEV §3.1.1：绝不把恢复点与中断点连线）
+        seqInSegment = 0
+        accumulatedPausedMs = snap.accumulatedPausedMs +
+            (snap.lastPausedAt?.let { System.currentTimeMillis() - it } ?: 0) // 崩溃时若在暂停，先结算
+        lastPausedAtMs = null
         hasBarometer = snap.hasBarometer
+        movingSecBySegment = parseMovingSecBySegment(snap.movingSecBySegmentJson) // 崩溃恢复必须读回（§4.12）
+        lastSampleTsMs = null
+        maxSpeedMps = null
         distanceM = snap.distanceM
         pointCount = 0
         maxAltitudeM = null
@@ -383,6 +412,19 @@ class RecordingSession @Inject constructor(
             distanceM += GeoMath.distanceMeters(last.lat, last.lng, fix.lat, fix.lng)
         }
         lastAcceptedFix = fix
+        // 逐段运动时长（DEV 决策 14）：段内相邻点时间差累加。lastSampleTsMs 在暂停/继续/
+        // 恢复时清空，跨段间隙与崩溃空窗都不会被误计为运动时长。
+        val prevTs = lastSampleTsMs
+        if (prevTs != null && fix.timestampMs > prevTs) {
+            movingSecBySegment[currentSegment] =
+                (movingSecBySegment[currentSegment] ?: 0L) + (fix.timestampMs - prevTs) / 1000
+        }
+        lastSampleTsMs = fix.timestampMs
+        // 最高速度：仅统计有效点（与 PRD 6.5.2 的 quality==0 口径一致）
+        if (sample.quality == 0) {
+            val sp = sample.fix.speedMps.toDouble()
+            if (maxSpeedMps == null || sp > maxSpeedMps!!) maxSpeedMps = sp
+        }
         // 海拔融合（DEV §4.3）：每个 fix 都喂给 fuser（精度门控/稳定确认由 fuser 内部处理）
         altitudeFuser?.onGpsFix(fix.altitudeM, fix.verticalAccuracyM?.toDouble(), fix.mslAltitudeM)
         // 爬升统计：低精度点不参与（PRD 6.3.7）；海拔用滤波后的融合值
@@ -493,13 +535,27 @@ class RecordingSession @Inject constructor(
                     pressureRefHpa = altitudeFuser?.refSnapshot()?.second,
                     statAnchorM = statAccumulator.currentAnchor(),
                     markAnchorM = markAccumulator.currentAnchor(), // 打点累加器锚点（提醒引擎接入后生效）
-                    movingSecBySegmentJson = "{}",
+                    movingSecBySegmentJson = movingSecBySegment.entries
+                        .joinToString(",", prefix = "{", postfix = "}") { (k, v) -> "\"$k\":$v" },
                     updatedAt = lastStatePersistAtMs,
                 ),
             )
         } catch (t: Throwable) {
             Timber.e(t, "recording_state 持久化失败")
         }
+    }
+
+    /** 解析逐段运动秒数 JSON（崩溃恢复）；格式损坏按空处理，绝不因此拒绝恢复 */
+    private fun parseMovingSecBySegment(json: String): MutableMap<Int, Long> = try {
+        val obj = Json.parseToJsonElement(json).jsonObject
+        val out = mutableMapOf<Int, Long>()
+        for ((k, v) in obj) {
+            out[k.toInt()] = v.jsonPrimitive.long
+        }
+        out
+    } catch (t: Throwable) {
+        Timber.w(t, "movingSecBySegmentJson 解析失败，按空处理")
+        mutableMapOf()
     }
 
     private fun bumpStateTick() {
