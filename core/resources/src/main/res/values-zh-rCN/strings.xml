@@ -119,6 +119,16 @@
     <string name="plan_hint_no_result">未找到相关地点，试试其他关键词或换个城市</string>
     <string name="plan_hint_offline">搜索暂不可用，请直接在地图上点选</string>
     <string name="plan_hint_locate_failed">定位失败，请重试或直接在地图上点选</string>
+    <string name="plan_planning">正在规划线路…</string>
+    <string name="plan_route_failed">未能规划出线路，可调整起终点后重试</string>
+    <string name="plan_replan">重新规划</string>
+    <string name="plan_select_this">选择此线路</string>
+    <string name="plan_saved">已保存为计划</string>
+    <string name="plan_estimated_ascent">爬升 ≈%1$d m（估算）</string>
+    <string name="diff_easy">简单</string>
+    <string name="diff_moderate">中等</string>
+    <string name="diff_hard">困难</string>
+    <string name="diff_challenging">挑战</string>
 
     <!-- 计划 plan_*（P-03 选点与搜索，F-PLAN-01~09） -->
     <string name="error_generic">出了点问题，请重试。</string>

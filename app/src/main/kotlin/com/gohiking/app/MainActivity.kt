@@ -52,8 +52,11 @@ import com.gohiking.core.data.recording.RecordingService
 import com.gohiking.core.data.recording.RecordingSession
 import com.gohiking.core.data.recording.SessionState
 import com.gohiking.core.data.repository.TripRepository
+import com.gohiking.core.database.dao.PlannedRouteDao
+import com.gohiking.core.elevation.ElevationRepository
 import com.gohiking.core.designsystem.theme.GhTheme
 import com.gohiking.core.location.LocationProvider
+import com.gohiking.core.map.route.RouteSearchClient
 import com.gohiking.core.map.search.AmapSearchClient
 import com.gohiking.core.resources.R as CoreR
 import com.gohiking.feature.history.HistoryListScreen
@@ -74,13 +77,21 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var session: RecordingSession
     @Inject lateinit var tripRepository: TripRepository
     @Inject lateinit var locationProvider: LocationProvider
+    @Inject lateinit var plannedRouteDao: PlannedRouteDao
+    @Inject lateinit var elevationRepository: ElevationRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             GhTheme {
-                Root(session = session, tripRepository = tripRepository, locationProvider = locationProvider)
+                Root(
+                    session = session,
+                    tripRepository = tripRepository,
+                    locationProvider = locationProvider,
+                    plannedRouteDao = plannedRouteDao,
+                    elevationRepository = elevationRepository,
+                )
             }
         }
     }
@@ -91,6 +102,8 @@ private fun Root(
     session: RecordingSession,
     tripRepository: TripRepository,
     locationProvider: LocationProvider,
+    plannedRouteDao: PlannedRouteDao,
+    elevationRepository: ElevationRepository,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -100,6 +113,7 @@ private fun Root(
     var showPlan by rememberSaveable { mutableStateOf(false) }
     val sessionState by session.state.collectAsStateWithLifecycle()
     val searchClient = remember { AmapSearchClient(context) }
+    val routeClient = remember { RouteSearchClient(context) }
 
     if (!agreed) {
         PrivacyGate(
@@ -122,7 +136,10 @@ private fun Root(
     } else if (showPlan) {
         PlanScreen(
             searchClient = searchClient,
+            routeClient = routeClient,
             locationProvider = locationProvider,
+            plannedRouteDao = plannedRouteDao,
+            elevationRepository = elevationRepository,
             onBack = { showPlan = false },
             modifier = modifier,
         )

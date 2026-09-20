@@ -10,12 +10,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -33,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -50,24 +54,43 @@ import com.amap.api.maps.model.LatLng
 import com.amap.api.maps.model.LatLngBounds
 import com.amap.api.maps.model.Marker
 import com.amap.api.maps.model.MarkerOptions
+import com.amap.api.maps.model.Polyline
+import com.amap.api.maps.model.PolylineOptions
+import com.gohiking.core.common.format.Formatters
+import com.gohiking.core.database.dao.PlannedRouteDao
+import com.gohiking.core.elevation.ElevationRepository
 import com.gohiking.core.location.LocationProvider
+import com.gohiking.core.map.route.RouteSearchClient
 import com.gohiking.core.map.search.AmapSearchClient
+import com.gohiking.core.model.Difficulty
 import com.gohiking.core.resources.R as CoreR
 
 /**
- * 计划模式选点页（P-03，F-PLAN-01~05/07/08）。
- * 四种选点方式（PRD 6.2.1）：① 地图点选（永远可用的兜底）② 搜索选点 ③ 底图 POI ④ 当前位置。
+ * 计划模式页（P-03 选点 + P-04 自动推荐，F-PLAN-01~16）。
+ * 选点四种方式（PRD 6.2.1）：① 地图点选（永远可用的兜底）② 搜索选点 ③ 底图 POI ④ 当前位置；
+ * 起终点齐后自动推荐 ≤3 条步行线路（DEV §4.8），卡片展示距离/耗时/爬升估算/难度，选定落库为计划线路。
  */
 @Composable
 fun PlanScreen(
     searchClient: AmapSearchClient,
+    routeClient: RouteSearchClient,
     locationProvider: LocationProvider,
+    plannedRouteDao: PlannedRouteDao,
+    elevationRepository: ElevationRepository,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val viewModel: PlanViewModel = viewModel(
         factory = viewModelFactory {
-            initializer { PlanViewModel(searchClient, locationProvider) }
+            initializer {
+                PlanViewModel(
+                    searchClient,
+                    routeClient,
+                    locationProvider,
+                    plannedRouteDao,
+                    elevationRepository::query,
+                )
+            }
         },
     )
     PlanContent(viewModel = viewModel, onBack = onBack, modifier = modifier)
@@ -95,6 +118,9 @@ private fun PlanContent(
     // 起终点 Marker 引用 + marker→target 映射（拖动回调定位用，F-PLAN-06）
     val markers = remember { mutableListOf<Marker>() }
     val markerTargets = remember { mutableMapOf<Marker, SelectTarget>() }
+
+    // 候选线路折线引用（F-PLAN-12/13/15；重画前逐条 remove，防叠加）
+    val candidatePolylines = remember { mutableListOf<Polyline>() }
 
     // 隐私合规必须早于 MapView 创建（红线，重复调用幂等；与首页/记录页同一模式）
     val mapView = remember {
@@ -165,6 +191,55 @@ private fun PlanContent(
                 pts.forEach { builder.include(it) }
                 aMap.moveCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), BOUNDS_PADDING_PX))
             }
+        }
+    }
+
+    // F-PLAN-12/13/15：候选折线渲染——3 色候选、点击卡片高亮加粗、选定后蓝实线。
+    // 键用 path 列表（数据类逐值相等）：metrics 后台补齐不触发重画；
+    // 密度换算必须在组合期捕获（LaunchedEffect 体不在组合作用域）；
+    // Polyline 无 setAlpha（D-17 javap 结论）：半透明用 ARGB color int 的 alpha 位。
+    val densityPx = with(LocalDensity.current) { 1.dp.toPx() }
+    LaunchedEffect(
+        state.candidates.map { it.path },
+        state.highlightIndex,
+        state.chosenIndex,
+        densityPx,
+    ) {
+        val aMap = mapView.map
+        candidatePolylines.forEach { it.remove() }
+        candidatePolylines.clear()
+        val chosen = state.candidates.getOrNull(state.chosenIndex)
+        if (chosen != null) {
+            candidatePolylines += aMap.addPolyline(
+                PolylineOptions()
+                    .addAll(chosen.path.points)
+                    .width(SELECTED_WIDTH_DP * densityPx)
+                    .color(SELECTED_COLOR),
+            )
+        } else {
+            state.candidates.forEachIndexed { i, c ->
+                val highlighted = i == state.highlightIndex
+                val base = CANDIDATE_COLORS[i % CANDIDATE_COLORS.size]
+                candidatePolylines += aMap.addPolyline(
+                    PolylineOptions()
+                        .addAll(c.path.points)
+                        .width((if (highlighted) HIGHLIGHT_WIDTH_DP else NORMAL_WIDTH_DP) * densityPx)
+                        .color(
+                            if (highlighted) {
+                                base
+                            } else {
+                                (CANDIDATE_DIM_ALPHA shl 24) or (base and 0x00FFFFFF)
+                            },
+                        ),
+                )
+            }
+        }
+        // 视野包含全部候选折线（选定后聚焦所选线路）
+        val focusPts = chosen?.path?.points ?: state.candidates.flatMap { it.path.points }
+        if (focusPts.isNotEmpty()) {
+            val builder = LatLngBounds.Builder()
+            focusPts.forEach { builder.include(it) }
+            aMap.moveCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), BOUNDS_PADDING_PX))
         }
     }
 
@@ -279,7 +354,53 @@ private fun PlanContent(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (state.start != null && state.end != null) {
+            if (state.planning) {
+                Surface(
+                    tonalElevation = 4.dp,
+                    shadowElevation = 2.dp,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(12.dp),
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Text(
+                            stringResource(CoreR.string.plan_planning),
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
+                }
+            } else if (state.planFailed) {
+                Surface(
+                    tonalElevation = 4.dp,
+                    shadowElevation = 2.dp,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        stringResource(CoreR.string.plan_route_failed),
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
+            }
+            if (state.candidates.isNotEmpty()) {
+                // F-PLAN-12/14：候选卡片列表（点击高亮 / 选择落库）
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    items(state.candidates.size) { i ->
+                        CandidateCard(
+                            candidate = state.candidates[i],
+                            chosen = i == state.chosenIndex,
+                            onSelect = { viewModel.chooseCandidate(i) },
+                            onClick = { viewModel.onCandidateClicked(i) },
+                        )
+                    }
+                }
+            } else if (state.start != null && state.end != null) {
                 Surface(
                     tonalElevation = 4.dp,
                     shadowElevation = 2.dp,
@@ -300,6 +421,12 @@ private fun PlanContent(
                 Text(stringResource(CoreR.string.plan_use_current))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                OutlinedButton(
+                    onClick = { viewModel.replan() },
+                    enabled = state.start != null && state.end != null, // F-PLAN-16 重新规划
+                ) {
+                    Text(stringResource(CoreR.string.plan_replan))
+                }
                 OutlinedButton(onClick = { viewModel.reset() }) {
                     Text(stringResource(CoreR.string.plan_reset))
                 }
@@ -342,9 +469,82 @@ private fun markerOptions(point: PlanPoint, fallbackTitle: String, hue: Float): 
 private fun mapCenterOf(mapView: MapView): LatLng? =
     mapView.map.cameraPosition?.target
 
+/** F-PLAN-12/14：单张候选卡片——距离/耗时恒显示，爬升/难度后台评估补齐（MA-1 首条 ≤3s 上屏） */
+@Composable
+private fun CandidateCard(
+    candidate: RouteCandidate,
+    chosen: Boolean,
+    onSelect: () -> Unit,
+    onClick: () -> Unit,
+) {
+    Surface(
+        tonalElevation = 4.dp,
+        shadowElevation = 2.dp,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .widthIn(min = 168.dp)
+            .clickable(onClick = onClick),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = Formatters.distanceText(candidate.path.distanceM.toDouble()),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                text = Formatters.durationText(candidate.path.durationS),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            val ascent = candidate.metrics?.ascentM
+            Text(
+                // F-PLAN-46：高程为 DEM/远程估算，必须标注「估算」；不可用显示「—」，绝不编造
+                text = if (ascent != null) {
+                    stringResource(CoreR.string.plan_estimated_ascent, ascent.toInt())
+                } else {
+                    stringResource(CoreR.string.common_stat_unknown)
+                },
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text(
+                text = candidate.difficulty?.let { difficultyLabel(it) }
+                    ?: stringResource(CoreR.string.common_stat_unknown),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (chosen) {
+                Text(
+                    text = stringResource(CoreR.string.plan_saved),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            } else {
+                Button(onClick = onSelect) {
+                    Text(stringResource(CoreR.string.plan_select_this))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun difficultyLabel(d: Difficulty): String = when (d) {
+    Difficulty.EASY -> stringResource(CoreR.string.diff_easy)
+    Difficulty.MODERATE -> stringResource(CoreR.string.diff_moderate)
+    Difficulty.HARD -> stringResource(CoreR.string.diff_hard)
+    Difficulty.CHALLENGING -> stringResource(CoreR.string.diff_challenging)
+}
+
 /** F-PLAN-08 双回调同触窗口（M0 真机实测：POI 与空白点选回调在 600ms 内先后触发） */
 private const val POI_WIN_MS = 600L
 
 /** 双点包含框的屏幕边距（px） */
 private const val BOUNDS_PADDING_PX = 120
+
+/** 候选线路配色（F-PLAN-12）：橙 / 紫 / 绿。Polyline 无 setAlpha（D-17 javap 结论）：
+ *  未高亮线路的半透明用 ARGB color int 的 alpha 位（CANDIDATE_DIM_ALPHA）实现。 */
+private val CANDIDATE_COLORS = intArrayOf(0xFFF2994A.toInt(), 0xFF9B51E0.toInt(), 0xFF27AE60.toInt())
+private const val CANDIDATE_DIM_ALPHA = 0x66
+
+/** 已选定线路（F-PLAN-15）：蓝色实线 */
+private val SELECTED_COLOR = 0xFF2F80ED.toInt()
+private const val NORMAL_WIDTH_DP = 6f
+private const val HIGHLIGHT_WIDTH_DP = 10f
+private const val SELECTED_WIDTH_DP = 8f
 

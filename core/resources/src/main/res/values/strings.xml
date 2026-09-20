@@ -120,6 +120,16 @@
     <string name="plan_hint_no_result">No result found. Try another keyword or a different city.</string>
     <string name="plan_hint_offline">Search unavailable. Tap the map to pick points instead.</string>
     <string name="plan_hint_locate_failed">Failed to get current location. Try again or pick on the map.</string>
+    <string name="plan_planning">Planning routes…</string>
+    <string name="plan_route_failed">No route found. Adjust the points and try again.</string>
+    <string name="plan_replan">Replan</string>
+    <string name="plan_select_this">Choose this route</string>
+    <string name="plan_saved">Saved as plan</string>
+    <string name="plan_estimated_ascent">Ascent ≈%1$d m (estimated)</string>
+    <string name="diff_easy">Easy</string>
+    <string name="diff_moderate">Moderate</string>
+    <string name="diff_hard">Hard</string>
+    <string name="diff_challenging">Challenging</string>
 
     <!-- 计划 plan_*（P-03 选点与搜索，F-PLAN-01~09） -->
     <string name="error_generic">Something went wrong. Please try again.</string>
