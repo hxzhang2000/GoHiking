@@ -68,6 +68,11 @@
     <string name="rec_plan_pick_title">选择要关联的计划线路</string>
     <string name="rec_plan_unlink">取消关联</string>
     <string name="rec_plan_empty">暂无已保存的计划线路</string>
+    <string name="rec_alert_on">提醒：开</string>
+    <string name="rec_alert_off">提醒：关</string>
+    <string name="tts_alert_distance">已行进 %1$d 米</string>
+    <string name="tts_alert_ascent">已爬升 %1$d 米，当前海拔 %2$d 米</string>
+    <string name="tts_alert_descent">已下降 %1$d 米，当前海拔 %2$d 米</string>
     <string name="rec_marker_dialog_title">添加标记</string>
     <string name="rec_marker_note_hint">备注（如：补水点、危险路段）</string>
     <string name="rec_start_dialog_title">开始记录</string>

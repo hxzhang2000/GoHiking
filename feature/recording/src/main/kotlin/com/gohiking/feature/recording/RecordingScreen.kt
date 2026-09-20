@@ -56,6 +56,7 @@ import com.amap.api.maps.model.PolylineOptions
 import com.gohiking.core.common.format.Formatters
 import com.gohiking.core.common.geo.PolylineJson
 import com.gohiking.core.map.overlay.PolylineArrowTexture
+import com.gohiking.core.data.alert.AlertVoice
 import com.gohiking.core.data.recording.RecordingSession
 import com.gohiking.core.data.recording.SessionState
 import com.gohiking.core.data.recording.TripDraft
@@ -93,6 +94,7 @@ fun RecordingScreen(
     var holdingStop by remember { mutableStateOf(false) }
     var showPlanPicker by remember { mutableStateOf(false) }
     val savedPlans by plannedRouteDao.observeAllWithLegs().collectAsStateWithLifecycle(initialValue = emptyList())
+    val ttsSpeaker = remember { TtsSpeaker(context) }
 
     val active = state as? SessionState.Active
 
@@ -101,6 +103,22 @@ fun RecordingScreen(
         (context as? Activity)?.window?.addFlags(FLAG_KEEP_SCREEN_ON)
         onDispose {
             (context as? Activity)?.window?.clearFlags(FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
+    // F-ALERT-42/43：TTS 播报（引擎不可用静默降级）；离开记录页释放引擎与音频焦点
+    DisposableEffect(ttsSpeaker) {
+        onDispose { ttsSpeaker.shutdown() }
+    }
+    // F-ALERT-28/40：播报文案取 strings_tts 模板（与屏幕文案分开，PRD 9.7.2），语言跟随 App
+    LaunchedEffect(ttsSpeaker) {
+        session.speakEvents.collect { voice ->
+            val text = when (voice) {
+                is AlertVoice.Distance -> context.getString(CoreR.string.tts_alert_distance, voice.meters)
+                is AlertVoice.Ascent -> context.getString(CoreR.string.tts_alert_ascent, voice.meters, voice.altitudeM)
+                is AlertVoice.Descent -> context.getString(CoreR.string.tts_alert_descent, voice.meters, voice.altitudeM)
+            }
+            ttsSpeaker.speak(text)
         }
     }
 
@@ -224,6 +242,15 @@ fun RecordingScreen(
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
             )
+            if (active != null) {
+                Text(
+                    text = stringResource(
+                        if (active.alertsEnabled) CoreR.string.rec_alert_on else CoreR.string.rec_alert_off,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
             if (active != null) {
                 // F-PLAN-44：关联计划入口（显示当前关联，点击选择/更换/取消）
