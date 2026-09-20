@@ -91,6 +91,9 @@ android {
         // PRD 9.4：记录页锁定竖屏是有意为之
         disable += "LockedOrientationActivity"
         disable += "DiscouragedApi"
+        // targetSdk 35 是 DEV §7.1.1 / PRD 9.4 锁定的基线；lint 数据库随环境认定「最新 API」不同
+        // 会在 CI（较新判定）报 OldTargetApi 而本地不报——与 GradleDependency 同理，升级由人工裁定
+        disable += "OldTargetApi"
     }
 
     // APK 命名：GoHiking-debug-v1-0-0.apk（参考 NASMusicTV-release-v2-36-0.apk 格式）
