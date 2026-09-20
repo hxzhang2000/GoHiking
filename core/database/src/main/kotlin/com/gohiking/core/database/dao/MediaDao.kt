@@ -6,6 +6,7 @@ import androidx.room.Query
 import androidx.room.Upsert
 import com.gohiking.core.database.entity.MediaFingerprintRow
 import com.gohiking.core.database.entity.MediaIndexEntity
+import com.gohiking.core.database.entity.MediaIndexKeyRow
 import com.gohiking.core.database.entity.MediaRefEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -35,6 +36,17 @@ interface MediaDao {
 
     @Query("SELECT mediaStoreId, dateModifiedMs FROM media_index")
     suspend fun indexFingerprint(): List<MediaFingerprintRow>
+
+    /** 全键表（F-MEDIA-09 增量比对 + 删除同步）：复合主键含 type，必须带 type 读全键 */
+    @Query("SELECT mediaStoreId, mediaType, dateModifiedMs FROM media_index")
+    suspend fun indexKeys(): List<MediaIndexKeyRow>
+
+    /** 删除单条索引（F-MEDIA-09 增量比对发现媒体已删除时同步缓存） */
+    @Query("DELETE FROM media_index WHERE mediaStoreId = :mediaStoreId AND mediaType = :mediaType")
+    suspend fun deleteIndex(mediaStoreId: Long, mediaType: String)
+
+    @Query("SELECT COUNT(*) FROM media_index")
+    suspend fun countIndex(): Int
 
     @Query("DELETE FROM media_index")
     suspend fun clearIndex()

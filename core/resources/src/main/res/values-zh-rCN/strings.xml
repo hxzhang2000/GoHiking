@@ -163,6 +163,7 @@
 
     <!-- 图表与分段表 hist_chart_*/hist_splits_*（M4-A，F-HIS-23~25） -->
     <string name="hist_detail_section_charts">图表</string>
+    <string name="hist_media_section">照片</string>
     <string name="hist_detail_section_splits">分段</string>
     <string name="hist_chart_altitude">海拔曲线</string>
     <string name="hist_chart_pace">每公里配速</string>

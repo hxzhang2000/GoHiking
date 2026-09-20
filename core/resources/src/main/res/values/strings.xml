@@ -165,6 +165,7 @@
     <!-- 图表与分段表 hist_chart_*/hist_splits_*（M4-A，F-HIS-23~25） -->
     <string name="hist_detail_section_charts">Charts</string>
     <string name="hist_detail_section_splits">Splits</string>
+    <string name="hist_media_section">Photos</string>
     <string name="hist_chart_altitude">Altitude profile</string>
     <string name="hist_chart_pace">Pace per kilometer</string>
     <string name="hist_chart_empty">No data</string>

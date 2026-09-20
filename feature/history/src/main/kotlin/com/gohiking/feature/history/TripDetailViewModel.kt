@@ -3,11 +3,14 @@ package com.gohiking.feature.history
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gohiking.core.common.geo.PolylineSimplifier
+import com.gohiking.core.data.media.MediaRepository
+import com.gohiking.core.data.media.MediaTripMatcher
 import com.gohiking.core.data.repository.TripRepository
 import com.gohiking.core.data.stats.GainSplit
 import com.gohiking.core.data.stats.KmSplit
 import com.gohiking.core.data.stats.Legs
 import com.gohiking.core.database.entity.MarkerEntity
+import com.gohiking.core.database.entity.MediaIndexEntity
 import com.gohiking.core.database.entity.TripEntity
 import com.gohiking.core.model.LatLngValue
 import kotlinx.coroutines.Dispatchers
@@ -35,12 +38,20 @@ data class TripDetailUiState(
     /** F-HIS-25 分段表 */
     val kmSplits: List<KmSplit> = emptyList(),
     val gainSplits: List<GainSplit> = emptyList(),
+    /**
+     * F-HIS-28 / F-MEDIA-40 照片缩略图条。
+     * null = 无媒体权限（整段隐藏，不打扰）；非 null = 权限已授（可能为空列表 = 无关联照片）。
+     */
+    val photos: List<MediaIndexEntity>? = null,
     val deleted: Boolean = false, // 删除完成后由壳层导航返回列表
 )
 
 class TripDetailViewModel(
     private val repo: TripRepository,
+    private val mediaRepository: MediaRepository,
     private val tripId: String,
+    /** 应用级 context 由壳层传入（media 权限与 MediaStore 访问用）；history 模块不引 Hilt */
+    private val appContext: android.content.Context,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(TripDetailUiState())
@@ -87,7 +98,30 @@ class TripDetailViewModel(
                     gainSplits = gain,
                 )
             }
+            loadPhotos(pts)
         }
+    }
+
+    /**
+     * F-HIS-28 / F-MEDIA-40 照片条：
+     * 1) 无媒体权限 → photos = null，照片区整段隐藏（权限引导在照片地图页 P-12，详情页静默）；
+     * 2) 有权限 → 先增量扫描（F-MEDIA-09，幂等），再按 F-MEDIA-41/43 判定加载关联照片。
+     */
+    private suspend fun loadPhotos(points: List<com.gohiking.core.database.entity.TrackPointEntity>) {
+        if (!mediaRepository.hasMediaAccess(appContext)) {
+            _state.update { it.copy(photos = null) }
+            return
+        }
+        runCatching { mediaRepository.rescan(appContext) }
+        val trip = _state.value.trip ?: return
+        val end = trip.endTime ?: points.maxOfOrNull { it.timestamp } ?: trip.startTime
+        val photos = mediaRepository.photosForTrip(
+            tripId = tripId,
+            tripStartMs = trip.startTime,
+            tripEndMs = end,
+            trackPointsGcj = points.map { MediaTripMatcher.TrackPointGcj(it.latitude, it.longitude) },
+        )
+        _state.update { it.copy(photos = photos) }
     }
 
     /** F-HIS-30 重命名 */

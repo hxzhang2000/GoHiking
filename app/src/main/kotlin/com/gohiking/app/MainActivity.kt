@@ -59,6 +59,7 @@ import com.gohiking.core.data.io.GeneratorInfo
 import com.gohiking.core.data.io.IoRepository
 import com.gohiking.core.data.io.ParsedFile
 import com.gohiking.core.data.io.RoomImportSink
+import com.gohiking.core.data.media.MediaRepository
 import com.gohiking.core.data.recording.RecordingService
 import com.gohiking.core.data.recording.RecordingSession
 import com.gohiking.core.data.recording.SessionState
@@ -105,6 +106,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var ioRepository: IoRepository
     @Inject lateinit var importSink: RoomImportSink
+    @Inject lateinit var mediaRepository: MediaRepository
 
     /** F-I18N-11：语言在 Activity 重建（重启）时经 attachBaseContext 生效 */
     override fun attachBaseContext(newBase: android.content.Context) {
@@ -136,6 +138,7 @@ class MainActivity : ComponentActivity() {
                     settingsRepository = settingsRepository,
                     ioRepository = ioRepository,
                     importSink = importSink,
+                    mediaRepository = mediaRepository,
                 )
             }
         }
@@ -152,6 +155,7 @@ private fun Root(
     settingsRepository: SettingsRepository,
     ioRepository: IoRepository,
     importSink: RoomImportSink,
+    mediaRepository: MediaRepository, // F-HIS-28 照片条（M4-B1）
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -319,6 +323,7 @@ private fun Root(
     } else if (openTripId != null) {
         TripDetailScreen(
             tripRepository = tripRepository,
+            mediaRepository = mediaRepository,
             tripId = openTripId!!,
             onBack = { openTripId = null },
             onDeleted = { openTripId = null },

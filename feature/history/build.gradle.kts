@@ -35,7 +35,9 @@ dependencies {
     implementation(project(":core:common")) // Formatters / PolylineSimplifier
 
     implementation(libs.amap.combined) // 详情页地图（F-HIS-21）；高德统一三合一（D-17）
-    implementation(libs.vico.compose.m3) // 详情页图表（F-HIS-23/24，M4-A；DEV §1.3 锁定 3.3.1）
+    implementation(libs.vico.compose.m3) // 详情页图表（F-HIS-23/24，M4-A；DEV §1.3 锁定 2.1.4）
+    implementation(libs.coil.compose) // 照片缩略图条（F-HIS-28 / F-MEDIA-40）
+    implementation(libs.coil.video) // 视频首帧（F-MEDIA-22）
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

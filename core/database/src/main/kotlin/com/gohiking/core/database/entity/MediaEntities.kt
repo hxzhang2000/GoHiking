@@ -54,3 +54,10 @@ data class MediaFingerprintRow(
     val mediaStoreId: Long,
     val dateModifiedMs: Long,
 )
+
+/** 媒体索引全键行（F-MEDIA-09：复合主键含 mediaType，增量比对与删除同步需要完整键） */
+data class MediaIndexKeyRow(
+    val mediaStoreId: Long,
+    val mediaType: String,
+    val dateModifiedMs: Long,
+)

@@ -2,6 +2,7 @@ package com.gohiking.feature.history
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,13 +10,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -34,7 +38,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -43,6 +51,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
+import coil3.video.videoFrameMillis
 import com.amap.api.maps.CameraUpdateFactory
 import com.amap.api.maps.MapView
 import com.amap.api.maps.MapsInitializer
@@ -52,8 +64,10 @@ import com.amap.api.maps.model.LatLngBounds
 import com.amap.api.maps.model.MarkerOptions
 import com.amap.api.maps.model.PolylineOptions
 import com.gohiking.core.common.format.Formatters
+import com.gohiking.core.data.media.MediaRepository
 import com.gohiking.core.data.repository.TripRepository
 import com.gohiking.core.database.entity.MarkerEntity
+import com.gohiking.core.database.entity.MediaIndexEntity
 import com.gohiking.core.database.entity.TripEntity
 import com.gohiking.core.data.stats.LegSummary
 import com.gohiking.core.resources.R as CoreR
@@ -73,16 +87,18 @@ import java.util.Locale
 @Composable
 fun TripDetailScreen(
     tripRepository: TripRepository,
+    mediaRepository: MediaRepository, // F-HIS-28 照片条（M4-B1）
     tripId: String,
     onBack: () -> Unit,
     onDeleted: () -> Unit,
     onExportTrip: ((tripId: String, tripName: String) -> Unit)? = null, // F-IO-01/F-HIS-30（M4 接线）
     modifier: Modifier = Modifier,
 ) {
+    val appContext = LocalContext.current.applicationContext
     val viewModel: TripDetailViewModel = viewModel(
         key = tripId,
         factory = viewModelFactory {
-            initializer { TripDetailViewModel(tripRepository, tripId) }
+            initializer { TripDetailViewModel(tripRepository, mediaRepository, tripId, appContext) }
         },
     )
     TripDetailContent(
@@ -182,6 +198,12 @@ private fun TripDetailContent(
             item { SectionTitle(stringResource(CoreR.string.hist_detail_section_charts)) }
             item { AltitudeChartCard(state.altitudeSeries) }
             item { PaceChartCard(state.kmSplits) }
+
+            // F-HIS-28 / F-MEDIA-40 照片条（M4-B1：无媒体权限时整段隐藏）
+            state.photos?.takeIf { it.isNotEmpty() }?.let { photos ->
+                item { SectionTitle(stringResource(CoreR.string.hist_media_section)) }
+                item { MediaStrip(photos) }
+            }
 
             // F-HIS-25 分段表
             if (state.kmSplits.isNotEmpty() || state.gainSplits.isNotEmpty()) {
@@ -344,6 +366,60 @@ private fun TripDetailContent(
                 }
             },
         )
+    }
+}
+
+/** F-HIS-28 / F-MEDIA-40 照片缩略图条（横向滑动）；视频首帧 + 播放角标 + 时长（F-MEDIA-22）。 */
+@Composable
+private fun MediaStrip(photos: List<MediaIndexEntity>, modifier: Modifier = Modifier) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        items(photos, key = { it.uri }) { m ->
+            Box(
+                modifier = Modifier
+                    .size(96.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                val ctx = LocalContext.current
+                val model = remember(m.uri) {
+                    ImageRequest.Builder(ctx)
+                        .data(m.uri)
+                        .apply { if (m.mediaType == "VIDEO") videoFrameMillis(0) }
+                        .crossfade(true)
+                        .build()
+                }
+                AsyncImage(
+                    model = model,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                if (m.mediaType == "VIDEO") {
+                    Icon(
+                        Icons.Filled.PlayArrow,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(28.dp),
+                    )
+                    m.durationMs?.let { d ->
+                        Text(
+                            text = Formatters.durationText(d / 1000),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(4.dp),
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
