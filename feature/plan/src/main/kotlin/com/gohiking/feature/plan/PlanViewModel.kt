@@ -19,8 +19,10 @@ import com.gohiking.core.map.search.SearchOutcome
 import com.gohiking.core.map.search.Suggestion
 import com.gohiking.core.model.Difficulty
 import com.gohiking.core.model.LatLngValue
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.abs
@@ -466,7 +468,7 @@ class PlanViewModel(
     }
 
     private fun manualRouteName(s: PlanUiState): String =
-        s.manualWaypoints.lastOrNull()?.name ?: ("手动线路 " + DATE_TIME_FORMAT.get()!!.format(Date()))
+        s.manualWaypoints.lastOrNull()?.name ?: ("手动线路 " + LocalDateTime.now().format(DATE_TIME_FORMAT))
 
     /** 相邻途经点连线重建（F-PLAN-23/24）：直线直连；吸附逐段步行规划、失败回退直线 */
     private fun rebuildManualSegments() {
@@ -631,7 +633,7 @@ class PlanViewModel(
         val a = s.start?.name
         val b = s.end?.name
         if (a != null && b != null) return "$a → $b"
-        return "计划线路 " + DATE_TIME_FORMAT.get()!!.format(Date())
+        return "计划线路 " + LocalDateTime.now().format(DATE_TIME_FORMAT)
     }
 
     /** 落点：按激活目标写入；写完自动切到另一个未设置的目标（F-PLAN-03→04 顺序引导） */
@@ -680,6 +682,5 @@ class PlanViewModel(
     }
 }
 
-private val DATE_TIME_FORMAT = ThreadLocal.withInitial {
-    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ROOT)
-}
+// DateTimeFormatter 线程安全且不可变，无需 ThreadLocal（K2 起 SimpleDateFormat?.get() 可空告警）
+private val DATE_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.ROOT)

@@ -94,9 +94,9 @@ class RecordingSession @Inject constructor(
     private var maxAltitudeM: Double? = null
     private var minAltitudeM: Double? = null
     private val markers = mutableListOf<MarkerEntity>()
-    private val DATE_TIME_FORMAT = ThreadLocal.withInitial {
-        java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.ROOT)
-    }
+    // DateTimeFormatter 线程安全且不可变，无需 ThreadLocal（K2 起 SimpleDateFormat?.get() 可空告警）
+    private val DATE_TIME_FORMAT =
+        java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", java.util.Locale.ROOT)
     private var sequenceByType = mutableMapOf<String, Int>()
 
     private var buffer = mutableListOf<TrackPointEntity>()
@@ -235,7 +235,11 @@ class RecordingSession @Inject constructor(
         val trip = TripEntity(
             id = s.tripId,
             // F-REC-08：未命名（空）→ 日期 + 时间命名；关联计划线路取计划名（M2 接入）
-            name = s.name.ifBlank { DATE_TIME_FORMAT.get().format(java.util.Date(startedAtMs)) },
+            name = s.name.ifBlank {
+                DATE_TIME_FORMAT.format(
+                    java.time.Instant.ofEpochMilli(startedAtMs).atZone(java.time.ZoneId.systemDefault())
+                )
+            },
             note = null,
             plannedRouteId = plannedRouteId,
             startTime = startedAtMs,

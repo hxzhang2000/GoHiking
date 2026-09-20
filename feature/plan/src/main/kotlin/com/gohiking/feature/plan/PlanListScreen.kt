@@ -31,8 +31,9 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.gohiking.core.common.format.Formatters
 import com.gohiking.core.resources.R as CoreR
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
@@ -94,7 +95,7 @@ fun PlanListScreen(
                                     CoreR.string.plan_estimated_ascent,
                                     item.totalAscentM.toInt(),
                                 ) +
-                                " · " + DATE_FMT.get()!!.format(Date(item.createdAt)),
+                                " · " + formatEpoch(item.createdAt, DATE_FMT),
                             style = MaterialTheme.typography.bodySmall,
                         )
                         TextButton(onClick = { deleteTarget = item }) {
@@ -155,6 +156,9 @@ fun PlanListScreen(
     }
 }
 
-private val DATE_FMT = ThreadLocal.withInitial {
-    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ROOT)
-}
+// DateTimeFormatter 线程安全且不可变，无需 ThreadLocal（K2 起 SimpleDateFormat?.get() 可空告警）
+private val DATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.ROOT)
+
+/** epoch millis → 本地时区格式化（DateTimeFormatter 线程安全） */
+private fun formatEpoch(ms: Long, fmt: DateTimeFormatter): String =
+    fmt.format(Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()))

@@ -20,7 +20,15 @@
 
 ## [Unreleased]
 
-### 0.3.0 — M2 计划线路（进行中）
+### Added
+- CI：GitHub Actions 打 `v*` tag 自动构建 release APK 并创建 GitHub Release，Release 说明自动取自 CHANGELOG 对应小节（参照 NASMusicTV）；另含 test / lint 两个阻塞门禁 job
+
+### Changed
+- 日期格式化统一迁移到 `java.time.format.DateTimeFormatter`（替代 `ThreadLocal<SimpleDateFormat>`，消除 K2 可空接收者告警）
+
+## [v0.3.0] - 2026-09-20
+
+> M2 计划线路里程碑。打 `v0.3.0` tag 推送后，CI 自动提取本节生成 GitHub Release 说明。
 
 - 选点与搜索（P-03）：地图点选 / 输入联想 / 底图 POI / 当前位置为起点，POI 气泡与拖动调整（F-PLAN-01~09）
 - 自动推荐 3 条步行线路（P-04）：候选折线三色渲染、点击高亮、选定落库（F-PLAN-10~16）

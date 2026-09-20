@@ -6,14 +6,19 @@ import com.gohiking.core.common.format.Formatters
 import com.gohiking.core.data.repository.TripRepository
 import com.gohiking.core.database.entity.TripEntity
 import com.gohiking.core.database.entity.TripSummaryRow
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/** epoch millis → 本地时区格式化（DateTimeFormatter 线程安全） */
+private fun formatEpoch(ms: Long, fmt: DateTimeFormatter): String =
+    fmt.format(Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()))
 
 /**
  * P-10 记录列表（DEV §5.2）。M1 最小切片：
@@ -109,8 +114,8 @@ class HistoryListViewModel(private val repo: TripRepository) : ViewModel() {
     private fun TripEntity.toRowUi(): TripRowUi = TripRowUi(
         id = id,
         name = name,
-        dateText = DATE_FORMAT.get().format(Date(startTime)),
-        monthKey = MONTH_FORMAT.get().format(Date(startTime)),
+        dateText = formatEpoch(startTime, DATE_FORMAT),
+        monthKey = formatEpoch(startTime, MONTH_FORMAT),
         distanceText = Formatters.distanceText(distanceM),
         durationText = Formatters.durationText(durationSec),
         ascentText = Formatters.metersText(totalAscentM),
@@ -125,8 +130,8 @@ class HistoryListViewModel(private val repo: TripRepository) : ViewModel() {
     )
 
     private companion object {
-        // ThreadLocal 防御：SimpleDateFormat 非线程安全；VM 只在主线程格式化，这里保守处理
-        val DATE_FORMAT = ThreadLocal.withInitial { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ROOT) }
-        val MONTH_FORMAT = ThreadLocal.withInitial { SimpleDateFormat("yyyy-MM", Locale.ROOT) }
+        // DateTimeFormatter 线程安全且不可变，无需 ThreadLocal（K2 起 SimpleDateFormat?.get() 可空告警）
+        val DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.ROOT)
+        val MONTH_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM", Locale.ROOT)
     }
 }

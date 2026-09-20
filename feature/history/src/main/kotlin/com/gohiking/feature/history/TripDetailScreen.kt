@@ -57,8 +57,9 @@ import com.gohiking.core.database.entity.MarkerEntity
 import com.gohiking.core.database.entity.TripEntity
 import com.gohiking.core.data.stats.LegSummary
 import com.gohiking.core.resources.R as CoreR
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
@@ -131,7 +132,7 @@ private fun TripDetailContent(
                 )
                 state.trip?.let { trip ->
                     Text(
-                        text = DATE_FORMAT.get().format(Date(trip.startTime)),
+                        text = formatEpoch(trip.startTime, DATE_FORMAT),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -510,7 +511,7 @@ private fun MarkerRow(marker: MarkerEntity, onClick: () -> Unit) {
                 )
                 Spacer(Modifier.weight(1f))
                 Text(
-                    text = MARKER_TIME_FORMAT.get().format(Date(marker.timestamp)),
+                    text = formatEpoch(marker.timestamp, MARKER_TIME_FORMAT),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -558,6 +559,10 @@ private fun markerTypeColor(type: String) = when (type) {
 
 private val TRACK_RED = 0xFFE24B4A.toInt() // PRD F-REC-03 权威色值
 
-// ThreadLocal 防御：SimpleDateFormat 非线程安全
-private val DATE_FORMAT = ThreadLocal.withInitial { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ROOT) }
-private val MARKER_TIME_FORMAT = ThreadLocal.withInitial { SimpleDateFormat("HH:mm:ss", Locale.ROOT) }
+// DateTimeFormatter 线程安全且不可变，无需 ThreadLocal（K2 起 SimpleDateFormat?.get() 可空告警）
+private val DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.ROOT)
+private val MARKER_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ROOT)
+
+/** epoch millis → 本地时区格式化（DateTimeFormatter 线程安全） */
+private fun formatEpoch(ms: Long, fmt: DateTimeFormatter): String =
+    fmt.format(Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()))
