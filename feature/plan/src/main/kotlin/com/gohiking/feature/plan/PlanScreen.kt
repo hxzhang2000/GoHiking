@@ -579,6 +579,14 @@ private fun PlanContent(
                                     onClick = { viewModel.setReturnEnabled(!state.returnEnabled) },
                                     label = { Text(stringResource(CoreR.string.plan_return_toggle)) },
                                 )
+                                // F-PLAN-35：返程独立规划（不依赖原路返回）
+                                if (state.returnPlanning) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                } else {
+                                    OutlinedButton(onClick = { viewModel.replanReturn() }) {
+                                        Text(stringResource(CoreR.string.plan_replan_return))
+                                    }
+                                }
                                 if (state.chosenRouteId != null) {
                                     Text(
                                         stringResource(CoreR.string.plan_saved),

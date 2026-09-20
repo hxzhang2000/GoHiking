@@ -84,6 +84,7 @@ data class PlanUiState(
     val returnPath: PlannedPath? = null, // 返程折线（原路返回 = 去程反向；独立规划在 C2b）
     val returnMetrics: RouteMetrics? = null, // 爬升/下降相对去程已互换
     val returnDifficulty: Difficulty? = null,
+    val returnPlanning: Boolean = false, // F-PLAN-35 返程独立规划中
     // ── 手动打点（F-PLAN-20~29）──
     val manualMode: Boolean = false,
     val manualWaypoints: List<PlanPoint> = emptyList(),
@@ -251,6 +252,39 @@ class PlanViewModel(
     /** F-PLAN-34：原路返回开关（关闭则只保存去程单段） */
     fun setReturnEnabled(enabled: Boolean) {
         _state.update { it.copy(returnEnabled = enabled) }
+    }
+
+    /**
+     * F-PLAN-35：返程独立规划——起终点对调重新步行规划，取第一条并重估爬升；
+     * 规划失败保留原「原路返回」折线不动（不出现空返程）
+     */
+    fun replanReturn() {
+        val s = _state.value
+        if (!s.confirming || s.returnPlanning) return
+        val a = s.start?.latLng ?: return
+        val b = s.end?.latLng ?: return
+        viewModelScope.launch {
+            _state.update { it.copy(returnPlanning = true) }
+            val paths = routeClient.walkRoutes(b, a) // 返程：终点 → 起点
+            if (paths.isEmpty()) {
+                _state.update { it.copy(returnPlanning = false) } // 保留原路返回
+                return@launch
+            }
+            val rp = paths.first()
+            _state.update {
+                it.copy(returnPath = rp, returnMetrics = null, returnDifficulty = null, returnPlanning = false)
+            }
+            val metrics = RouteEvaluator.evaluate(
+                rp.points.map { LatLngValue(it.latitude, it.longitude) },
+                queryElevation,
+            )
+            val difficulty = if (metrics.elevationAvailable) {
+                RouteEvaluator.difficultyOf(metrics.distanceM, metrics.ascentM ?: 0.0)
+            } else {
+                null
+            }
+            _state.update { it.copy(returnMetrics = metrics, returnDifficulty = difficulty) }
+        }
     }
 
     /** 确认态保存计划（F-PLAN-40 命名由 UI 对话框传入；OUTBOUND + RETURN 两段同事务落库） */
@@ -556,6 +590,7 @@ class PlanViewModel(
                     returnPath = null,
                     returnMetrics = null,
                     returnDifficulty = null,
+                    returnPlanning = false,
                 )
             }
             val paths = routeClient.walkRoutes(start, end)
