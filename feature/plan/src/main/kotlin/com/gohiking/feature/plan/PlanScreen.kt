@@ -56,6 +56,7 @@ import com.amap.api.maps.model.Marker
 import com.amap.api.maps.model.MarkerOptions
 import com.amap.api.maps.model.Polyline
 import com.amap.api.maps.model.PolylineOptions
+import com.gohiking.core.map.overlay.PolylineArrowTexture
 import com.gohiking.core.common.format.Formatters
 import com.gohiking.core.database.dao.PlannedRouteDao
 import com.gohiking.core.elevation.ElevationRepository
@@ -128,7 +129,7 @@ private fun PlanContent(
     val waypointMarkers = remember { mutableMapOf<Marker, Int>() }
     val manualPolylines = remember { mutableListOf<Polyline>() }
     // 返程折线引用（F-PLAN-36 深蓝虚线；单条）
-    var returnPolyline by remember { mutableStateOf<Polyline?>(null) }
+    val returnPolylines = remember { mutableListOf<Polyline>() } // 线 + 箭头纹理层（F-PLAN-37）
 
     // 隐私合规必须早于 MapView 创建（红线，重复调用幂等；与首页/记录页同一模式）
     val mapView = remember {
@@ -265,21 +266,35 @@ private fun PlanContent(
                     .width(SELECTED_WIDTH_DP * densityPx)
                     .color(SELECTED_COLOR),
             )
+            // F-PLAN-37：方向箭头叠加层（透明底 chevron 纹理，D-23）
+            candidatePolylines += aMap.addPolyline(
+                PolylineOptions()
+                    .addAll(chosen.path.points)
+                    .width(SELECTED_WIDTH_DP * densityPx)
+                    .setCustomTexture(PolylineArrowTexture.forColor(SELECTED_COLOR))
+                    .zIndex(1f),
+            )
         } else {
             state.candidates.forEachIndexed { i, c ->
                 val highlighted = i == state.highlightIndex
                 val base = CANDIDATE_COLORS[i % CANDIDATE_COLORS.size]
+                val lineColor = if (highlighted) {
+                    base
+                } else {
+                    (CANDIDATE_DIM_ALPHA shl 24) or (base and 0x00FFFFFF)
+                }
                 candidatePolylines += aMap.addPolyline(
                     PolylineOptions()
                         .addAll(c.path.points)
                         .width((if (highlighted) HIGHLIGHT_WIDTH_DP else NORMAL_WIDTH_DP) * densityPx)
-                        .color(
-                            if (highlighted) {
-                                base
-                            } else {
-                                (CANDIDATE_DIM_ALPHA shl 24) or (base and 0x00FFFFFF)
-                            },
-                        ),
+                        .color(lineColor),
+                )
+                candidatePolylines += aMap.addPolyline(
+                    PolylineOptions()
+                        .addAll(c.path.points)
+                        .width((if (highlighted) HIGHLIGHT_WIDTH_DP else NORMAL_WIDTH_DP) * densityPx)
+                        .setCustomTexture(PolylineArrowTexture.forColor(lineColor))
+                        .zIndex(1f),
                 )
             }
         }
@@ -295,17 +310,25 @@ private fun PlanContent(
     // F-PLAN-36：返程折线——深蓝 #1B4F9C 虚线（原路返回 = 去程反向）
     LaunchedEffect(state.returnEnabled, state.returnPath, densityPx) {
         val aMap = mapView.map
-        returnPolyline?.remove()
-        returnPolyline = null
+        returnPolylines.forEach { it.remove() }
+        returnPolylines.clear()
         if (state.returnEnabled) {
             state.returnPath?.let { rp ->
                 if (rp.points.isNotEmpty()) {
-                    returnPolyline = aMap.addPolyline(
+                    returnPolylines += aMap.addPolyline(
                         PolylineOptions()
                             .addAll(rp.points)
                             .width(RETURN_WIDTH_DP * densityPx)
                             .color(RETURN_COLOR)
                             .setDottedLine(true),
+                    )
+                    // 虚线与纹理互斥（D-23 jlib 实测结论）→ 箭头用叠加层
+                    returnPolylines += aMap.addPolyline(
+                        PolylineOptions()
+                            .addAll(rp.points)
+                            .width(RETURN_WIDTH_DP * densityPx)
+                            .setCustomTexture(PolylineArrowTexture.forColor(RETURN_COLOR))
+                            .zIndex(1f),
                     )
                 }
             }
@@ -324,6 +347,13 @@ private fun PlanContent(
                 .color(MANUAL_COLOR)
             if (!seg.snapped) opts.setDottedLine(true)
             manualPolylines += aMap.addPolyline(opts)
+            manualPolylines += aMap.addPolyline(
+                PolylineOptions()
+                    .addAll(seg.points)
+                    .width(MANUAL_WIDTH_DP * densityPx)
+                    .setCustomTexture(PolylineArrowTexture.forColor(MANUAL_COLOR))
+                    .zIndex(1f),
+            )
         }
     }
 

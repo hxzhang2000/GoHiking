@@ -33,6 +33,7 @@ dependencies {
     implementation(project(":core:data")) // RecordingSession / TripRepository（M1 切片：UI 直读会话状态）
     implementation(project(":core:common")) // Formatters（记录页统计展示）
     implementation(project(":core:database")) // TrackPointEntity / TripEntity（地图轨迹与保存弹窗）
+    implementation(project(":core:map")) // PolylineArrowTexture（F-PLAN-37 方向箭头纹理）
 
     implementation(libs.amap.combined) // 记录页实时轨迹地图（F-REC-03）；高德统一三合一（D-17）
 

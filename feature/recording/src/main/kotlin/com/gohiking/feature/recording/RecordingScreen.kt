@@ -55,6 +55,7 @@ import com.amap.api.maps.model.Polyline
 import com.amap.api.maps.model.PolylineOptions
 import com.gohiking.core.common.format.Formatters
 import com.gohiking.core.common.geo.PolylineJson
+import com.gohiking.core.map.overlay.PolylineArrowTexture
 import com.gohiking.core.data.recording.RecordingSession
 import com.gohiking.core.data.recording.SessionState
 import com.gohiking.core.data.recording.TripDraft
@@ -174,6 +175,10 @@ fun RecordingScreen(
             if (pts.size >= 2) {
                 planPolylines += aMap.addPolyline(
                     PolylineOptions().addAll(pts).width(planWidthPx).color(PLANNED_BLUE).zIndex(5f),
+                )
+                planPolylines += aMap.addPolyline(
+                    PolylineOptions().addAll(pts).width(planWidthPx)
+                        .setCustomTexture(PolylineArrowTexture.forColor(PLANNED_BLUE)).zIndex(6f),
                 )
             }
         }
