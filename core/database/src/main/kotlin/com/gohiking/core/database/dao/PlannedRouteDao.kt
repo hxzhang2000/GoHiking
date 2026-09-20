@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import com.gohiking.core.database.entity.PlannedLegEntity
 import com.gohiking.core.database.entity.PlannedRouteEntity
 import com.gohiking.core.database.entity.PlannedRouteWithLegs
 import kotlinx.coroutines.flow.Flow
@@ -13,6 +14,16 @@ import kotlinx.coroutines.flow.Flow
 interface PlannedRouteDao {
     @Insert
     suspend fun insert(route: PlannedRouteEntity)
+
+    @Insert
+    suspend fun insertLegs(legs: List<PlannedLegEntity>)
+
+    /** 线路与段同事务落库（半截数据无意义：route 无 legs 时管理列表会显示空壳） */
+    @Transaction
+    suspend fun saveWithLegs(route: PlannedRouteEntity, legs: List<PlannedLegEntity>) {
+        insert(route)
+        insertLegs(legs)
+    }
 
     @Transaction
     @Query("SELECT * FROM planned_route ORDER BY createdAt DESC")
