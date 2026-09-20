@@ -42,6 +42,8 @@
     <string name="rec_stat_duration">运动时长</string>
     <string name="rec_stat_climb">累计爬升</string>
     <string name="rec_stat_points">轨迹点</string>
+    <string name="rec_stat_altitude">海拔</string>
+    <string name="rec_stat_steps">步数</string>
     <string name="rec_action_summit">登顶标记</string>
     <string name="rec_action_pause">暂停</string>
     <string name="rec_action_resume">继续</string>

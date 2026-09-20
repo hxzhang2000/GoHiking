@@ -73,6 +73,17 @@ fun RecordingScreen(
                 StatCard(stringResource(CoreR.string.rec_stat_duration), formatDuration(active.movingDurationSec))
                 StatCard(stringResource(CoreR.string.rec_stat_distance), formatKm(active.distanceM))
                 StatCard(stringResource(CoreR.string.rec_stat_climb), formatMeters(active.ascentM))
+                // 海拔：fuser 不可用时显示「—」（PRD 6.1 降级规则，绝不编造）
+                StatCard(
+                    stringResource(CoreR.string.rec_stat_altitude),
+                    active.currentAltitudeM?.let { formatMeters(it) }
+                        ?: stringResource(CoreR.string.common_stat_unknown),
+                )
+                StatCard(
+                    stringResource(CoreR.string.rec_stat_steps),
+                    if (active.stepCount >= 0) active.stepCount.toString()
+                    else stringResource(CoreR.string.common_stat_unknown),
+                )
                 StatCard(stringResource(CoreR.string.rec_stat_points), active.pointCount.toString())
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {

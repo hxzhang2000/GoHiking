@@ -19,6 +19,7 @@ vico = "3.3.1"           # ✅ 稳定线（T-10：直接用 v3，不备 MPAndroi
 amapMap = "10.0.600"     # 公网 Maven 可解析的最新 3dmap（jar 无 aar，manifest/权限需 App 自声明）
 amapLocation = "6.4.9"   # ⚠ 已停用（2026-09-20）：3dmap 10.0.600 内嵌完整定位 API+实现（col/3l 602 类），再引 location 会重复 32 类构建失败；坐标保留备查
 amapSearch = "9.7.1"     # ✅ POI 搜索 / 输入提示 / 路径规划都在 search 包，必须单独引（T-01）
+playServicesLocation = "21.3.0" # Fused 备源（DEV D-08）；GMS 不可用时运行时降级
 javaxInject = "1"
 
 [libraries]
@@ -41,6 +42,7 @@ androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterfa
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
 hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", version.ref = "hilt" }
 javax-inject = { group = "javax.inject", name = "javax.inject", version.ref = "javaxInject" }
+play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }

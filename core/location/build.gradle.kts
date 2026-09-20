@@ -30,6 +30,7 @@ dependencies {
     // （col/3l 602 类），再引 location:6.4.9 会与 3dmap 重复 32 个类导致 checkDuplicateClasses 失败
     // （2026-09-20 实测裁定，libs.versions.toml 同步注明）
     implementation(libs.amap.map3d)
+    implementation(libs.play.services.location) // Fused 备源（D-08）；GMS 不可用时运行时降级
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.javax.inject)
     implementation(libs.hilt.android)

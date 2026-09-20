@@ -43,6 +43,8 @@
     <string name="rec_stat_duration">Moving time</string>
     <string name="rec_stat_climb">Ascent</string>
     <string name="rec_stat_points">Points</string>
+    <string name="rec_stat_altitude">Altitude</string>
+    <string name="rec_stat_steps">Steps</string>
     <string name="rec_action_summit">Mark summit</string>
     <string name="rec_action_pause">Pause</string>
     <string name="rec_action_resume">Resume</string>

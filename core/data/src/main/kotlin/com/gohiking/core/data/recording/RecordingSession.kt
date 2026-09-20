@@ -10,9 +10,13 @@ import com.gohiking.core.database.entity.RecordingStateEntity
 import com.gohiking.core.database.entity.TrackPointEntity
 import com.gohiking.core.database.entity.TripEntity
 import com.gohiking.core.location.LocationProvider
+import com.gohiking.core.location.altitude.AltitudeFuser
 import com.gohiking.core.location.altitude.ThresholdAccumulator
 import com.gohiking.core.location.geo.GeoMath
 import com.gohiking.core.location.sampler.TrackSampler
+import com.gohiking.core.location.step.StepSource
+import com.gohiking.core.location.step.StepSourceFactory
+import com.gohiking.core.location.step.StepWire
 import androidx.room.withTransaction
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
@@ -67,7 +71,13 @@ class RecordingSession @Inject constructor(
 
     private var sampler = TrackSampler()
     private var statAccumulator = ThresholdAccumulator(10.0) // 无气压计阈值 10m；有气压计 3m（§4.3.1）
+    private var markAccumulator = ThresholdAccumulator(100.0) // 打点累加器：独立实例（冻结决策 5），默认 100m
     private var hasBarometer = false
+    private var altitudeFuser: AltitudeFuser? = null
+    private var stepSource: StepSource? = null
+    private var currentSteps = -1
+    private var pressureListener: android.hardware.SensorEventListener? = null
+    private var stepsCollectJob: Job? = null
 
     private var lastAcceptedFix: com.gohiking.core.location.LocationFix? = null
     private var seqInSegment: Int = 0
@@ -114,6 +124,16 @@ class RecordingSession @Inject constructor(
         lastStatePersistAtMs = lastFlushAtMs
         sampler = TrackSampler()
         statAccumulator = ThresholdAccumulator(if (hasBarometer) 3.0 else 10.0)
+        markAccumulator = ThresholdAccumulator(100.0)
+        altitudeFuser = AltitudeFuser(hasBarometer, nowMs = System::currentTimeMillis)
+        currentSteps = -1
+        stepSource = StepSourceFactory.create(context, hasPermission = true).also { src ->
+            stepsCollectJob?.cancel()
+            stepsCollectJob = scope.launch {
+                src.steps.collect { currentSteps = it }
+            }
+        }
+        if (hasBarometer) registerPressureListener()
 
         startLocationCollection()
         Timber.i("记录开始 id=%s hasBarometer=%s", tripId, hasBarometer)
@@ -126,6 +146,9 @@ class RecordingSession @Inject constructor(
         lastPausedAtMs = System.currentTimeMillis()
         locationProvider.stop()
         tickJob?.cancel()
+        altitudeFuser?.onSessionPause()
+        stepSource?.pause()
+        unregisterPressureListener()
         scope.launch { flushBuffer(force = true) }
         scope.launch { persistSessionState() }
         _state.value = s.copy(status = "PAUSED", pausedAtMs = lastPausedAtMs)
@@ -143,6 +166,8 @@ class RecordingSession @Inject constructor(
         }
         currentSegment += 1
         seqInSegment = 0
+        stepSource?.resume()
+        if (hasBarometer) registerPressureListener()
         startLocationCollection()
         _state.value = s.copy(
             status = "RECORDING",
@@ -198,10 +223,10 @@ class RecordingSession @Inject constructor(
             avgSpeedMps = avgSpeedMps,
             avgPaceSecPerKm = avgPaceSecPerKm,
             maxSpeedMps = null, // M1 下一批：接受点 max speed
-            steps = -1, // 计步四级降级下一批接入；-1 = 不可用
-            stepSource = "UNAVAILABLE",
+            steps = currentSteps,
+            stepSource = stepSource?.wire ?: StepWire.UNAVAILABLE,
             caloriesKcal = null, // MET 分段估算（F-HIS-35）下一批接入
-            altitudeSource = "GPS_ONLY", // AltitudeFuser 接入后 BAROMETER_FUSED
+            altitudeSource = altitudeFuser?.source?.name ?: "GPS_ONLY",
             hasBarometer = hasBarometer,
             status = "FINISHED",
             createdAt = now,
@@ -216,6 +241,9 @@ class RecordingSession @Inject constructor(
         collectJob = null
         tickJob?.cancel()
         tickJob = null
+        stepsCollectJob?.cancel()
+        stepsCollectJob = null
+        unregisterPressureListener()
         tripId = null
         _state.value = SessionState.Finished(draft)
         Timber.i("记录停止 distance=%.1fm points=%d markers=%d", distance, pointCount, markers.size)
@@ -273,6 +301,14 @@ class RecordingSession @Inject constructor(
         sampler.reset() // 恢复点与中断点不连线 → 位移基准重建
         statAccumulator = ThresholdAccumulator(if (snap.hasBarometer) 3.0 else 10.0)
         statAccumulator.restore(snap.statAnchorM, snap.ascentAccumM, snap.descentAccumM)
+        markAccumulator = ThresholdAccumulator(100.0)
+        altitudeFuser = AltitudeFuser(snap.hasBarometer, nowMs = System::currentTimeMillis)
+            .also { it.restoreRef(snap.altitudeRefM, snap.pressureRefHpa) }
+        currentSteps = -1
+        stepSource = StepSourceFactory.create(context, hasPermission = true).also { src ->
+            stepsCollectJob?.cancel()
+            stepsCollectJob = scope.launch { src.steps.collect { currentSteps = it } }
+        }
         startLocationCollection()
         _state.value = SessionState.Active(
             tripId = snap.tripId,
@@ -295,6 +331,29 @@ class RecordingSession @Inject constructor(
     }
 
     // —— 内部 ——
+
+    /** 气压采样 → AltitudeFuser（仅 hasBarometer 时注册；暂停期间注销） */
+    private fun registerPressureListener() {
+        if (pressureListener != null) return
+        val sm = context.getSystemService(SensorManager::class.java) ?: return
+        val sensor = sm.getDefaultSensor(Sensor.TYPE_PRESSURE) ?: return
+        val listener = object : android.hardware.SensorEventListener {
+            override fun onSensorChanged(event: android.hardware.SensorEvent) {
+                val hpa = event.values.firstOrNull()?.toDouble() ?: return
+                altitudeFuser?.onPressure(hpa)
+            }
+
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+        }
+        sm.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+        pressureListener = listener
+    }
+
+    private fun unregisterPressureListener() {
+        val listener = pressureListener ?: return
+        context.getSystemService(SensorManager::class.java)?.unregisterListener(listener)
+        pressureListener = null
+    }
 
     private fun startLocationCollection() {
         locationProvider.start(intervalMs = 1_000) // 高精度 1s（PRD 6.3.7；省电 3s 由设置项控制）
@@ -324,10 +383,13 @@ class RecordingSession @Inject constructor(
             distanceM += GeoMath.distanceMeters(last.lat, last.lng, fix.lat, fix.lng)
         }
         lastAcceptedFix = fix
-        // 爬升统计：低精度点不参与（PRD 6.3.7）
-        val altitude = fix.altitudeM
-        if (sample.quality == 0 && altitude != null) {
+        // 海拔融合（DEV §4.3）：每个 fix 都喂给 fuser（精度门控/稳定确认由 fuser 内部处理）
+        altitudeFuser?.onGpsFix(fix.altitudeM, fix.verticalAccuracyM?.toDouble(), fix.mslAltitudeM)
+        // 爬升统计：低精度点不参与（PRD 6.3.7）；海拔用滤波后的融合值
+        val altitude = if (sample.quality == 0) altitudeFuser?.current() else null
+        if (altitude != null) {
             statAccumulator.accept(altitude)
+            markAccumulator.accept(altitude) // 打点累加器：独立实例（冻结决策 5）
             if (maxAltitudeM == null || altitude > maxAltitudeM!!) maxAltitudeM = altitude
             if (minAltitudeM == null || altitude < minAltitudeM!!) minAltitudeM = altitude
         }
@@ -356,6 +418,9 @@ class RecordingSession @Inject constructor(
                 maxAltitudeM = maxAltitudeM,
                 minAltitudeM = minAltitudeM,
                 pointCount = pointCount,
+                currentAltitudeM = if (sample.quality == 0) altitudeFuser?.current() else s.currentAltitudeM,
+                stepCount = currentSteps,
+                stepWire = stepSource?.wire ?: StepWire.UNAVAILABLE,
             )
         }
         // emit 采样事件给地图绘制（失败即丢，不影响记录主链路）
@@ -421,13 +486,13 @@ class RecordingSession @Inject constructor(
                     lastDistanceMarkM = 0.0, // 提醒引擎（§4.9）接入后维护
                     lastAscentMarkM = 0.0,
                     lastDescentMarkM = 0.0,
-                    stepAtStart = -1,
-                    stepSourceUsed = "UNAVAILABLE",
+                    stepAtStart = -1, // 级①基准由 SensorCounterStepSource 内部维护，会话级恢复用不到
+                    stepSourceUsed = stepSource?.wire ?: StepWire.UNAVAILABLE,
                     hasBarometer = hasBarometer,
-                    altitudeRefM = null,
-                    pressureRefHpa = null,
+                    altitudeRefM = altitudeFuser?.refSnapshot()?.first,
+                    pressureRefHpa = altitudeFuser?.refSnapshot()?.second,
                     statAnchorM = statAccumulator.currentAnchor(),
-                    markAnchorM = null, // 打点累加器（用户配置阈值）随提醒引擎接入
+                    markAnchorM = markAccumulator.currentAnchor(), // 打点累加器锚点（提醒引擎接入后生效）
                     movingSecBySegmentJson = "{}",
                     updatedAt = lastStatePersistAtMs,
                 ),

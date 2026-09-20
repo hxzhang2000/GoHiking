@@ -25,6 +25,9 @@ sealed interface SessionState {
         val accumulatedPausedMs: Long,
         val pausedAtMs: Long?, // PAUSED 时的暂停起点
         val pointCount: Int,
+        val currentAltitudeM: Double? = null, // AltitudeFuser 滤波输出；null → UI「—」
+        val stepCount: Int = -1, // 计步；-1 = 不可用（四级降级）
+        val stepWire: String = "UNAVAILABLE", // SENSOR_COUNTER / SENSOR_DETECTOR / ACCEL_ALGORITHM / UNAVAILABLE / MANUAL
     ) : SessionState {
         val isRecording: Boolean get() = status == "RECORDING"
         val movingDurationSec: Long
