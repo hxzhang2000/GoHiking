@@ -105,10 +105,7 @@ timber = "5.0.1"
 coroutines = "1.9.0"
 navigation = "2.8.5"
 vico = "3.3.1"          # ✅ 已核实：2.0.0-beta.2 确实存在，但 v3 才是稳定线（最新 3.3.1）；见 §9.2.1 T-10
-amapMap = "10.0.600"      # ❌ 原写 11.1.0 在公网仓库不存在；公网可解析的最新就是 10.0.600（2024-03 后停更）
-#                          若要用更新版本只能走官网下载 aar（见 §9.2.1 T-01）
-amapLocation = "6.4.9"    # ✅ 已核实存在；公网另有 11.2.100 一条新版本线（2026-08 更新），选型见 §9.2.1 T-01
-amapSearch = "9.7.1"      # ✅ 新增：POI 搜索 / 输入提示 / 路径规划都【不在】3dmap 包里，必须单独引（见下）
+amapCombined = "10.0.700_loc6.4.5_sea9.7.2"  # 官方三合一（3dmap+location+search）；单独引 3dmap 与 search 会重复类冲突（D-17）
 
 [libraries]
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
@@ -134,9 +131,7 @@ coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref 
 coil-video = { group = "io.coil-kt.coil3", name = "coil-video", version.ref = "coil" }
 timber = { group = "com.jakewharton.timber", name = "timber", version.ref = "timber" }
 vico-compose-m3 = { group = "com.patrykandpatrick.vico", name = "compose-m3", version.ref = "vico" }
-amap-map-3d = { group = "com.amap.api", name = "3dmap", version.ref = "amapMap" }
-amap-location = { group = "com.amap.api", name = "location", version.ref = "amapLocation" }
-amap-search = { group = "com.amap.api", name = "search", version.ref = "amapSearch" }
+amap-combined = { group = "com.amap.api", name = "3dmap-location-search", version.ref = "amapCombined" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -2177,6 +2172,7 @@ build/
 | D-13 | `media_ref` 增列 `fileName` / `note`、`planned_route` 增列 `source`、`trip` 增列 `avgPaceSecPerKm` | 导出 JSON（PRD 7.3）引用了这些字段，但 PRD 7.1 的表无对应列——导出实现时要么临时加列（Room 版本 +1）、要么破坏 schema（审阅 H-5 / P9） | **影响 PRD：✅ 已落地**（PRD v1.14 在 7.1 补列） |
 | D-14 | `planned_waypoint` 列 `order`（PRD 7.1）落库为 **`orderIndex`** | `order` 是 SQLite 关键字，Room 手写查询里每次都要转义、易踩坑；实体属性 `orderIndex` + `@ColumnInfo(name = "orderIndex")`。导出 JSON 字段名不受影响（按 7.3 schema 独立命名） | 实现补充（2026-09-20，M1 数据层落地时） |
 | D-15 | **不引入独立的 `amap-location` 依赖**：定位能力统一来自 `amap-3dmap`（10.0.600 内嵌完整定位实现，`AmapLocationClient` 可直接使用） | 单独引入 location 6.4.9 会与 3dmap 内嵌实现产生**重复类冲突**（`checkDuplicateClasses` 直接失败，实测 col/3l 602 类重复）；libs.versions.toml 中 `amap-location` 已标记 deprecated | 实现补充（2026-09-20，M1 记录切片落地时） |
+| D-17 | **高德 SDK 改用官方三合一 Maven 包 `com.amap.api:3dmap-location-search:10.0.700_loc6.4.5_sea9.7.2`**（3dmap 10.0.700 + location 6.4.5 + search 9.7.2） | 单独引 `3dmap:10.0.600` + `search:9.7.1` 会在 `checkDuplicateClasses` 失败：两个 jar 各自内嵌 `com.amap.apis.utils.core.api.{NetProxy, AMapUtilCoreApi}` 公共库（实测），且 Gradle 无法按类排除、社区验证 `exclude core-api` 无效；官方三合一是唯一无冲突的 Maven 途径。版本取与 M0 基线最接近的组合（地图/搜索各 +1 patch 号，RouteSearchV2/Inputtips API 面不变）。替代方案（自切 jar 去重）被否：维护成本高且破坏 maven 版本基线 | 实现补充（2026-09-20，M2 选点切片落地时） |
 | D-16 | **传感器类型常量用 `Sensor.TYPE_*`，不是 `SensorManager.TYPE_*`**：气压计探测写法为 `getSystemService(SensorManager::class.java)?.getDefaultSensor(Sensor.TYPE_PRESSURE) != null` | `TYPE_PRESSURE` 等常量定义在 `android.hardware.Sensor` 上（对照官方 platform-35 android.jar 逐字节核验）；`Context.PRESSURE_SERVICE` 是隐藏 SystemApi，公开代码拿 `SensorManager` 应走 `SENSOR_SERVICE` / `getSystemService(Class)` | 实现补充（2026-09-20，M1 记录切片落地时） |
 
 **登记规则**：任何实现层新增项都要在此登记。若某项实质上改变了用户可感知的行为，**必须先回改 PRD**，不能只登记在这里。

@@ -16,9 +16,7 @@ coroutines = "1.9.0"
 navigation = "2.8.5"
 junit = "4.13.2"
 vico = "3.3.1"           # ✅ 稳定线（T-10：直接用 v3，不备 MPAndroidChart）
-amapMap = "10.0.600"     # 公网 Maven 可解析的最新 3dmap（jar 无 aar，manifest/权限需 App 自声明）
-amapLocation = "6.4.9"   # ⚠ 已停用（2026-09-20）：3dmap 10.0.600 内嵌完整定位 API+实现（col/3l 602 类），再引 location 会重复 32 类构建失败；坐标保留备查
-amapSearch = "9.7.1"     # ✅ POI 搜索 / 输入提示 / 路径规划都在 search 包，必须单独引（T-01）
+amapCombined = "10.0.700_loc6.4.5_sea9.7.2"  # ✅ 官方三合一（3dmap 10.0.700 + location 6.4.5 + search 9.7.2），Maven Central 已核实存在（2026-09-20）
 playServicesLocation = "21.3.0" # Fused 备源（DEV D-08）；GMS 不可用时运行时降级
 javaxInject = "1"
 
@@ -51,9 +49,8 @@ coil-video = { group = "io.coil-kt.coil3", name = "coil-video", version.ref = "c
 timber = { group = "com.jakewharton.timber", name = "timber", version.ref = "timber" }
 vico-compose-m3 = { group = "com.patrykandpatrick.vico", name = "compose-m3", version.ref = "vico" }
 junit4 = { group = "junit", name = "junit", version.ref = "junit" }
-amap-map3d = { group = "com.amap.api", name = "3dmap", version.ref = "amapMap" }
-amap-location = { group = "com.amap.api", name = "location", version.ref = "amapLocation" }
-amap-search = { group = "com.amap.api", name = "search", version.ref = "amapSearch" }
+# 高德三合一：地图 + 定位 + 搜索。单独引 3dmap/search 会重复类冲突（com.amap.apis.utils.core.api.*，D-17）
+amap-combined = { group = "com.amap.api", name = "3dmap-location-search", version.ref = "amapCombined" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

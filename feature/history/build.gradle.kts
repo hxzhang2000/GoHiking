@@ -34,7 +34,7 @@ dependencies {
     implementation(project(":core:database")) // TripEntity / TripSummaryRow（VM 内映射 UI 模型）
     implementation(project(":core:common")) // Formatters / PolylineSimplifier
 
-    implementation(libs.amap.map3d) // 详情页地图（F-HIS-21）
+    implementation(libs.amap.combined) // 详情页地图（F-HIS-21）；高德统一三合一（D-17）
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

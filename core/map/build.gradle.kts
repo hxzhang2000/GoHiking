@@ -29,8 +29,8 @@ kotlin {
 dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:common"))
-    // 高德是四件套：地图 / 定位 / 搜索 / 导航（DEV §1.3 T-01）。本模块承载地图；搜索在 core:location 之外按需引入。
-    api(libs.amap.map3d)
+    // 高德官方三合一：地图 + 定位 + 搜索（D-17）。单独引 3dmap/search 会重复类冲突。
+    api(libs.amap.combined)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.tooling.preview)
