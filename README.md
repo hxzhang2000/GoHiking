@@ -89,6 +89,9 @@ AMAP_KEY_RELEASE=你的发布Key
 - 版本号唯一来源：`gradle.properties`（`gohiking.versionName` / `gohiking.versionCode`）
 - 语义化版本：`0.x` 开发期，`1.0.0` 为首个正式发布；MINOR 位对应里程碑批次
 - 任何变更在 `CHANGELOG.md` 的 `[Unreleased]` 记录，发布时定版
+- **发布流程**：`CHANGELOG.md` 对应小节定版 → `git tag vX.Y.Z && git push origin vX.Y.Z`
+  → GitHub Actions 自动构建 release APK（签名走仓库 Secrets，未配置时用临时 keystore）
+  并创建 GitHub Release，Release 说明自动提取自 CHANGELOG 对应小节
 
 ## 开发状态
 

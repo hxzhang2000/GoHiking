@@ -1,0 +1,204 @@
+name: Build
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # 构建.job：打 v* tag 时产出 release APK 并创建 GitHub Release（说明取自 CHANGELOG 对应小节）
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # CI 环境没有本机 Gradle 文件，覆盖为网络 URL（本地是 file:/// 引用，见 gradle-wrapper.properties）
+      - name: Use network Gradle distribution
+        run: |
+          sed -i 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.9-bin.zip|' gradle/wrapper/gradle-wrapper.properties
+          cat gradle/wrapper/gradle-wrapper.properties
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>&1 || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-35" "build-tools;35.0.0" 2>&1 || true
+
+      # 签名密钥双模式（与 NASMusicTV 同款）：
+      #   - 模式 A（正式签名）：仓库 Secrets 配置 SIGNING_KEYSTORE_BASE64（keystore 文件的 base64）
+      #     及 SIGNING_STORE_PASSWORD / SIGNING_KEY_ALIAS / SIGNING_KEY_PASSWORD 时，
+      #     解码出 keystore/release-key.jks 签名——产出与本地一致的正式发布 APK。
+      #     base64 生成：base64 -w0 keystore/gohiking.jks | clip（或 certutil -encode）
+      #   - 模式 B（fallback）：未配置 secrets 时临时生成 ci-keystore.jks，
+      #     只用于 CI 验证「能编译 + 签名通过」，APK 不可覆盖安装到已有数据的设备。
+      # keystore.properties 的 storeFile 相对 app/ 目录解析（本地值 ../keystore/gohiking.jks），
+      # CI 写入 ../keystore/release-key.jks 保持同一约定（见 app/build.gradle.kts signingConfigs）。
+      - name: Set up signing keystore
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          mkdir -p keystore
+          if [ -n "$SIGNING_KEYSTORE_BASE64" ]; then
+            echo "Using release keystore from GitHub Secrets"
+            echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > keystore/release-key.jks
+            {
+              echo "storeFile=../keystore/release-key.jks"
+              echo "storePassword=$SIGNING_STORE_PASSWORD"
+              echo "keyAlias=$SIGNING_KEY_ALIAS"
+              echo "keyPassword=$SIGNING_KEY_PASSWORD"
+            } > keystore.properties
+          else
+            echo "No signing secrets found, falling back to throwaway CI keystore"
+            keytool -genkey -v -keystore keystore/ci-keystore.jks -alias ci -keyalg RSA -keysize 2048 -validity 3650 -storepass ci-pass -keypass ci-pass -dname "CN=CI,OU=CI,O=CI,L=CI,S=CI,C=CI"
+            {
+              echo "storeFile=../keystore/ci-keystore.jks"
+              echo "storePassword=ci-pass"
+              echo "keyAlias=ci"
+              echo "keyPassword=ci-pass"
+            } > keystore.properties
+          fi
+          echo "=== keystore.properties (passwords redacted) ==="
+          sed 's/\(storePassword\|keyPassword\)=.*/\1=<redacted>/' keystore.properties
+
+      - name: Build release APK
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Rename APK
+        run: |
+          # 版本号单一事实源 = gradle.properties（2026-09-20 起，app/build.gradle.kts 只读取）
+          VERSION=$(grep '^gohiking.versionName' gradle.properties | cut -d= -f2)
+          VERSION_DASHED=$(echo "$VERSION" | tr '.' '-')
+          echo "APK_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "APK_VERSION_DASHED=$VERSION_DASHED" >> $GITHUB_ENV
+          ls -la app/build/outputs/apk/release/
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: GoHiking-release-v${{ env.APK_VERSION_DASHED }}
+          path: app/build/outputs/apk/release/*.apk
+
+      # Release 说明：从 CHANGELOG.md 提取 `## [vTAG]` 到下一个小节
+      - name: Extract release notes from CHANGELOG
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          # 获取上一个 release 的版本号
+          LATEST_TAG=$(gh release view --json tagName --jq '.tagName' 2>/dev/null || echo "")
+          if [ "$LATEST_TAG" = "$TAG" ]; then
+            # 最新 release 就是当前 tag，取前一个
+            PREV_TAG=$(gh release list --limit 2 --json tagName --jq '.[1].tagName' 2>/dev/null || echo "")
+          else
+            PREV_TAG="$LATEST_TAG"
+          fi
+          # 清理无效值
+          if [ "$PREV_TAG" = "null" ] || [ -z "$PREV_TAG" ]; then PREV_TAG=""; fi
+          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$TAG" ]; then
+            echo "Previous release: $PREV_TAG, current: $TAG"
+            # 从 CHANGELOG 开头提取到上一个版本之前
+            awk -v prev="$PREV_TAG" '
+              /^## \[/ { found=1 }
+              found && $0 ~ "^## \\[" prev "\\]" { exit }
+              found { print }
+            ' CHANGELOG.md > release_notes.md
+          else
+            echo "No previous release found, extracting current version only"
+            # 没有上一个 release，只提取当前版本
+            awk -v tag="$TAG" '
+              $0 ~ "^## \\[" tag "\\]" { found=1; next }
+              found && /^## \[/ { exit }
+              found { print }
+            ' CHANGELOG.md > release_notes.md
+          fi
+          echo "=== Release notes ==="
+          cat release_notes.md
+          echo "=== End ==="
+          echo "File size: $(wc -c < release_notes.md) bytes"
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          APK="app/build/outputs/apk/release/GoHiking-release-v${{ env.APK_VERSION_DASHED }}.apk"
+          # 删除已存在的 release（如果有），重新创建
+          if gh release view "$TAG" --json tagName &>/dev/null; then
+            echo "Deleting existing release $TAG..."
+            gh release delete "$TAG" --yes
+          fi
+          echo "Creating release $TAG..."
+          ARGS=("--notes-file" "release_notes.md" "--title" "GoHiking $TAG")
+          if [ -f "$APK" ]; then
+            gh release create "$TAG" "${ARGS[@]}" "$APK"
+          else
+            gh release create "$TAG" "${ARGS[@]}"
+          fi
+
+  # 单元测试：与本地门禁同口径
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use network Gradle distribution
+        run: |
+          sed -i 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.9-bin.zip|' gradle/wrapper/gradle-wrapper.properties
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      # testDebugUnitTest 需 Android SDK（android.jar）；与 build job 显式安装保持一致
+      - name: Set up Android SDK
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>&1 || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-35" "build-tools;35.0.0" 2>&1 || true
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+  # lint：本地门禁 warningsAsErrors=true，CI 同为阻塞门禁
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use network Gradle distribution
+        run: |
+          sed -i 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.9-bin.zip|' gradle/wrapper/gradle-wrapper.properties
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Set up Android SDK
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>&1 || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-35" "build-tools;35.0.0" 2>&1 || true
+      - name: Run lint
+        run: ./gradlew lintDebug --stacktrace
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: app/build/reports/lint-results-debug.html
+          if-no-files-found: warn

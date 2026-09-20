@@ -7,6 +7,14 @@ val localProps = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+// release 签名属性（gitignored）：本地 = keystore/gohiking.jks；
+// CI 由 workflow 生成（Secrets base64 或临时 keystore，见 .github/workflows/build.yml）。
+// 无该文件时 release 退回未签名构建（仅 assemble 不崩，不能分发）。
+val keystoreProps = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -43,6 +51,18 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    signingConfigs {
+        if (keystoreProps.getProperty("storeFile") != null) {
+            create("release") {
+                // storeFile 相对 app/ 目录解析（本地值 ../keystore/gohiking.jks → 根 keystore/）
+                storeFile = project.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             // 不加 applicationIdSuffix：debug/release 共用 com.gohiking.app，高德单 Key 双 SHA1 生效（用户 2026-09-20 决策）
@@ -54,6 +74,9 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             manifestPlaceholders["AMAP_KEY"] = localProps.getProperty("AMAP_KEY_RELEASE").orEmpty()
+            if (keystoreProps.getProperty("storeFile") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
