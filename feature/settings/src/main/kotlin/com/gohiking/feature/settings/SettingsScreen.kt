@@ -31,6 +31,13 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.gohiking.core.resources.R as CoreR
 
+/** 数据组操作入口（M3-D2：SAF 导出/备份/导入由 app 壳层实现，设置页只放按钮） */
+data class IoActions(
+    val onExportAll: () -> Unit,
+    val onBackup: () -> Unit,
+    val onImport: () -> Unit,
+)
+
 /**
  * 设置页（P-14，DEV §5.2）：6 分组 + 分组内 Switch/Select/Number 三种行。
  * 选择项用对话框单选（避免下拉菜单在 TV/手机上的焦点问题）；数字项用 ± 步进（v1 简化，DEV §5.2）。
@@ -42,6 +49,7 @@ fun SettingsScreen(
     hasBarometer: Boolean,
     onLanguageChanged: (String) -> Unit,
     onBack: () -> Unit,
+    ioActions: IoActions? = null,
     modifier: Modifier = Modifier,
 ) {
     val viewModel: SettingsViewModel = viewModel(
@@ -101,6 +109,21 @@ fun SettingsScreen(
                         }
                     }
                     if (i < group.items.size - 1) HorizontalDivider()
+                }
+            }
+            item(key = "io_actions") {
+                ioActions?.let { actions ->
+                    Column(modifier = Modifier.padding(top = 8.dp)) {
+                        TextButton(onClick = actions.onExportAll) {
+                            Text(stringResource(CoreR.string.io_export_all))
+                        }
+                        TextButton(onClick = actions.onBackup) {
+                            Text(stringResource(CoreR.string.io_backup))
+                        }
+                        TextButton(onClick = actions.onImport) {
+                            Text(stringResource(CoreR.string.io_import))
+                        }
+                    }
                 }
             }
             item(key = "reset") {

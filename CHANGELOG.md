@@ -21,6 +21,7 @@
 ## [Unreleased]
 
 ### Added
+- 导出/导入引擎 + 设置页数据操作入口（M3-D，PRD 7.2~7.5）：批量导出全部记录 JSON（SAF 选目录）、全量 ZIP 备份（manifest + SHA-256 校验和 + settings.json）、GPX 1.1 恒 WGS-84 导出（F-IO-04/14/15）；导入 JSON/ZIP 多选，预览（数量/冲突/坐标系转换告知）、四种冲突策略、逐条事务、结果报告（F-IO-20~31/40~44）；ZIP Slip / Zip Bomb / 流式解压三道安全防线（F-IO-60~63）；settings.json 默认不导入（F-IO-36/37）
 - 提醒触发引擎（M3-A，F-ALERT-01~26）：距离/海拔打点与上下山判定，三基线随 recording_state 持久化，进程被杀恢复后不重复触发（DEV §4.9）；同时修复 `RecordingSession.start()` 未置 Active 导致记录页永不进入的 P0 缺陷
 - TTS 语音播报（M3-B，F-ALERT-40~44）：跟随系统语言、音频焦点让行、未就绪静默；记录页提醒开关指示（F-ALERT-04）
 - 设置页 + DataStore 设置存储（M3-C，F-SET-01~06）：6 分组 27 键即时读写，阈值范围/步进校验（F-ALERT-12/22、F-SET-05）、无气压计海拔间隔下限 30m 提示（F-REC-63）、语言切换重启生效（F-I18N-11）、恢复默认（F-SET-03）

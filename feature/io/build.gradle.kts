@@ -30,6 +30,7 @@ dependencies {
     implementation(project(":core:designsystem"))
     implementation(project(":core:model"))
     implementation(project(":core:resources"))
+    implementation(project(":core:data")) // IO 模型（ParsedFile/ImportEngine/ConflictPolicy，M3-D2）
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

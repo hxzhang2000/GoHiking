@@ -223,4 +223,22 @@
     <string name="set_reset_default">Restore default settings</string>
     <string name="set_reset_confirm">Restore all settings to their default values?</string>
     <string name="set_barometer_hint">No barometer detected: elevation interval lower limit is 30 m (F-REC-63).</string>
+
+    <!-- 导出/导入 io_*（M3-D2，P-16/17/18，F-IO-02/03/11/24/30） -->
+    <string name="io_export_all">Export all records (JSON)</string>
+    <string name="io_backup">Full backup (ZIP)</string>
+    <string name="io_import">Import records</string>
+    <string name="io_working">Working…</string>
+    <string name="io_progress">%1$d of %2$d</string>
+    <string name="io_done">Finished. %1$s item(s) processed.</string>
+    <string name="io_error">Operation failed</string>
+    <string name="io_import_preview_title">Import preview</string>
+    <string name="io_import_summary">%1$d trip(s) and %2$d planned route(s) will be imported.</string>
+    <string name="io_import_conflicts">%1$d conflict(s), %2$d suspected duplicate(s).</string>
+    <string name="io_import_invalid">%1$d file(s) will be skipped:</string>
+    <string name="io_import_crs_notice">Coordinates will be converted to GCJ-02 (the in-app standard).</string>
+    <string name="io_import_confirm">Import</string>
+    <string name="io_report_title">Import report</string>
+    <string name="io_report_summary">Imported %1$d, skipped %2$d, failed %3$d.</string>
+    <string name="io_report_ok">Imported</string>
 </resources>

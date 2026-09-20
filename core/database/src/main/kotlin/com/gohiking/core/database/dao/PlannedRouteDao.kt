@@ -34,6 +34,11 @@ interface PlannedRouteDao {
     @Query("SELECT * FROM planned_route WHERE id = :id")
     suspend fun withLegs(id: String): PlannedRouteWithLegs?
 
+    /** 导出全量备份用（F-IO-03） */
+    @Transaction
+    @Query("SELECT * FROM planned_route ORDER BY createdAt DESC")
+    suspend fun allWithLegs(): List<PlannedRouteWithLegs>
+
     @Update
     suspend fun update(route: PlannedRouteEntity)
 
@@ -51,4 +56,8 @@ interface PlannedRouteDao {
     /** 导入重建途经点（F-IO-21；M2 规划链路暂不写该表，导入端先支持） */
     @Insert
     suspend fun insertWaypoints(items: List<PlannedWaypointEntity>)
+
+    /** 导出计划线路途经点（F-PLAN-43） */
+    @Query("SELECT * FROM planned_waypoint WHERE legId IN (:legIds) ORDER BY orderIndex")
+    suspend fun waypointsOfLegs(legIds: List<String>): List<PlannedWaypointEntity>
 }

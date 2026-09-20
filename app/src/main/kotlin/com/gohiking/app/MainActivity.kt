@@ -33,6 +33,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -51,6 +52,13 @@ import com.amap.api.maps.CameraUpdateFactory
 import com.amap.api.maps.MapView
 import com.amap.api.maps.MapsInitializer
 import com.amap.api.maps.model.LatLng
+import com.gohiking.core.data.io.BackupBuilder
+import com.gohiking.core.data.io.ConflictPolicy
+import com.gohiking.core.data.io.FileNamer
+import com.gohiking.core.data.io.GeneratorInfo
+import com.gohiking.core.data.io.IoRepository
+import com.gohiking.core.data.io.ParsedFile
+import com.gohiking.core.data.io.RoomImportSink
 import com.gohiking.core.data.recording.RecordingService
 import com.gohiking.core.data.recording.RecordingSession
 import com.gohiking.core.data.recording.SessionState
@@ -67,12 +75,19 @@ import com.gohiking.core.map.search.AmapSearchClient
 import com.gohiking.core.resources.R as CoreR
 import com.gohiking.feature.history.HistoryListScreen
 import com.gohiking.feature.history.TripDetailScreen
+import com.gohiking.feature.io.ImportPreviewDialog
+import com.gohiking.feature.io.ImportReportDialog
+import com.gohiking.feature.io.IoProgressDialog
 import com.gohiking.feature.plan.PlanListScreen
 import com.gohiking.feature.plan.PlanScreen
 import com.gohiking.feature.recording.RecordingScreen
+import com.gohiking.feature.settings.IoActions
 import com.gohiking.feature.settings.SettingsScreen
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 /**
  * M1 壳：①隐私同意门（DEV §1.5 红线：高德 SDK 必须在用户同意后才初始化）；
@@ -88,6 +103,8 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var plannedRouteDao: PlannedRouteDao
     @Inject lateinit var elevationRepository: ElevationRepository
     @Inject lateinit var settingsRepository: SettingsRepository
+    @Inject lateinit var ioRepository: IoRepository
+    @Inject lateinit var importSink: RoomImportSink
 
     /** F-I18N-11：语言在 Activity 重建（重启）时经 attachBaseContext 生效 */
     override fun attachBaseContext(newBase: android.content.Context) {
@@ -117,6 +134,8 @@ class MainActivity : ComponentActivity() {
                     plannedRouteDao = plannedRouteDao,
                     elevationRepository = elevationRepository,
                     settingsRepository = settingsRepository,
+                    ioRepository = ioRepository,
+                    importSink = importSink,
                 )
             }
         }
@@ -131,6 +150,8 @@ private fun Root(
     plannedRouteDao: PlannedRouteDao,
     elevationRepository: ElevationRepository,
     settingsRepository: SettingsRepository,
+    ioRepository: IoRepository,
+    importSink: RoomImportSink,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -146,6 +167,98 @@ private fun Root(
     // F-REC-63：气压计探测（海拔打点间隔下限 30m 的提示依据）
     val hasBarometer = remember {
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_SENSOR_BAROMETER)
+    }
+
+    // ---- M3-D2：IO 导出/导入状态机（P-16/17/18）----
+    val scope = rememberCoroutineScope()
+    var ioJob by remember { mutableStateOf<Job?>(null) }
+    var ioBusy by remember { mutableStateOf(false) }
+    var ioProgress by remember { mutableStateOf<com.gohiking.core.data.io.ImportEngine.Progress?>(null) }
+    var ioDoneMsg by remember { mutableStateOf<String?>(null) }
+    var ioErrorMsg by remember { mutableStateOf<String?>(null) }
+    var pendingImport by remember { mutableStateOf<Pair<List<ParsedFile>, List<String>>?>(null) }
+    var importPreview by remember { mutableStateOf<com.gohiking.core.data.io.ImportEngine.ImportPreview?>(null) }
+    var importPolicy by remember { mutableStateOf(ConflictPolicy.SKIP) }
+    var importReport by remember { mutableStateOf<com.gohiking.core.data.io.ImportEngine.ImportReport?>(null) }
+    val generator = GeneratorInfo(versionName = BuildConfig.VERSION_NAME, versionCode = BuildConfig.VERSION_CODE)
+
+    fun ioRun(block: suspend () -> Unit) {
+        ioJob = scope.launch {
+            ioBusy = true
+            try {
+                block()
+            } catch (e: CancellationException) {
+                // 用户取消：已导入/已导出的保留（F-IO-11/29）
+            } catch (t: Throwable) {
+                ioErrorMsg = t.message ?: t::class.java.simpleName
+            } finally {
+                ioBusy = false
+                ioProgress = null
+            }
+        }
+    }
+
+    // 导出全部记录 → SAF 目录（F-IO-02/05/06/13）
+    val exportAllTree = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { treeUri ->
+        if (treeUri == null) return@rememberLauncherForActivityResult
+        ioRun {
+            val crs = ioRepository.currentExportCrs()
+            val resolver = context.contentResolver
+            var done = 0
+            val n = ioRepository.exportAllTrips(crs, generator, onTotal = { total ->
+                ioProgress = com.gohiking.core.data.io.ImportEngine.Progress(0, total)
+            }) { fileName, content ->
+                val docUri = android.provider.DocumentsContract.createDocument(resolver, treeUri, "application/json", fileName)
+                    ?: error("无法在所选目录创建文件：$fileName")
+                resolver.openOutputStream(docUri)?.use { content(it) }
+                done++
+                ioProgress = com.gohiking.core.data.io.ImportEngine.Progress(done, ioProgress?.total ?: 0)
+            }
+            ioDoneMsg = if (n == 0) "0" else n.toString()
+        }
+    }
+
+    // 全量备份 ZIP（F-IO-03/07）
+    val backupDoc = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip"),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        ioRun {
+            val crs = ioRepository.currentExportCrs()
+            val resolver = context.contentResolver
+            ioProgress = com.gohiking.core.data.io.ImportEngine.Progress(0, 0)
+            resolver.openOutputStream(uri)?.use { out ->
+                val n = ioRepository.writeBackup(
+                    crs = crs,
+                    includeSettings = true,
+                    generator = generator,
+                    readme = BackupBuilder.DEFAULT_README,
+                    output = out,
+                )
+                ioDoneMsg = n.toString()
+            } ?: error("无法写入所选文件")
+        }
+    }
+
+    // 多选导入（F-IO-20/21/22）→ 先解析预览（F-IO-24）
+    val importDocs = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        if (uris.isNullOrEmpty()) return@rememberLauncherForActivityResult
+        ioRun {
+            val resolver = context.contentResolver
+            val sources = uris.map { uri ->
+                val name = queryDisplayName(resolver, uri) ?: uri.lastPathSegment ?: "unknown"
+                val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: error("无法打开：$name")
+                name to bytes
+            }
+            val parsed = ioRepository.parseImportSources(sources)
+            pendingImport = parsed.files to parsed.warnings
+            importPreview = ioRepository.preview(parsed.files)
+        }
     }
 
     if (!agreed) {
@@ -196,6 +309,15 @@ private fun Root(
                 Toast.makeText(context, context.getString(CoreR.string.set_language_restart), Toast.LENGTH_SHORT).show()
                 if (lang != AppSettings.LANGUAGE_SYSTEM) (context as? Activity)?.recreate()
             },
+            ioActions = IoActions(
+                onExportAll = { exportAllTree.launch(null) }, // F-IO-02 批量导出
+                onBackup = {
+                    backupDoc.launch(FileNamer.backupFileName(System.currentTimeMillis())) // F-IO-07
+                },
+                onImport = {
+                    importDocs.launch(arrayOf("application/json", "application/zip", "application/octet-stream"))
+                },
+            ),
             onBack = { showSettings = false },
             modifier = modifier,
         )
@@ -216,6 +338,74 @@ private fun Root(
             onOpenSettings = { showSettings = true },
         )
     }
+
+    // ---- P-16/17/18：IO 对话框 ----
+    if (ioBusy) {
+        IoProgressDialog(
+            title = stringResource(CoreR.string.io_working),
+            done = ioProgress?.done ?: 0,
+            total = ioProgress?.total ?: 0,
+            onCancel = { ioJob?.cancel() }, // F-IO-11/29 支持取消
+        )
+    }
+    importPreview?.let { preview ->
+        ImportPreviewDialog(
+            preview = preview,
+            extraWarnings = pendingImport?.second ?: emptyList(),
+            policy = importPolicy,
+            onPolicyChange = { importPolicy = it },
+            onConfirm = {
+                val files = pendingImport?.first ?: return@ImportPreviewDialog
+                importPreview = null
+                ioRun {
+                    val report = ioRepository.executeImport(files, importPolicy) { done, total ->
+                        ioProgress = com.gohiking.core.data.io.ImportEngine.Progress(done, total)
+                    }
+                    importReport = report
+                    pendingImport = null
+                }
+            },
+            onDismiss = {
+                importPreview = null
+                pendingImport = null
+            },
+        )
+    }
+    importReport?.let { report ->
+        ImportReportDialog(
+            report = report,
+            onDismiss = { importReport = null },
+        )
+    }
+    ioDoneMsg?.let { n ->
+        AlertDialog(
+            onDismissRequest = { ioDoneMsg = null },
+            title = { Text(stringResource(CoreR.string.io_working)) },
+            text = { Text(stringResource(CoreR.string.io_done, n)) },
+            confirmButton = {
+                TextButton(onClick = { ioDoneMsg = null }) { Text(stringResource(CoreR.string.common_action_confirm)) }
+            },
+        )
+    }
+    ioErrorMsg?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { ioErrorMsg = null },
+            title = { Text(stringResource(CoreR.string.io_error)) },
+            text = { Text(msg) }, // F-IO-34：给出具体原因
+            confirmButton = {
+                TextButton(onClick = { ioErrorMsg = null }) { Text(stringResource(CoreR.string.common_action_confirm)) }
+            },
+        )
+    }
+}
+
+/** SAF 文件名（OpenableColumns.DISPLAY_NAME） */
+private fun queryDisplayName(resolver: android.content.ContentResolver, uri: android.net.Uri): String? {
+    resolver.query(uri, null, null, null, null)?.use { cursor ->
+        val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+        if (idx >= 0 && cursor.moveToFirst()) return cursor.getString(idx)
+    }
+    return null
 }
 
 @Composable

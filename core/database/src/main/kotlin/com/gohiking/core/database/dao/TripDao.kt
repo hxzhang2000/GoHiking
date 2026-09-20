@@ -21,6 +21,10 @@ interface TripDao {
     @Query("SELECT * FROM trip WHERE status = 'FINISHED' ORDER BY startTime DESC")
     fun observeFinished(): Flow<List<TripEntity>>
 
+    /** 导出全量用（F-IO-02）：所有 FINISHED 记录 */
+    @Query("SELECT * FROM trip WHERE status = 'FINISHED' ORDER BY startTime DESC")
+    suspend fun finishedAll(): List<TripEntity>
+
     @Query("SELECT * FROM trip ORDER BY startTime DESC LIMIT :limit OFFSET :offset")
     suspend fun page(limit: Int, offset: Int): List<TripEntity>
 
