@@ -75,7 +75,8 @@ jobs:
           sed 's/\(storePassword\|keyPassword\)=.*/\1=<redacted>/' keystore.properties
 
       - name: Build release APK
-        run: ./gradlew assembleRelease --stacktrace
+        # checkStringKeys 合并自旧 ci.yml（F-I18N-09 中英键对齐门禁；ci.yml 已删除，本文件是唯一 CI）
+        run: ./gradlew assembleRelease :core:resources:checkStringKeys --stacktrace
 
       - name: Rename APK
         run: |
