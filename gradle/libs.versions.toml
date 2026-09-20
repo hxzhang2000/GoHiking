@@ -17,7 +17,7 @@ navigation = "2.8.5"
 junit = "4.13.2"
 vico = "3.3.1"           # ✅ 稳定线（T-10：直接用 v3，不备 MPAndroidChart）
 amapMap = "10.0.600"     # 公网 Maven 可解析的最新 3dmap（jar 无 aar，manifest/权限需 App 自声明）
-amapLocation = "6.4.9"   # ✅ 已核实存在
+amapLocation = "6.4.9"   # ⚠ 已停用（2026-09-20）：3dmap 10.0.600 内嵌完整定位 API+实现（col/3l 602 类），再引 location 会重复 32 类构建失败；坐标保留备查
 amapSearch = "9.7.1"     # ✅ POI 搜索 / 输入提示 / 路径规划都在 search 包，必须单独引（T-01）
 javaxInject = "1"
 

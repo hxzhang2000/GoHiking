@@ -40,7 +40,11 @@ __pycache__/
 # 本机构建调试日志（gradlew 后台跑的 Out-File 输出）
 build_*.log
 build_*_result.txt
+build_*_fail.txt
 diag.txt
+procs.txt
+stop.log
+git_status.txt
 
 # ---------- AI 助手工作区 ----------
 # 若希望把设计过程与修订历史一并开源，删掉下面两行。

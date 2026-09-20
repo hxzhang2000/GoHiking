@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 记录前台服务：任务划掉后仍记录（F-REC-51，DEV §6.1 stopWithTask=false） -->
+    <application>
+        <service
+            android:name="com.gohiking.core.data.recording.RecordingService"
+            android:exported="false"
+            android:foregroundServiceType="location"
+            android:stopWithTask="false" />
+    </application>
+
+</manifest>

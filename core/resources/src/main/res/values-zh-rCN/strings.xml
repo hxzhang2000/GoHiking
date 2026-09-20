@@ -32,6 +32,27 @@
     <string name="map_test_log_both">⚠ onPOIClick 与 OnMapClickListener 同时触发</string>
     <string name="map_test_log_language">已切换地图语言（瓦片重绘中…）</string>
 
+    <!-- 记录（M1 切片） -->
+    <string name="home_start_record">开始记录</string>
+    <string name="rec_need_permission">需要定位权限才能记录轨迹。</string>
+    <string name="rec_name_default">新的记录</string>
+    <string name="rec_status_recording">正在记录</string>
+    <string name="rec_status_paused">已暂停</string>
+    <string name="rec_stat_distance">距离</string>
+    <string name="rec_stat_duration">运动时长</string>
+    <string name="rec_stat_climb">累计爬升</string>
+    <string name="rec_stat_points">轨迹点</string>
+    <string name="rec_action_summit">登顶标记</string>
+    <string name="rec_action_pause">暂停</string>
+    <string name="rec_action_resume">继续</string>
+    <string name="rec_action_stop">停止</string>
+    <string name="rec_stop_confirm">停止并保存本次记录？</string>
+    <string name="rec_action_discard">丢弃</string>
+    <string name="rec_notif_channel">记录通知</string>
+    <string name="rec_notif_recording">正在记录</string>
+    <string name="rec_notif_paused">已暂停</string>
+    <string name="rec_notif_distance">距离 %1$.2f km</string>
+
     <!-- 通用占位 -->
     <string name="common_stat_unknown">--</string>
 

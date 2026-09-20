@@ -30,6 +30,7 @@ dependencies {
     implementation(project(":core:designsystem"))
     implementation(project(":core:model"))
     implementation(project(":core:resources"))
+    implementation(project(":core:data")) // RecordingSession（M1 切片：UI 直读会话状态）
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

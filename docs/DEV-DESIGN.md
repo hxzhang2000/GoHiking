@@ -2176,6 +2176,8 @@ build/
 
 | D-13 | `media_ref` 增列 `fileName` / `note`、`planned_route` 增列 `source`、`trip` 增列 `avgPaceSecPerKm` | 导出 JSON（PRD 7.3）引用了这些字段，但 PRD 7.1 的表无对应列——导出实现时要么临时加列（Room 版本 +1）、要么破坏 schema（审阅 H-5 / P9） | **影响 PRD：✅ 已落地**（PRD v1.14 在 7.1 补列） |
 | D-14 | `planned_waypoint` 列 `order`（PRD 7.1）落库为 **`orderIndex`** | `order` 是 SQLite 关键字，Room 手写查询里每次都要转义、易踩坑；实体属性 `orderIndex` + `@ColumnInfo(name = "orderIndex")`。导出 JSON 字段名不受影响（按 7.3 schema 独立命名） | 实现补充（2026-09-20，M1 数据层落地时） |
+| D-15 | **不引入独立的 `amap-location` 依赖**：定位能力统一来自 `amap-3dmap`（10.0.600 内嵌完整定位实现，`AmapLocationClient` 可直接使用） | 单独引入 location 6.4.9 会与 3dmap 内嵌实现产生**重复类冲突**（`checkDuplicateClasses` 直接失败，实测 col/3l 602 类重复）；libs.versions.toml 中 `amap-location` 已标记 deprecated | 实现补充（2026-09-20，M1 记录切片落地时） |
+| D-16 | **传感器类型常量用 `Sensor.TYPE_*`，不是 `SensorManager.TYPE_*`**：气压计探测写法为 `getSystemService(SensorManager::class.java)?.getDefaultSensor(Sensor.TYPE_PRESSURE) != null` | `TYPE_PRESSURE` 等常量定义在 `android.hardware.Sensor` 上（对照官方 platform-35 android.jar 逐字节核验）；`Context.PRESSURE_SERVICE` 是隐藏 SystemApi，公开代码拿 `SensorManager` 应走 `SENSOR_SERVICE` / `getSystemService(Class)` | 实现补充（2026-09-20，M1 记录切片落地时） |
 
 **登记规则**：任何实现层新增项都要在此登记。若某项实质上改变了用户可感知的行为，**必须先回改 PRD**，不能只登记在这里。
 

@@ -1,0 +1,445 @@
+package com.gohiking.core.data.recording
+
+import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorManager
+import com.gohiking.core.common.coroutine.ApplicationScope
+import com.gohiking.core.database.GhDatabase
+import com.gohiking.core.database.entity.MarkerEntity
+import com.gohiking.core.database.entity.RecordingStateEntity
+import com.gohiking.core.database.entity.TrackPointEntity
+import com.gohiking.core.database.entity.TripEntity
+import com.gohiking.core.location.LocationProvider
+import com.gohiking.core.location.altitude.ThresholdAccumulator
+import com.gohiking.core.location.geo.GeoMath
+import com.gohiking.core.location.sampler.TrackSampler
+import androidx.room.withTransaction
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.util.UUID
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import timber.log.Timber
+
+/**
+ * 记录会话——记录过程中唯一可变状态源（DEV 冻结决策 12 / §6.1）。
+ * Service 只管生命周期与通知；UI 只读 [state] / [samples]。
+ *
+ * 批量写入（PRD 6.3.7）：每 10 点 / 每 5 秒 flush；recording_state 每 10 秒持久化（F-REC-09）。
+ * 暂停语义：anchor 保留（F-ALERT-16），segmentIndex 在 resume 时 +1，暂停期间停止定位。
+ */
+@Singleton
+class RecordingSession @Inject constructor(
+    private val locationProvider: LocationProvider,
+    private val db: GhDatabase,
+    @ApplicationContext private val context: Context,
+    @ApplicationScope private val scope: CoroutineScope,
+) {
+    private val _state = MutableStateFlow<SessionState>(SessionState.Idle)
+    val state: StateFlow<SessionState> = _state.asStateFlow()
+
+    private val _samples = MutableSharedFlow<TrackSample>(
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val samples: SharedFlow<TrackSample> = _samples.asSharedFlow()
+
+    // —— 逐场可变状态（start() 时重建，绝不跨场继承）——
+    private var tripId: String? = null
+    private var plannedRouteId: String? = null
+    private var name: String = ""
+    private var startedAtMs: Long = 0
+    private var currentSegment: Int = 0
+    private var lastPausedAtMs: Long? = null
+    private var accumulatedPausedMs: Long = 0
+
+    private var sampler = TrackSampler()
+    private var statAccumulator = ThresholdAccumulator(10.0) // 无气压计阈值 10m；有气压计 3m（§4.3.1）
+    private var hasBarometer = false
+
+    private var lastAcceptedFix: com.gohiking.core.location.LocationFix? = null
+    private var seqInSegment: Int = 0
+    private var pointCount: Int = 0
+    private var distanceM: Double = 0.0
+    private var maxAltitudeM: Double? = null
+    private var minAltitudeM: Double? = null
+    private val markers = mutableListOf<MarkerEntity>()
+    private var sequenceByType = mutableMapOf<String, Int>()
+
+    private var buffer = mutableListOf<TrackPointEntity>()
+    private var lastFlushAtMs: Long = 0
+    private var lastStatePersistAtMs: Long = 0
+
+    private var collectJob: Job? = null
+    private var tickJob: Job? = null
+
+    val droppedCount: Int get() = locationProvider.droppedCount
+
+    /** —— 开始记录（F-REC-01/02）—— */
+    fun start(name: String, plannedRouteId: String?) {
+        if (_state.value !is SessionState.Idle && _state.value !is SessionState.Finished) return
+        // 气压计探测（DEV §4.4）：Sensor.TYPE_PRESSURE 定义在 Sensor 类上，
+        // 通过 SensorManager.getDefaultSensor 判断气压计是否可用
+        hasBarometer = context.getSystemService(SensorManager::class.java)
+            ?.getDefaultSensor(Sensor.TYPE_PRESSURE) != null
+
+        tripId = UUID.randomUUID().toString()
+        this.plannedRouteId = plannedRouteId
+        this.name = name
+        startedAtMs = System.currentTimeMillis()
+        currentSegment = 0
+        lastPausedAtMs = null
+        accumulatedPausedMs = 0
+        seqInSegment = 0
+        pointCount = 0
+        distanceM = 0.0
+        maxAltitudeM = null
+        minAltitudeM = null
+        markers.clear()
+        sequenceByType.clear()
+        buffer.clear()
+        lastFlushAtMs = System.currentTimeMillis()
+        lastStatePersistAtMs = lastFlushAtMs
+        sampler = TrackSampler()
+        statAccumulator = ThresholdAccumulator(if (hasBarometer) 3.0 else 10.0)
+
+        startLocationCollection()
+        Timber.i("记录开始 id=%s hasBarometer=%s", tripId, hasBarometer)
+    }
+
+    /** —— 暂停（F-REC-04）：停止定位省电；anchor 与累加值保留 —— */
+    fun pause() {
+        val s = _state.value as? SessionState.Active ?: return
+        if (!s.isRecording) return
+        lastPausedAtMs = System.currentTimeMillis()
+        locationProvider.stop()
+        tickJob?.cancel()
+        scope.launch { flushBuffer(force = true) }
+        scope.launch { persistSessionState() }
+        _state.value = s.copy(status = "PAUSED", pausedAtMs = lastPausedAtMs)
+        Timber.d("记录暂停 segment=%d", currentSegment)
+    }
+
+    /** —— 继续（F-REC-05）：segmentIndex + 1，重新开始定位 —— */
+    fun resume() {
+        val s = _state.value as? SessionState.Active ?: return
+        if (s.isRecording) return
+        val paused = lastPausedAtMs
+        if (paused != null) {
+            accumulatedPausedMs += System.currentTimeMillis() - paused
+            lastPausedAtMs = null
+        }
+        currentSegment += 1
+        seqInSegment = 0
+        startLocationCollection()
+        _state.value = s.copy(
+            status = "RECORDING",
+            pausedAtMs = null,
+            accumulatedPausedMs = accumulatedPausedMs,
+            currentSegment = currentSegment,
+        )
+        Timber.d("记录继续 segment=%d", currentSegment)
+    }
+
+    /** —— 登顶点标记（F-REC-30）—— */
+    fun markSummit(note: String?) = addMarker("SUMMIT", note, extraJson = null)
+
+    /** —— 手动打点（F-REC-40）—— */
+    fun dropMarker(note: String) = addMarker("MANUAL", note, extraJson = null)
+
+    /** —— 停止（F-REC-06/07）：产出 TripDraft；save 落库 / discard 丢弃 —— */
+    suspend fun stop(): TripDraft? {
+        val s = _state.value as? SessionState.Active ?: return null
+        if (s.isRecording) {
+            locationProvider.stop()
+            tickJob?.cancel()
+            flushBuffer(force = true)
+        } else {
+            accumulatedPausedMs += lastPausedAtMs?.let { System.currentTimeMillis() - it } ?: 0
+        }
+        val now = System.currentTimeMillis()
+        val totalDurationSec = ((now - startedAtMs) / 1000).coerceAtLeast(0)
+        val movingDurationSec = (totalDurationSec - accumulatedPausedMs / 1000).coerceAtLeast(0)
+        val distance = distanceM
+        // F-HIS-33/34：分母用运动时长（不含暂停）；distance < 50m → null（导出写 null）
+        val avgSpeedMps = if (distance >= 50 && movingDurationSec > 0) distance / movingDurationSec else null
+        val avgPaceSecPerKm = if (distance >= 50 && movingDurationSec > 0) {
+            (movingDurationSec / (distance / 1000.0)).toLong()
+        } else {
+            null
+        }
+        val trip = TripEntity(
+            id = s.tripId,
+            name = s.name,
+            note = null,
+            plannedRouteId = plannedRouteId,
+            startTime = startedAtMs,
+            endTime = now,
+            durationSec = totalDurationSec,
+            movingDurationSec = movingDurationSec,
+            pausedDurationSec = accumulatedPausedMs / 1000,
+            distanceM = distance,
+            totalAscentM = statAccumulator.ascent,
+            totalDescentM = statAccumulator.descent,
+            maxAltitudeM = maxAltitudeM,
+            minAltitudeM = minAltitudeM,
+            avgSpeedMps = avgSpeedMps,
+            avgPaceSecPerKm = avgPaceSecPerKm,
+            maxSpeedMps = null, // M1 下一批：接受点 max speed
+            steps = -1, // 计步四级降级下一批接入；-1 = 不可用
+            stepSource = "UNAVAILABLE",
+            caloriesKcal = null, // MET 分段估算（F-HIS-35）下一批接入
+            altitudeSource = "GPS_ONLY", // AltitudeFuser 接入后 BAROMETER_FUSED
+            hasBarometer = hasBarometer,
+            status = "FINISHED",
+            createdAt = now,
+        )
+        val draft = TripDraft(
+            trip = trip,
+            markers = markers.toList(),
+            droppedCount = droppedCount,
+            pointCount = pointCount,
+        )
+        collectJob?.cancel()
+        collectJob = null
+        tickJob?.cancel()
+        tickJob = null
+        tripId = null
+        _state.value = SessionState.Finished(draft)
+        Timber.i("记录停止 distance=%.1fm points=%d markers=%d", distance, pointCount, markers.size)
+        return draft
+    }
+
+    /** 保存：一个大事务 insert trip → insert markers → delete recording_state（DEV §3.4） */
+    suspend fun save(draft: TripDraft): Boolean = withContext(Dispatchers.IO) {
+        try {
+            db.withTransaction {
+                db.tripDao().insert(draft.trip)
+                if (draft.markers.isNotEmpty()) db.markerDao().insertAll(draft.markers)
+                db.recordingStateDao().clear()
+            }
+            _state.value = SessionState.Idle
+            true
+        } catch (t: Throwable) {
+            Timber.e(t, "保存失败 tripId=%s", draft.trip.id)
+            false
+        }
+    }
+
+    /** 丢弃：清掉已分批落库的轨迹点与状态快照 */
+    suspend fun discard(draft: TripDraft) {
+        withContext(Dispatchers.IO) {
+            db.trackPointDao().deleteOf(draft.trip.id)
+            db.recordingStateDao().clear()
+        }
+        _state.value = SessionState.Idle
+    }
+
+    /** 检测未结束记录（崩溃恢复 F-REC-09）：App 启动时调用 */
+    suspend fun hasRecoverableSession(): Boolean = db.recordingStateDao().get() != null
+
+    /** 恢复（F-REC-09）：rebind 同一 tripId，新建 segment；绝不把恢复点与中断点连线 */
+    suspend fun restoreFromSnapshot(): Boolean {
+        if (_state.value !is SessionState.Idle) return false
+        val snap = db.recordingStateDao().get() ?: return false
+        tripId = snap.tripId
+        name = ""
+        plannedRouteId = null
+        startedAtMs = snap.startedAt
+        currentSegment = snap.currentSegment
+        lastPausedAtMs = snap.lastPausedAt
+        accumulatedPausedMs = snap.accumulatedPausedMs
+        hasBarometer = snap.hasBarometer
+        distanceM = snap.distanceM
+        pointCount = 0
+        maxAltitudeM = null
+        minAltitudeM = null
+        buffer.clear()
+        markers.clear()
+        sequenceByType.clear()
+        sampler = TrackSampler()
+        sampler.reset() // 恢复点与中断点不连线 → 位移基准重建
+        statAccumulator = ThresholdAccumulator(if (snap.hasBarometer) 3.0 else 10.0)
+        statAccumulator.restore(snap.statAnchorM, snap.ascentAccumM, snap.descentAccumM)
+        startLocationCollection()
+        _state.value = SessionState.Active(
+            tripId = snap.tripId,
+            name = "",
+            plannedRouteId = null,
+            startedAtMs = snap.startedAt,
+            currentSegment = snap.currentSegment + 1, // 新建 segment
+            status = "RECORDING",
+            distanceM = snap.distanceM,
+            ascentM = snap.ascentAccumM,
+            descentM = snap.descentAccumM,
+            maxAltitudeM = null,
+            minAltitudeM = null,
+            accumulatedPausedMs = snap.accumulatedPausedMs,
+            pausedAtMs = null,
+            pointCount = 0,
+        )
+        Timber.w("崩溃恢复 tripId=%s segment=%d", snap.tripId, snap.currentSegment + 1)
+        return true
+    }
+
+    // —— 内部 ——
+
+    private fun startLocationCollection() {
+        locationProvider.start(intervalMs = 1_000) // 高精度 1s（PRD 6.3.7；省电 3s 由设置项控制）
+        val id = requireNotNull(tripId)
+        collectJob?.cancel()
+        collectJob = scope.launch {
+            locationProvider.fixes.collect { fix ->
+                val sample = sampler.accept(fix) ?: return@collect
+                onSample(id, fix, sample)
+            }
+        }
+        tickJob?.cancel()
+        tickJob = scope.launch {
+            while (true) {
+                delay(1_000)
+                val now = System.currentTimeMillis()
+                if (now - lastFlushAtMs >= 5_000) flushBuffer(force = true) // 每 5 秒（PRD 6.3.7）
+                if (now - lastStatePersistAtMs >= 10_000) persistSessionState() // 每 10 秒（F-REC-09）
+                bumpStateTick()
+            }
+        }
+    }
+
+    private fun onSample(id: String, fix: com.gohiking.core.location.LocationFix, sample: TrackSampler.Sample) {
+        val last = lastAcceptedFix
+        if (sample.quality == 0 && last != null) {
+            distanceM += GeoMath.distanceMeters(last.lat, last.lng, fix.lat, fix.lng)
+        }
+        lastAcceptedFix = fix
+        // 爬升统计：低精度点不参与（PRD 6.3.7）
+        val altitude = fix.altitudeM
+        if (sample.quality == 0 && altitude != null) {
+            statAccumulator.accept(altitude)
+            if (maxAltitudeM == null || altitude > maxAltitudeM!!) maxAltitudeM = altitude
+            if (minAltitudeM == null || altitude < minAltitudeM!!) minAltitudeM = altitude
+        }
+        buffer += TrackPointEntity(
+            tripId = id,
+            segmentIndex = currentSegment,
+            seq = seqInSegment,
+            timestamp = fix.timestampMs,
+            latitude = fix.lat,
+            longitude = fix.lng,
+            altitude = fix.altitudeM,
+            accuracy = fix.accuracyM.toDouble(),
+            speedMps = sample.fix.speedMps.toDouble(),
+            bearing = fix.bearing.toDouble(),
+            quality = sample.quality,
+            distanceM = distanceM,
+        )
+        seqInSegment += 1
+        pointCount += 1
+        val s = _state.value as? SessionState.Active
+        if (s != null) {
+            _state.value = s.copy(
+                distanceM = distanceM,
+                ascentM = statAccumulator.ascent,
+                descentM = statAccumulator.descent,
+                maxAltitudeM = maxAltitudeM,
+                minAltitudeM = minAltitudeM,
+                pointCount = pointCount,
+            )
+        }
+        // emit 采样事件给地图绘制（失败即丢，不影响记录主链路）
+        _samples.tryEmit(
+            TrackSample(
+                tripId = id, lat = fix.lat, lng = fix.lng, altitudeM = fix.altitudeM,
+                quality = sample.quality, segmentIndex = currentSegment, seq = seqInSegment - 1,
+                timestampMs = fix.timestampMs,
+            ),
+        )
+        if (buffer.size >= 10) scope.launch { flushBuffer(force = false) } // 每 10 点（PRD 6.3.7）
+    }
+
+    private fun addMarker(type: String, note: String?, extraJson: String?) {
+        val fix = lastAcceptedFix ?: return // 无有效定位时不打点
+        val s = _state.value as? SessionState.Active ?: return
+        val seq = (sequenceByType[type] ?: 0) + 1
+        sequenceByType[type] = seq
+        markers += MarkerEntity(
+            id = UUID.randomUUID().toString(),
+            tripId = s.tripId,
+            type = type,
+            timestamp = System.currentTimeMillis(),
+            latitude = fix.lat,
+            longitude = fix.lng,
+            altitude = fix.altitudeM,
+            label = null, // 渲染按 type 本地化生成；不在此写展示快照
+            note = note,
+            sequence = seq,
+            extraJson = extraJson,
+        )
+    }
+
+    private suspend fun flushBuffer(force: Boolean) {
+        if (buffer.isEmpty()) return
+        if (!force && buffer.size < 10) return
+        val batch = buffer.toList()
+        buffer.clear()
+        lastFlushAtMs = System.currentTimeMillis()
+        try {
+            withContext(Dispatchers.IO) { db.trackPointDao().insertBatch(batch) }
+        } catch (t: Throwable) {
+            Timber.e(t, "轨迹点批量写入失败 size=%d", batch.size)
+            buffer.addAll(0, batch) // 失败回填，下次重试
+        }
+    }
+
+    private suspend fun persistSessionState() {
+        val s = _state.value as? SessionState.Active ?: return
+        lastStatePersistAtMs = System.currentTimeMillis()
+        try {
+            db.recordingStateDao().save(
+                RecordingStateEntity(
+                    tripId = s.tripId,
+                    status = s.status,
+                    startedAt = s.startedAtMs,
+                    lastPausedAt = s.pausedAtMs,
+                    accumulatedPausedMs = s.accumulatedPausedMs,
+                    currentSegment = s.currentSegment,
+                    distanceM = s.distanceM,
+                    ascentAccumM = s.ascentM,
+                    descentAccumM = s.descentM,
+                    lastDistanceMarkM = 0.0, // 提醒引擎（§4.9）接入后维护
+                    lastAscentMarkM = 0.0,
+                    lastDescentMarkM = 0.0,
+                    stepAtStart = -1,
+                    stepSourceUsed = "UNAVAILABLE",
+                    hasBarometer = hasBarometer,
+                    altitudeRefM = null,
+                    pressureRefHpa = null,
+                    statAnchorM = statAccumulator.currentAnchor(),
+                    markAnchorM = null, // 打点累加器（用户配置阈值）随提醒引擎接入
+                    movingSecBySegmentJson = "{}",
+                    updatedAt = lastStatePersistAtMs,
+                ),
+            )
+        } catch (t: Throwable) {
+            Timber.e(t, "recording_state 持久化失败")
+        }
+    }
+
+    private fun bumpStateTick() {
+        // Active 状态下每秒 bump 一次，驱动 UI 时长/速度刷新（copy 相同值也触发 collector）
+        val s = _state.value as? SessionState.Active ?: return
+        _state.value = s.copy()
+    }
+}

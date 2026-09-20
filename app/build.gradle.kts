@@ -88,6 +88,7 @@ kotlin {
 dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:designsystem"))
+    implementation(project(":core:data"))
     implementation(project(":core:map"))
     implementation(project(":core:resources"))
 

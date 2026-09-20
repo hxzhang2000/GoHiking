@@ -1,10 +1,15 @@
 package com.gohiking.app
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,47 +36,64 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.amap.api.maps.AMap
 import com.amap.api.maps.CameraUpdateFactory
 import com.amap.api.maps.MapView
 import com.amap.api.maps.MapsInitializer
 import com.amap.api.maps.model.LatLng
+import com.gohiking.core.data.recording.RecordingService
+import com.gohiking.core.data.recording.RecordingSession
+import com.gohiking.core.data.recording.SessionState
 import com.gohiking.core.designsystem.theme.GhTheme
 import com.gohiking.core.resources.R as CoreR
+import com.gohiking.feature.recording.RecordingScreen
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 /**
- * M0 验证壳：①隐私同意门（DEV §1.5 红线：高德 SDK 必须在用户同意后才初始化）；
- * ②同意后展示高德地图验证页——瓦片能加载 = Key + 包名 + SHA1 绑定全部生效（已真机通过 2026-09-20）；
- * ③两项 M0 实测开关：setMapLanguage 切语言 / POI 点击与 OnMapClickListener 冲突（PRD 6.2.1 M0 项）。
- * 导航宿主（P-02 首页地图等）在 M1 起按 DEV §5.4 导航图逐页落地。
+ * M1 壳：①隐私同意门（DEV §1.5 红线：高德 SDK 必须在用户同意后才初始化）；
+ * ②首页地图（P-02 雏形：地图 + 开始记录）；③记录页切换（session 状态驱动）。
+ * 导航宿主在 M1 后续按 DEV §5.4 落地。
  */
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject lateinit var session: RecordingSession
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             GhTheme {
-                Root()
+                Root(session = session)
             }
         }
     }
 }
 
 @Composable
-private fun Root(modifier: Modifier = Modifier) {
+private fun Root(session: RecordingSession, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var agreed by rememberSaveable { mutableStateOf(false) }
-    if (agreed) {
-        MapVerifyScreen(modifier)
-    } else {
+    val sessionState by session.state.collectAsStateWithLifecycle()
+
+    if (!agreed) {
         PrivacyGate(
             onAgree = { agreed = true },
             onDecline = { (context as? Activity)?.finish() },
         )
+        return
+    }
+
+    if (sessionState !is SessionState.Idle) {
+        RecordingScreen(session = session, modifier = modifier)
+    } else {
+        MapVerifyScreen(modifier = modifier, session = session)
     }
 }
 
@@ -91,7 +113,7 @@ private fun PrivacyGate(onAgree: () -> Unit, onDecline: () -> Unit) {
 }
 
 @Composable
-private fun MapVerifyScreen(modifier: Modifier = Modifier) {
+private fun MapVerifyScreen(session: RecordingSession, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -100,6 +122,13 @@ private fun MapVerifyScreen(modifier: Modifier = Modifier) {
     var isChinese by rememberSaveable { mutableStateOf(true) }
     var lastPoiAtMs by remember { mutableStateOf(0L) }
     var lastMapClickAtMs by remember { mutableStateOf(0L) }
+    var locationGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED,
+        )
+    }
+    var showPermissionHint by remember { mutableStateOf(false) }
 
     fun log(text: String) {
         events.add(0, text)
@@ -115,10 +144,10 @@ private fun MapVerifyScreen(modifier: Modifier = Modifier) {
         MapView(context).apply {
             onCreate(null)
             map.uiSettings.isZoomControlsEnabled = true
-            // 默认视角：中国全域；M1 首页再改为定位到当前位置
+            // 默认视角：中国全域；定位到当前位置由记录页/蓝点接入后处理
             map.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(35.86, 104.19), 3.8f))
 
-            // ---- M0 实测②：POI 点击时 OnMapClickListener 是否同触发（PRD 6.2.1）----
+            // M0 实测②：POI 点击时 OnMapClickListener 是否同触发（已真机通过 2026-09-20，保留供回归）
             map.setOnMapClickListener { latLng ->
                 lastMapClickAtMs = System.currentTimeMillis()
                 log(
@@ -132,7 +161,6 @@ private fun MapVerifyScreen(modifier: Modifier = Modifier) {
             map.setOnPOIClickListener { poi ->
                 lastPoiAtMs = System.currentTimeMillis()
                 log(context.getString(CoreR.string.map_test_log_poi, poi.name ?: "?"))
-                // 同一手势的两个回调间隔通常 <100ms；>600ms 视为两次独立点击
                 if (lastMapClickAtMs > 0 && kotlin.math.abs(lastPoiAtMs - lastMapClickAtMs) < 600) {
                     log(context.getString(CoreR.string.map_test_log_both))
                 }
@@ -155,6 +183,20 @@ private fun MapVerifyScreen(modifier: Modifier = Modifier) {
         }
     }
 
+    // 定位权限（F-REC-53 首层：FINE+COARSE；BACKGROUND 在开始记录引导，M1 下一批）
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { grants ->
+        locationGranted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (locationGranted) {
+            session.start(context.getString(CoreR.string.rec_name_default), plannedRouteId = null)
+            RecordingService.start(context)
+        } else {
+            showPermissionHint = true
+        }
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
 
@@ -172,7 +214,6 @@ private fun MapVerifyScreen(modifier: Modifier = Modifier) {
             )
         }
 
-        // ---- M0 实测控制区 ----
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -187,10 +228,7 @@ private fun MapVerifyScreen(modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = stringResource(CoreR.string.map_test_hint),
-                        modifier = Modifier.padding(bottom = 4.dp),
-                    )
+                    Text(stringResource(CoreR.string.map_test_hint), modifier = Modifier.padding(bottom = 4.dp))
                     events.forEachIndexed { index, line ->
                         Text(
                             text = line,
@@ -201,8 +239,21 @@ private fun MapVerifyScreen(modifier: Modifier = Modifier) {
             }
             Button(
                 onClick = {
+                    val permissions = buildList {
+                        add(Manifest.permission.ACCESS_FINE_LOCATION)
+                        add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                        if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+                    }.toTypedArray()
+                    permissionLauncher.launch(permissions)
+                },
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            ) {
+                Text(stringResource(CoreR.string.home_start_record))
+            }
+            Button(
+                onClick = {
                     isChinese = !isChinese
-                    // ---- M0 实测①：setMapLanguage 真机能否切英文（PRD 9.7.7 / F-I18N-31）----
+                    // M0 实测①：setMapLanguage 真机已验证可切换（2026-09-20），保留供回归
                     mapView.map.setMapLanguage(if (isChinese) AMap.CHINESE else AMap.ENGLISH)
                     log(context.getString(CoreR.string.map_test_log_language))
                 },
@@ -211,5 +262,18 @@ private fun MapVerifyScreen(modifier: Modifier = Modifier) {
                 Text(stringResource(CoreR.string.map_test_switch_language))
             }
         }
+    }
+
+    if (showPermissionHint) {
+        AlertDialog(
+            onDismissRequest = { showPermissionHint = false },
+            title = { Text(stringResource(CoreR.string.common_privacy_title)) },
+            text = { Text(stringResource(CoreR.string.rec_need_permission)) },
+            confirmButton = {
+                TextButton(onClick = { showPermissionHint = false }) {
+                    Text(stringResource(CoreR.string.common_action_confirm))
+                }
+            },
+        )
     }
 }
