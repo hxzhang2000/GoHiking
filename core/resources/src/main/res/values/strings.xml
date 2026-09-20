@@ -130,6 +130,19 @@
     <string name="diff_moderate">Moderate</string>
     <string name="diff_hard">Hard</string>
     <string name="diff_challenging">Challenging</string>
+    <string name="plan_manual_entry">Draw manually</string>
+    <string name="plan_manual_title">Manual route</string>
+    <string name="plan_manual_hint">Tap the map to add waypoints in order</string>
+    <string name="plan_manual_connect_straight">Straight</string>
+    <string name="plan_manual_connect_snap">Follow roads</string>
+    <string name="plan_manual_undo">Undo</string>
+    <string name="plan_manual_clear">Clear</string>
+    <string name="plan_manual_save">Save route</string>
+    <string name="plan_manual_save_dialog_title">Save as planned route</string>
+    <string name="plan_manual_name_hint">Route name</string>
+    <string name="plan_manual_waypoint_limit">Up to 50 waypoints</string>
+    <string name="plan_manual_delete_waypoint">Delete waypoint</string>
+    <string name="plan_poi_add_waypoint">Add waypoint</string>
 
     <!-- 计划 plan_*（P-03 选点与搜索，F-PLAN-01~09） -->
     <string name="error_generic">Something went wrong. Please try again.</string>

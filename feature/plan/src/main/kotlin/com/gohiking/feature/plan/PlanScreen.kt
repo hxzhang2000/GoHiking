@@ -109,6 +109,8 @@ private fun PlanContent(
     var query by rememberSaveable { mutableStateOf("") }
     var poiCandidate by remember { mutableStateOf<Pair<String, LatLng>?>(null) }
     var lastPoiAtMs by remember { mutableLongStateOf(0L) }
+    var showSaveDialog by rememberSaveable { mutableStateOf(false) }
+    var deleteWaypointIdx by remember { mutableStateOf<Int?>(null) }
 
     val startLabel = stringResource(CoreR.string.plan_target_start)
     val endLabel = stringResource(CoreR.string.plan_target_end)
@@ -121,6 +123,10 @@ private fun PlanContent(
 
     // 候选线路折线引用（F-PLAN-12/13/15；重画前逐条 remove，防叠加）
     val candidatePolylines = remember { mutableListOf<Polyline>() }
+
+    // 手动模式：途经点 marker→序号（拖动/删除回调定位用）+ 折线引用
+    val waypointMarkers = remember { mutableMapOf<Marker, Int>() }
+    val manualPolylines = remember { mutableListOf<Polyline>() }
 
     // 隐私合规必须早于 MapView 创建（红线，重复调用幂等；与首页/记录页同一模式）
     val mapView = remember {
@@ -142,6 +148,16 @@ private fun PlanContent(
                 if (System.currentTimeMillis() - lastPoiAtMs < POI_WIN_MS) return@setOnMapClickListener
                 viewModel.onMapTap(latLng)
             }
+            // F-PLAN-27：点击途经点 marker → 删除确认（仅手动模式的 marker 会命中 waypointMarkers）
+            map.setOnMarkerClickListener { marker ->
+                val idx = waypointMarkers[marker]
+                if (idx != null) {
+                    deleteWaypointIdx = idx
+                    true
+                } else {
+                    false
+                }
+            }
         }
     }
 
@@ -160,36 +176,67 @@ private fun PlanContent(
         }
     }
 
-    // 起终点标记随 state 重建；选中后相机跟随（单点居中 / 双点取包含框）
-    LaunchedEffect(state.start, state.end, startLabel, endLabel) {
+    // 标记随 state 重建；选中后相机跟随（单点居中 / 多点取包含框）
+    LaunchedEffect(state.start, state.end, state.manualMode, state.manualWaypoints, startLabel, endLabel) {
         val aMap = mapView.map
         markers.forEach { it.remove() }
         markers.clear()
         markerTargets.clear()
-        state.start?.let { p ->
-            val m = aMap.addMarker(markerOptions(p, startLabel, BitmapDescriptorFactory.HUE_GREEN))
-            markers += m
-            markerTargets[m] = SelectTarget.START
-        }
-        state.end?.let { p ->
-            val m = aMap.addMarker(markerOptions(p, endLabel, BitmapDescriptorFactory.HUE_RED))
-            markers += m
-            markerTargets[m] = SelectTarget.END
-        }
-        aMap.setOnMarkerDragListener(object : AMap.OnMarkerDragListener {
-            override fun onMarkerDragStart(marker: Marker) = Unit
-            override fun onMarkerDrag(marker: Marker) = Unit
-            override fun onMarkerDragEnd(marker: Marker) {
-                markerTargets[marker]?.let { viewModel.onPointMoved(it, marker.position) }
+        waypointMarkers.clear()
+        if (state.manualMode) {
+            // F-PLAN-22 序号圆图标；F-PLAN-26 拖动；删除入口见 setOnMarkerClickListener
+            state.manualWaypoints.forEachIndexed { i, wp ->
+                val m = aMap.addMarker(
+                    MarkerOptions()
+                        .position(wp.latLng)
+                        .title(wp.name ?: (i + 1).toString())
+                        .icon(BitmapDescriptorFactory.fromBitmap(numberedMarkerBitmap(i + 1)))
+                        .draggable(true),
+                )
+                waypointMarkers[m] = i
             }
-        })
-        val pts = listOfNotNull(state.start?.latLng, state.end?.latLng)
-        when (pts.size) {
-            1 -> aMap.moveCamera(CameraUpdateFactory.newLatLngZoom(pts[0], 15f))
-            2 -> {
+            aMap.setOnMarkerDragListener(object : AMap.OnMarkerDragListener {
+                override fun onMarkerDragStart(marker: Marker) = Unit
+                override fun onMarkerDrag(marker: Marker) = Unit
+                override fun onMarkerDragEnd(marker: Marker) {
+                    markerTargets[marker]?.let { viewModel.onPointMoved(it, marker.position) }
+                    waypointMarkers[marker]?.let { viewModel.onWaypointMoved(it, marker.position) }
+                }
+            })
+            val wps = state.manualWaypoints.map { it.latLng }
+            if (wps.size == 1) {
+                aMap.moveCamera(CameraUpdateFactory.newLatLngZoom(wps[0], 15f))
+            } else if (wps.isNotEmpty()) {
                 val builder = LatLngBounds.Builder()
-                pts.forEach { builder.include(it) }
+                wps.forEach { builder.include(it) }
                 aMap.moveCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), BOUNDS_PADDING_PX))
+            }
+        } else {
+            state.start?.let { p ->
+                val m = aMap.addMarker(markerOptions(p, startLabel, BitmapDescriptorFactory.HUE_GREEN))
+                markers += m
+                markerTargets[m] = SelectTarget.START
+            }
+            state.end?.let { p ->
+                val m = aMap.addMarker(markerOptions(p, endLabel, BitmapDescriptorFactory.HUE_RED))
+                markers += m
+                markerTargets[m] = SelectTarget.END
+            }
+            aMap.setOnMarkerDragListener(object : AMap.OnMarkerDragListener {
+                override fun onMarkerDragStart(marker: Marker) = Unit
+                override fun onMarkerDrag(marker: Marker) = Unit
+                override fun onMarkerDragEnd(marker: Marker) {
+                    markerTargets[marker]?.let { viewModel.onPointMoved(it, marker.position) }
+                }
+            })
+            val pts = listOfNotNull(state.start?.latLng, state.end?.latLng)
+            when (pts.size) {
+                1 -> aMap.moveCamera(CameraUpdateFactory.newLatLngZoom(pts[0], 15f))
+                2 -> {
+                    val builder = LatLngBounds.Builder()
+                    pts.forEach { builder.include(it) }
+                    aMap.moveCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), BOUNDS_PADDING_PX))
+                }
             }
         }
     }
@@ -240,6 +287,21 @@ private fun PlanContent(
             val builder = LatLngBounds.Builder()
             focusPts.forEach { builder.include(it) }
             aMap.moveCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), BOUNDS_PADDING_PX))
+        }
+    }
+
+    // F-PLAN-23/24/36：手动线路折线——直线段虚线（setDottedLine，javap 确认 API）、吸附段实线
+    LaunchedEffect(state.manualSegments, densityPx) {
+        val aMap = mapView.map
+        manualPolylines.forEach { it.remove() }
+        manualPolylines.clear()
+        state.manualSegments.forEach { seg ->
+            val opts = PolylineOptions()
+                .addAll(seg.points)
+                .width(MANUAL_WIDTH_DP * densityPx)
+                .color(MANUAL_COLOR)
+            if (!seg.snapped) opts.setDottedLine(true)
+            manualPolylines += aMap.addPolyline(opts)
         }
     }
 
@@ -344,6 +406,73 @@ private fun PlanContent(
                     Text(hintText, modifier = Modifier.padding(12.dp))
                 }
             }
+            if (state.manualMode) {
+                // F-PLAN-20/22~29：手动模式面板——连线方式切换 + 实时评估
+                Surface(
+                    tonalElevation = 4.dp,
+                    shadowElevation = 2.dp,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            stringResource(CoreR.string.plan_manual_title),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            stringResource(CoreR.string.plan_manual_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(top = 8.dp),
+                        ) {
+                            FilterChip(
+                                selected = state.manualConnect == ManualConnect.STRAIGHT,
+                                onClick = { viewModel.setManualConnect(ManualConnect.STRAIGHT) },
+                                label = { Text(stringResource(CoreR.string.plan_manual_connect_straight)) },
+                            )
+                            FilterChip(
+                                selected = state.manualConnect == ManualConnect.SNAP,
+                                onClick = { viewModel.setManualConnect(ManualConnect.SNAP) },
+                                label = { Text(stringResource(CoreR.string.plan_manual_connect_snap)) },
+                            )
+                            if (state.manualSnapping) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            }
+                        }
+                        val mm = state.manualMetrics
+                        if (mm != null) {
+                            // F-PLAN-29：距离/耗时即时，爬升「估算」（F-PLAN-46）后台补齐
+                            val ascent = mm.ascentM // 跨模块属性不能 smart cast，先取局部值
+                            Text(
+                                text = Formatters.distanceText(mm.distanceM) +
+                                    " · " + Formatters.durationText(mm.estimatedDurationSec),
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                            Text(
+                                text = if (ascent != null) {
+                                    stringResource(CoreR.string.plan_estimated_ascent, ascent.toInt())
+                                } else {
+                                    stringResource(CoreR.string.common_stat_unknown)
+                                } + " · " + (state.manualDifficulty?.let { difficultyLabel(it) }
+                                    ?: stringResource(CoreR.string.common_stat_unknown)),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        if (state.manualLimitHit) {
+                            Text(
+                                stringResource(CoreR.string.plan_manual_waypoint_limit),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         // 底部：当前位置为起点（F-PLAN-07）+ 重选 + 返回
@@ -379,10 +508,16 @@ private fun PlanContent(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(
-                        stringResource(CoreR.string.plan_route_failed),
-                        modifier = Modifier.padding(12.dp),
-                    )
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(stringResource(CoreR.string.plan_route_failed))
+                        // F-PLAN-20：自动规划失败 → 引导手动打点兜底
+                        Button(
+                            onClick = { viewModel.enterManualMode() },
+                            modifier = Modifier.padding(top = 8.dp),
+                        ) {
+                            Text(stringResource(CoreR.string.plan_manual_entry))
+                        }
+                    }
                 }
             }
             if (state.candidates.isNotEmpty()) {
@@ -413,47 +548,150 @@ private fun PlanContent(
                     )
                 }
             }
-            Button(
-                onClick = { viewModel.useCurrentLocationAsStart() },
-                enabled = !state.locating,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            ) {
-                Text(stringResource(CoreR.string.plan_use_current))
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                OutlinedButton(
-                    onClick = { viewModel.replan() },
-                    enabled = state.start != null && state.end != null, // F-PLAN-16 重新规划
+            if (state.manualMode) {
+                // F-PLAN-25/27/40：手动模式操作组
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
                 ) {
-                    Text(stringResource(CoreR.string.plan_replan))
+                    OutlinedButton(
+                        onClick = { viewModel.undoWaypoint() },
+                        enabled = state.manualWaypoints.isNotEmpty(), // F-PLAN-25
+                    ) {
+                        Text(stringResource(CoreR.string.plan_manual_undo))
+                    }
+                    OutlinedButton(
+                        onClick = { viewModel.clearManual() },
+                        enabled = state.manualWaypoints.isNotEmpty(),
+                    ) {
+                        Text(stringResource(CoreR.string.plan_manual_clear))
+                    }
+                    Button(
+                        onClick = { showSaveDialog = true }, // F-PLAN-40 命名保存
+                        enabled = state.manualSegments.isNotEmpty() && state.manualSavedRouteId == null,
+                    ) {
+                        Text(
+                            stringResource(
+                                if (state.manualSavedRouteId != null) CoreR.string.plan_saved
+                                else CoreR.string.plan_manual_save,
+                            ),
+                        )
+                    }
                 }
-                OutlinedButton(onClick = { viewModel.reset() }) {
-                    Text(stringResource(CoreR.string.plan_reset))
-                }
-                OutlinedButton(onClick = onBack) {
+                OutlinedButton(onClick = { viewModel.exitManualMode() }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                     Text(stringResource(CoreR.string.plan_back))
+                }
+            } else {
+                Button(
+                    onClick = { viewModel.useCurrentLocationAsStart() },
+                    enabled = !state.locating,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                ) {
+                    Text(stringResource(CoreR.string.plan_use_current))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                    OutlinedButton(
+                        onClick = { viewModel.replan() },
+                        enabled = state.start != null && state.end != null, // F-PLAN-16 重新规划
+                    ) {
+                        Text(stringResource(CoreR.string.plan_replan))
+                    }
+                    OutlinedButton(onClick = { viewModel.reset() }) {
+                        Text(stringResource(CoreR.string.plan_reset))
+                    }
+                    OutlinedButton(onClick = onBack) {
+                        Text(stringResource(CoreR.string.plan_back))
+                    }
                 }
             }
         }
     }
 
-    // F-PLAN-08：POI 气泡——设为起点 / 设为终点
+    // F-PLAN-08：POI 气泡——选点态「设为起点/终点」；手动态「添加途经点」（VM 按模式分流）
     poiCandidate?.let { (name, latLng) ->
         AlertDialog(
             onDismissRequest = { poiCandidate = null },
             title = { Text(name) },
-            text = { Text(stringResource(CoreR.string.plan_poi_dialog_message)) },
+            text = {
+                Text(
+                    stringResource(
+                        if (state.manualMode) CoreR.string.plan_manual_hint
+                        else CoreR.string.plan_poi_dialog_message,
+                    ),
+                )
+            },
             confirmButton = {
-                TextButton(onClick = {
-                    viewModel.onPoiChosen(name, latLng, SelectTarget.START)
-                    poiCandidate = null
-                }) { Text(stringResource(CoreR.string.plan_poi_set_start)) }
+                if (state.manualMode) {
+                    TextButton(onClick = {
+                        viewModel.onPoiChosen(name, latLng, SelectTarget.START) // manualMode 下被分流为 addWaypoint
+                        poiCandidate = null
+                    }) { Text(stringResource(CoreR.string.plan_poi_add_waypoint)) }
+                } else {
+                    TextButton(onClick = {
+                        viewModel.onPoiChosen(name, latLng, SelectTarget.START)
+                        poiCandidate = null
+                    }) { Text(stringResource(CoreR.string.plan_poi_set_start)) }
+                }
             },
             dismissButton = {
+                if (state.manualMode) {
+                    TextButton(onClick = { poiCandidate = null }) {
+                        Text(stringResource(CoreR.string.common_action_cancel))
+                    }
+                } else {
+                    TextButton(onClick = {
+                        viewModel.onPoiChosen(name, latLng, SelectTarget.END)
+                        poiCandidate = null
+                    }) { Text(stringResource(CoreR.string.plan_poi_set_end)) }
+                }
+            },
+        )
+    }
+
+    // F-PLAN-40：手动线路保存命名（默认取最后一个有名称的途经点）
+    if (showSaveDialog) {
+        var nameInput by rememberSaveable { mutableStateOf(state.manualWaypoints.lastOrNull()?.name.orEmpty()) }
+        AlertDialog(
+            onDismissRequest = { showSaveDialog = false },
+            title = { Text(stringResource(CoreR.string.plan_manual_save_dialog_title)) },
+            text = {
+                OutlinedTextField(
+                    value = nameInput,
+                    onValueChange = { nameInput = it },
+                    placeholder = { Text(stringResource(CoreR.string.plan_manual_name_hint)) },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
                 TextButton(onClick = {
-                    viewModel.onPoiChosen(name, latLng, SelectTarget.END)
-                    poiCandidate = null
-                }) { Text(stringResource(CoreR.string.plan_poi_set_end)) }
+                    showSaveDialog = false
+                    viewModel.saveManual(nameInput.trim().ifEmpty { null })
+                }) { Text(stringResource(CoreR.string.common_action_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSaveDialog = false }) {
+                    Text(stringResource(CoreR.string.common_action_cancel))
+                }
+            },
+        )
+    }
+
+    // F-PLAN-27：删除指定途经点确认
+    deleteWaypointIdx?.let { idx ->
+        AlertDialog(
+            onDismissRequest = { deleteWaypointIdx = null },
+            title = { Text(stringResource(CoreR.string.plan_manual_delete_waypoint)) },
+            text = { Text("#${idx + 1}") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.removeWaypoint(idx)
+                    deleteWaypointIdx = null
+                }) { Text(stringResource(CoreR.string.common_action_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteWaypointIdx = null }) {
+                    Text(stringResource(CoreR.string.common_action_cancel))
+                }
             },
         )
     }
@@ -547,4 +785,27 @@ private val SELECTED_COLOR = 0xFF2F80ED.toInt()
 private const val NORMAL_WIDTH_DP = 6f
 private const val HIGHLIGHT_WIDTH_DP = 10f
 private const val SELECTED_WIDTH_DP = 8f
+
+/** 手动线路（F-PLAN-23/24）：紫色系与推荐色板区分；直线段虚线 */
+private val MANUAL_COLOR = 0xFF9B51E0.toInt()
+private const val MANUAL_WIDTH_DP = 6f
+
+/** F-PLAN-22：途经点序号圆图标（自绘 bitmap，64px 足够 marker 缩放） */
+private fun numberedMarkerBitmap(number: Int): android.graphics.Bitmap {
+    val size = 64
+    val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(bitmap)
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF9B51E0.toInt()
+        style = android.graphics.Paint.Style.FILL
+    }
+    canvas.drawCircle(size / 2f, size / 2f, size / 2f - 2f, paint)
+    paint.color = android.graphics.Color.WHITE
+    paint.textSize = size * 0.5f
+    paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
+    paint.textAlign = android.graphics.Paint.Align.CENTER
+    val baseline = size / 2f - (paint.descent() + paint.ascent()) / 2f
+    canvas.drawText(number.toString(), size / 2f, baseline, paint)
+    return bitmap
+}
 

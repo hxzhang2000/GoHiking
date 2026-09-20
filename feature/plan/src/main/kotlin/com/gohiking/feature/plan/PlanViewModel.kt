@@ -38,6 +38,9 @@ enum class SelectTarget { START, END }
 /** 搜索提示类型（文案走资源文件，VM 只给语义） */
 enum class SearchHint { NONE, NO_RESULT, OFFLINE, LOCATE_FAILED }
 
+/** F-PLAN-24：手动线路连线方式——直线（虚线）/ 路径吸附（失败回退直线） */
+enum class ManualConnect { STRAIGHT, SNAP }
+
 /** 已选定的点（POI 选点带名称，空白点选 / 当前位置为 null） */
 data class PlanPoint(
     val name: String?,
@@ -52,6 +55,12 @@ data class RouteCandidate(
     val path: PlannedPath,
     val metrics: RouteMetrics? = null,
     val difficulty: Difficulty? = null,
+)
+
+/** 手动线路单段（直线段虚线渲染、吸附段实线渲染） */
+data class ManualSegment(
+    val points: List<LatLng>,
+    val snapped: Boolean,
 )
 
 data class PlanUiState(
@@ -69,6 +78,16 @@ data class PlanUiState(
     val highlightIndex: Int = -1, // F-PLAN-13 点击卡片高亮
     val chosenIndex: Int = -1, // F-PLAN-14 已选定为计划线路（蓝实线）
     val chosenRouteId: String? = null,
+    // ── 手动打点（F-PLAN-20~29）──
+    val manualMode: Boolean = false,
+    val manualWaypoints: List<PlanPoint> = emptyList(),
+    val manualConnect: ManualConnect = ManualConnect.STRAIGHT,
+    val manualSnapping: Boolean = false,
+    val manualSegments: List<ManualSegment> = emptyList(),
+    val manualMetrics: RouteMetrics? = null,
+    val manualDifficulty: Difficulty? = null,
+    val manualSavedRouteId: String? = null,
+    val manualLimitHit: Boolean = false, // F-PLAN-28 超上限提示
 )
 
 /**
@@ -89,15 +108,24 @@ class PlanViewModel(
     val state: StateFlow<PlanUiState> = _state.asStateFlow()
 
     private var planJob: kotlinx.coroutines.Job? = null
+    private var manualJob: kotlinx.coroutines.Job? = null
 
-    /** F-PLAN-03/04：地图空白点选，落到当前激活目标 */
+    /** F-PLAN-03/04：地图空白点选；手动模式下 = 添加途经点（F-PLAN-21） */
     fun onMapTap(latLng: LatLng) {
-        assign(PlanPoint(name = null, latLng = latLng))
+        if (_state.value.manualMode) {
+            addWaypoint(PlanPoint(name = null, latLng = latLng))
+        } else {
+            assign(PlanPoint(name = null, latLng = latLng))
+        }
     }
 
-    /** F-PLAN-08：底图 POI 气泡「设为起点 / 设为终点」（双回调同触以 POI 为准） */
+    /** F-PLAN-08：底图 POI 气泡（双回调同触以 POI 为准）；手动模式下 = 添加途经点 */
     fun onPoiChosen(name: String, latLng: LatLng, target: SelectTarget) {
-        assign(PlanPoint(name = name, latLng = latLng), forceTarget = target)
+        if (_state.value.manualMode) {
+            addWaypoint(PlanPoint(name = name, latLng = latLng))
+        } else {
+            assign(PlanPoint(name = name, latLng = latLng), forceTarget = target)
+        }
     }
 
     /** F-PLAN-06：拖动起终点调整位置（保留名称，只更新坐标；改动后重规划） */
@@ -125,7 +153,11 @@ class PlanViewModel(
     fun onSuggestionPicked(s: Suggestion, center: LatLng?) {
         val latLng = s.latLng
         if (latLng != null) {
-            assign(PlanPoint(name = s.name, latLng = latLng))
+            if (_state.value.manualMode) {
+                addWaypoint(PlanPoint(name = s.name, latLng = latLng)) // 手动模式：搜索结果也是途经点
+            } else {
+                assign(PlanPoint(name = s.name, latLng = latLng))
+            }
         } else {
             viewModelScope.launch { search(s.name, center) }
         }
@@ -162,6 +194,21 @@ class PlanViewModel(
     /** 重选：清空起终点与全部候选，回到起点 */
     fun reset() {
         planJob?.cancel()
+        _state.update { PlanUiState(activeTarget = SelectTarget.START) }
+    }
+
+    /** F-PLAN-20：进入手动打点模式（自动规划失败或用户主动）；已选起终点转为初始途经点 */
+    fun enterManualMode() {
+        planJob?.cancel()
+        val s = _state.value
+        val carried = listOfNotNull(s.start, s.end)
+        _state.update { PlanUiState(manualMode = true, manualWaypoints = carried) }
+        rebuildManualSegments()
+    }
+
+    /** 退出手动模式，回到选点态 */
+    fun exitManualMode() {
+        manualJob?.cancel()
         _state.update { PlanUiState(activeTarget = SelectTarget.START) }
     }
 
@@ -215,6 +262,185 @@ class PlanViewModel(
         planJob?.cancel()
         val s = _state.value
         if (s.start != null && s.end != null) planRoutes()
+    }
+
+    // ── 手动打点（F-PLAN-20~29）──
+
+    /** F-PLAN-21：添加途经点；F-PLAN-28 上限 50 */
+    fun addWaypoint(point: PlanPoint) {
+        val s = _state.value
+        if (!s.manualMode) return
+        if (s.manualWaypoints.size >= MAX_WAYPOINTS) {
+            _state.update { it.copy(manualLimitHit = true) }
+            return
+        }
+        _state.update {
+            it.copy(manualWaypoints = it.manualWaypoints + point, manualLimitHit = false, manualSavedRouteId = null)
+        }
+        rebuildManualSegments()
+    }
+
+    /** F-PLAN-25：撤销上一个途经点 */
+    fun undoWaypoint() {
+        val s = _state.value
+        if (!s.manualMode || s.manualWaypoints.isEmpty()) return
+        _state.update { it.copy(manualWaypoints = it.manualWaypoints.dropLast(1), manualSavedRouteId = null) }
+        rebuildManualSegments()
+    }
+
+    /** 清空全部途经点 */
+    fun clearManual() {
+        manualJob?.cancel()
+        _state.update {
+            it.copy(
+                manualWaypoints = emptyList(),
+                manualSegments = emptyList(),
+                manualMetrics = null,
+                manualDifficulty = null,
+                manualSavedRouteId = null,
+                manualLimitHit = false,
+            )
+        }
+    }
+
+    /** F-PLAN-27：删除指定途经点 */
+    fun removeWaypoint(index: Int) {
+        val s = _state.value
+        if (index !in s.manualWaypoints.indices) return
+        _state.update {
+            it.copy(manualWaypoints = it.manualWaypoints.filterIndexed { i, _ -> i != index }, manualSavedRouteId = null)
+        }
+        rebuildManualSegments()
+    }
+
+    /** F-PLAN-26：拖动途经点，线路实时更新 */
+    fun onWaypointMoved(index: Int, latLng: LatLng) {
+        val s = _state.value
+        if (index !in s.manualWaypoints.indices) return
+        _state.update {
+            it.copy(
+                manualWaypoints = it.manualWaypoints.mapIndexed { i, p ->
+                    if (i == index) p.copy(latLng = latLng) else p
+                },
+                manualSavedRouteId = null,
+            )
+        }
+        rebuildManualSegments()
+    }
+
+    /** F-PLAN-24：连线方式切换（直线 / 路径吸附） */
+    fun setManualConnect(mode: ManualConnect) {
+        _state.update { it.copy(manualConnect = mode) }
+        rebuildManualSegments()
+    }
+
+    /** 手动线路保存为计划（F-PLAN-29/40；source=MANUAL，C1 先单段 OUTBOUND） */
+    fun saveManual(name: String?) {
+        val s = _state.value
+        val segs = s.manualSegments
+        if (!s.manualMode || segs.isEmpty() || s.manualSavedRouteId != null) return
+        viewModelScope.launch {
+            val flat = segs.flatMap { it.points }
+            val dist = s.manualMetrics?.distanceM
+                ?: RouteEvaluator.polylineDistance(flat.map { LatLngValue(it.latitude, it.longitude) })
+            val m = s.manualMetrics
+            val routeId = UUID.randomUUID().toString()
+            val simplified = PolylineSimplifier.simplify(
+                flat.map { LatLngValue(it.latitude, it.longitude) },
+                POLYLINE_EPSILON_M,
+            )
+            val leg = PlannedLegEntity(
+                id = UUID.randomUUID().toString(),
+                plannedRouteId = routeId,
+                legType = "OUTBOUND",
+                distanceM = dist,
+                ascentM = m?.ascentM ?: 0.0,
+                descentM = m?.descentM ?: 0.0,
+                estimatedMin = ((m?.estimatedDurationSec ?: 0L) / 60).toInt(),
+                difficulty = (s.manualDifficulty ?: Difficulty.MODERATE).name,
+                polylineJson = PolylineJson.encode(simplified),
+            )
+            val route = PlannedRouteEntity(
+                id = routeId,
+                name = name ?: manualRouteName(s),
+                note = null,
+                source = "MANUAL",
+                createdAt = System.currentTimeMillis(),
+                totalDistanceM = dist,
+                totalAscentM = leg.ascentM,
+                totalDescentM = leg.descentM,
+            )
+            routeDao.saveWithLegs(route, listOf(leg))
+            _state.update { it.copy(manualSavedRouteId = routeId) }
+        }
+    }
+
+    private fun manualRouteName(s: PlanUiState): String =
+        s.manualWaypoints.lastOrNull()?.name ?: ("手动线路 " + DATE_TIME_FORMAT.get()!!.format(Date()))
+
+    /** 相邻途经点连线重建（F-PLAN-23/24）：直线直连；吸附逐段步行规划、失败回退直线 */
+    private fun rebuildManualSegments() {
+        manualJob?.cancel()
+        val s = _state.value
+        val wps = s.manualWaypoints
+        if (wps.size < 2) {
+            _state.update {
+                it.copy(manualSegments = emptyList(), manualMetrics = null, manualDifficulty = null, manualSnapping = false)
+            }
+            return
+        }
+        if (s.manualConnect == ManualConnect.STRAIGHT) {
+            val segs = (0 until wps.size - 1).map { i ->
+                ManualSegment(points = listOf(wps[i].latLng, wps[i + 1].latLng), snapped = false)
+            }
+            _state.update { it.copy(manualSegments = segs, manualSnapping = false) }
+            evaluateManual(segs)
+        } else {
+            manualJob = viewModelScope.launch {
+                _state.update { it.copy(manualSnapping = true) }
+                val segs = ArrayList<ManualSegment>()
+                for (i in 0 until wps.size - 1) {
+                    val route = routeClient.walkRoutes(wps[i].latLng, wps[i + 1].latLng).firstOrNull()
+                    segs.add(
+                        if (route != null && route.points.isNotEmpty()) {
+                            ManualSegment(points = route.points, snapped = true)
+                        } else {
+                            ManualSegment(points = listOf(wps[i].latLng, wps[i + 1].latLng), snapped = false)
+                        },
+                    )
+                    _state.update { it.copy(manualSegments = segs.toList()) } // 逐段上屏
+                }
+                _state.update { it.copy(manualSnapping = false) }
+                evaluateManual(segs)
+            }
+        }
+    }
+
+    /** F-PLAN-29：手动线路同样评估——距离/耗时即时，爬升/难度后台补齐（不可用显示「—」） */
+    private fun evaluateManual(segs: List<ManualSegment>) {
+        manualJob = viewModelScope.launch {
+            val flat = segs.flatMap { it.points }
+            if (flat.size < 2) return@launch
+            val distance = RouteEvaluator.polylineDistance(flat.map { LatLngValue(it.latitude, it.longitude) })
+            _state.update {
+                it.copy(
+                    manualMetrics = RouteMetrics(
+                        distanceM = distance,
+                        estimatedDurationSec = (distance / MANUAL_SPEED_MPS).toLong(),
+                        ascentM = null, descentM = null, maxAltitudeM = null, minAltitudeM = null,
+                        elevationAvailable = false,
+                    ),
+                    manualDifficulty = null,
+                )
+            }
+            val metrics = RouteEvaluator.evaluate(flat.map { LatLngValue(it.latitude, it.longitude) }, queryElevation)
+            val difficulty = if (metrics.elevationAvailable) {
+                RouteEvaluator.difficultyOf(metrics.distanceM, metrics.ascentM ?: 0.0)
+            } else {
+                null
+            }
+            _state.update { it.copy(manualMetrics = metrics, manualDifficulty = difficulty) }
+        }
     }
 
     /** 输入联想 + 周边检索组合（F-PLAN-05/09）。失败 → OFFLINE（降级地图点选），无结果 → NO_RESULT */
@@ -349,6 +575,12 @@ class PlanViewModel(
 
         /** 计划折线入库前的抽稀容差（与详情页渲染一致） */
         const val POLYLINE_EPSILON_M = 12.0
+
+        /** F-PLAN-28：手动途经点数量上限 */
+        const val MAX_WAYPOINTS = 50
+
+        /** 登山平均速度 3.5 km/h = 3.5/3.6 m/s（PRD 6.2.3，与 RouteEvaluator 同口径） */
+        const val MANUAL_SPEED_MPS = 3.5 / 3.6
     }
 }
 
