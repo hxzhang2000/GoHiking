@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>去爬山 GoHiking · 可交互原型（P-01 ~ P-18）</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="stage">
+
+  <!-- ============ 手机 ============ -->
+  <div class="phone">
+    <div class="screen">
+      <div class="notch"></div>
+
+      <div class="statusbar">
+        <span id="clock">9:41</span>
+        <span class="sb-r">
+          <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor" aria-hidden="true">
+            <rect x="0"  y="7.5" width="2.4" height="3.5" rx=".6" opacity=".35"/>
+            <rect x="3.6" y="5.5" width="2.4" height="5.5" rx=".6" opacity=".55"/>
+            <rect x="7.2" y="3"   width="2.4" height="8"   rx=".6" opacity=".75"/>
+            <rect x="10.8" y="0"  width="2.4" height="11"  rx=".6"/>
+          </svg>
+          <svg width="15" height="11" viewBox="0 0 15 11" fill="currentColor" aria-hidden="true">
+            <path d="M7.5 1.2a8.6 8.6 0 0 0-7.5 4.3l7.5 4.4 7.5-4.4A8.6 8.6 0 0 0 7.5 1.2z" opacity=".9"/>
+          </svg>
+          <i class="sb-battery"><i></i></i>
+        </span>
+      </div>
+
+      <div id="view"></div>
+      <div id="tabbar" class="tabbar"></div>
+      <div id="sheet"></div>
+      <div id="overlay"></div>
+      <div id="toast"></div>
+    </div>
+  </div>
+
+  <!-- ============ 说明 / 控制台 ============ -->
+  <aside class="side">
+    <h1>去爬山 GoHiking</h1>
+    <div class="meta">
+      可交互原型 · 依据 <b>docs/PRD.md v1.7</b><br>
+      手机竖屏 393 × 852 · 页面编号与 PRD 8.1 一一对应
+    </div>
+
+    <h2>页面清单（点击直达）</h2>
+    <div class="plist" id="plist"></div>
+
+    <h2>主流程</h2>
+    <div class="note">
+      权限引导 → 首页 → 计划选点（搜索 / 点选地图标记 / 点地图）→ 推荐线路 → 保存
+      → <b>开始记录</b>（每 100m 距离 / 海拔自动打点并播报）→ 登顶 → 停止保存
+      → 记录详情（概览 / 图表 / 分段 / 标记 / 照片）→ 导出 → 导入
+    </div>
+
+    <h2>图例</h2>
+    <div class="lg">
+      <div><i style="background:#2F80ED"></i>计划线路 · 去程（实线）</div>
+      <div><i style="background:#1B4F9C"></i>计划线路 · 返程（虚线）</div>
+      <div><i style="background:#E24B4A"></i>实际轨迹 / 登顶点红旗</div>
+      <div><i style="background:#639922"></i>海拔提醒 · 爬升（上箭头）</div>
+      <div><i style="background:#EF9F27"></i>海拔提醒 · 下降 / 手动标记</div>
+      <div><i style="background:#2F80ED;border-radius:50%;width:10px;height:10px"></i>距离提醒点</div>
+    </div>
+
+    <h2>演示控制台</h2>
+    <div class="ctl">
+      <button data-act="resetdemo">重置演示数据（回到 P-01）</button>
+      <button data-act="emptytrips">清空运动记录（看 P-10 空状态）</button>
+      <button data-act="emptyroutes">清空计划线路（看 P-07 空状态）</button>
+      <button data-go="p14">打开设置页（切换中 / 英文）</button>
+      <button data-go="p08">直接进入记录页</button>
+    </div>
+
+    <h2>说明</h2>
+    <div class="note">
+      <ul>
+        <li>地图上<b>带白底的文字标签</b>是高德底图 POI，点击可直接设为起点 / 终点（<code>F-PLAN-08</code>）。</li>
+        <li>选点页可<b>输入搜索</b>：联想列表里区分「兴趣点 / 公交线路 / 关键词」三种结果（<code>F-PLAN-05</code>）。</li>
+        <li>记录页会<b>真的跑计时器</b>：距离每满 100 m、爬升每满 100 m 自动打点并弹出播报文案。</li>
+        <li>设置页底部可切 <b>简体中文 / English</b>，整份文案（含难度、单位、提示）都会切换。</li>
+        <li>灰色按钮标「演示：原型中未接线」的是 PRD 有需求、原型未实现交互的部分。</li>
+      </ul>
+    </div>
+  </aside>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
