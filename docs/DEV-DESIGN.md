@@ -104,7 +104,7 @@ coil = "3.0.4"
 timber = "5.0.1"
 coroutines = "1.9.0"
 navigation = "2.8.5"
-vico = "3.3.1"          # ✅ 已核实：2.0.0-beta.2 确实存在，但 v3 才是稳定线（最新 3.3.1）；见 §9.2.1 T-10
+vico = "2.1.4"          # ⚠ M4-A 实测修订：3.3.1 以 Kotlin 2.4 编译（metadata 2.4.0），与 §7.1.1 Kotlin 2.1.0 基线冲突（编译直接失败）→ 锁定 2.1.4（2025-09-17，Kotlin 2.1 时代编译；API 为 Cartesian 命名但 axis composable 是 VerticalAxis.rememberStart()/HorizontalAxis.rememberBottom()）。修订 T-10 结论
 amapCombined = "10.0.700_loc6.4.5_sea9.7.2"  # 官方三合一（3dmap+location+search）；单独引 3dmap 与 search 会重复类冲突（D-17）
 
 [libraries]
@@ -152,7 +152,7 @@ hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 | 高德 SDK 是**四件套**，不是一个包 | M0 已核实（§9.2.1 T-01）：`3dmap`（地图，含 `AMap`/`MapsInitializer`）／`location`（定位，含 `AMapLocationClient`）／**`search`（搜索 + 路径规划，含 `PoiSearch`/`Inputtips`/`RouteSearch`/`RouteSearchV2`）**／`navi-3dmap`（导航，选配）。**`PoiSearch`、`Inputtips`、`RouteSearch` 都不在地图包里**——项目一开始必须把 `search` 一起引上，否则 PRD 6.2.1 的搜索选点与 PRD 6.2.2 的线路规划都做不了 |
 | 高德 SDK 引入方式（已查清） | 公网 Maven **只有 jar、没有 aar**（已实测 `3dmap-10.0.600.aar` 返回 404，`.jar` 正常）。两个后果必须在 M0 处理：① **jar 不带 `AndroidManifest.xml`，权限与 `com.amap.api.v2.apikey` 的 `meta-data` 必须由 App 自己声明**；② **jar 内没有任何 proguard 规则**（见 T-17），Release 混淆规则必须手写。若改用官网 aar 则反之（aar 带清单、但仍不带混淆规则） |
 | 导航 SDK 的版本号编码了地图 SDK 版本 | `navi-3dmap` 的版本形如 `10.0.800_3dmap10.0.800`——**它绑定了配套的地图 SDK 版本**。若引入导航 SDK，地图 SDK 必须与它成对锁定，不能各自取最新 |
-| 图表库 | **Vico 3.3.1（稳定线）**——T-10 已裁定直接用 v3，**不准备 MPAndroidChart 兜底**（PRD 4.1 的备选仅在 v3 出现不兼容时再议） |
+| 图表库 | **Vico 2.1.4**（M4-A 实测修订：3.3.1 需 Kotlin 2.4 metadata，与 §7.1.1 Kotlin 2.1.0 基线冲突；2.1.4 为 v2 稳定线末版）——**不准备 MPAndroidChart 兜底**（PRD 4.1 的备选仅再议） |
 | minSdk / targetSdk | 26 / 35（PRD 4.1） |
 | 新增依赖的核实结论 | 见 §9.2.1 T-01 / T-10 / T-11 / T-14：20 个版本号全部存在但整体偏旧；**Vico 直接用 3.3.1**；**高德必须引四个坐标** |
 
@@ -2116,7 +2116,7 @@ build/
 | T-17 / B9 | 是否内置 consumer-proguard 规则 | **没有**。jar 内只有 `META-INF/MANIFEST.MF`，无任何 proguard 规则 → **必须手写 keep 规则**（§7.1 已给初稿，且必须 release 实跑验证） | §7.1 |
 | T-19 | AGP / Kotlin 弃用 API 现状 | `kotlinOptions` **自 Kotlin 2.0 起弃用** → 改 `kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }` 或 `jvmToolchain(17)`；`resourceConfigurations` **自 AGP 8.8 起弃用** → 改 `androidResources { localeFilters }`。**叠加 §7.4 的 `warningsAsErrors = true`，写错会直接让 CI 变红** | §7.1 |
 | T-07 | 高程服务连通性 / 批量 / 精度 | 三个候选**都能连通**：Open-Elevation（单点 1.3–4.2 s，**200 点一次 ≈ 1 s**）、Open-Meteo（1.2–1.6 s，逗号批量）、OpenTopoData（`srtm90m`/`srtm30m` 通、`aster30m` 超时）。**⚠ 但 DEM 90 m 在陡峭山峰系统性低估**：泰山玉皇顶实测 1532.7 m / SRTM 报 1479 m，黄山光明顶实测 1860 m / 报 1725 m → 爬升评估必须标「估算」（落地为 PRD `F-PLAN-46`） | §4.10 |
-| T-10 | Vico v2（beta）是否可用 | artifact 存在（`2.0.0-beta.2` 可解析），**但 v3 已是稳定线（最新 3.3.1）** → **不必再准备 MPAndroidChart 兜底**，直接用 v3 | §1.3 |
+| T-10 | Vico v2（beta）是否可用 | artifact 存在（`2.0.0-beta.2` 可解析），v3 为稳定线。**⚠ M4-A 实测修订（2026-09-20）**：3.3.1 以 Kotlin 2.4 编译（metadata 2.4.0），与 Kotlin 2.1.0 基线冲突 → **改锁 2.1.4**；API 差异：axis composable 为 `VerticalAxis.rememberStart()` / `HorizontalAxis.rememberBottom()`，producer 用构造函数 `CartesianChartModelProducer()` | §1.3 |
 | T-11 | 地图 SDK 与定位 SDK 的版本兼容 | **导航 SDK 的版本号直接编码了配套地图 SDK 版本**（`10.0.800_3dmap10.0.800`）→ 引入导航 SDK 时两者必须成对锁定；定位 SDK 与地图 SDK 相互独立 | §1.3 |
 | T-14 / B1 | 版本号是否真实存在 | §1.3 那 20 个「凭经验填的」版本号 **全部真实存在**（含三个插件 marker）。但它们整体是 **2024 年末~2025 年初**的版本，仓库最新已到 AGP 9.4.1 / Kotlin 2.4.20 / Compose BOM 2026.09.00 → **需要一次「旧稳定基线 vs 新版本」的决策**，锁定留到 M0 | §1.3 |
 | B2 | GCJ→WGS 迭代收敛次数 | `eps=1e-9` → **≤4 次**；`1e-8` → ≤4；`1e-12` → **≤6**。还原精度：`1e-9` 时中位 0.003 mm。**单次近似反解误差 0.59–3.40 m，不可用** | §4.11 |

@@ -242,6 +242,26 @@ private fun Root(
         }
     }
 
+    // 单条记录导出（F-IO-01，F-HIS-30 详情页按钮）：CreateDocument 输入 = 建议文件名
+    var pendingTripExport by rememberSaveable { mutableStateOf<String?>(null) } // tripId
+    val tripExportDoc = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        val tripId = pendingTripExport
+        pendingTripExport = null
+        if (uri == null || tripId == null) return@rememberLauncherForActivityResult
+        ioRun {
+            val crs = ioRepository.currentExportCrs()
+            val resolver = context.contentResolver
+            resolver.openOutputStream(uri)?.use { out ->
+                if (!ioRepository.writeTripJson(tripId, crs, generator, out)) {
+                    error("记录不存在：$tripId")
+                }
+            } ?: error("无法写入所选文件")
+            ioDoneMsg = "1"
+        }
+    }
+
     // 计划线路单文件导出（F-PLAN-43）：CreateDocument 输入 = 建议文件名
     var pendingRouteExport by rememberSaveable { mutableStateOf<String?>(null) } // "routeId"
     val routeExportDoc = rememberLauncherForActivityResult(
@@ -302,6 +322,10 @@ private fun Root(
             tripId = openTripId!!,
             onBack = { openTripId = null },
             onDeleted = { openTripId = null },
+            onExportTrip = { tripId, tripName ->
+                pendingTripExport = tripId
+                tripExportDoc.launch(FileNamer.tripFileName(tripName, System.currentTimeMillis()))
+            },
             modifier = modifier,
         )
     } else if (showPlanList) {

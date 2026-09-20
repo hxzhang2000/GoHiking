@@ -162,6 +162,21 @@
     <string name="plan_list_delete">Delete</string>
     <string name="plan_export_route">Export JSON</string>
 
+    <!-- 图表与分段表 hist_chart_*/hist_splits_*（M4-A，F-HIS-23~25） -->
+    <string name="hist_detail_section_charts">Charts</string>
+    <string name="hist_detail_section_splits">Splits</string>
+    <string name="hist_chart_altitude">Altitude profile</string>
+    <string name="hist_chart_pace">Pace per kilometer</string>
+    <string name="hist_chart_empty">No data</string>
+    <string name="hist_splits_col_km">Km</string>
+    <string name="hist_splits_col_segment">Seg</string>
+    <string name="hist_splits_col_distance">Distance</string>
+    <string name="hist_splits_col_time">Time</string>
+    <string name="hist_splits_col_pace">Pace</string>
+    <string name="hist_splits_col_gain">Gain</string>
+    <string name="hist_splits_km">Km %1$d</string>
+    <string name="hist_splits_gain_no">Gain %1$d</string>
+
     <!-- 计划 plan_*（P-03 选点与搜索，F-PLAN-01~09） -->
     <string name="error_generic">Something went wrong. Please try again.</string>
 

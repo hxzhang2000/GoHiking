@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gohiking.core.common.geo.PolylineSimplifier
 import com.gohiking.core.data.repository.TripRepository
+import com.gohiking.core.data.stats.GainSplit
+import com.gohiking.core.data.stats.KmSplit
 import com.gohiking.core.data.stats.Legs
 import com.gohiking.core.database.entity.MarkerEntity
 import com.gohiking.core.database.entity.TripEntity
@@ -28,6 +30,11 @@ data class TripDetailUiState(
     val segments: List<List<LatLngValue>> = emptyList(),
     val markers: List<MarkerEntity> = emptyList(),
     val legs: Legs? = null,
+    /** F-HIS-23 海拔曲线（距离 m, 海拔 m），抽稀降采样后 ≤600 点 */
+    val altitudeSeries: List<Pair<Double, Double>> = emptyList(),
+    /** F-HIS-25 分段表 */
+    val kmSplits: List<KmSplit> = emptyList(),
+    val gainSplits: List<GainSplit> = emptyList(),
     val deleted: Boolean = false, // 删除完成后由壳层导航返回列表
 )
 
@@ -61,7 +68,25 @@ class TripDetailViewModel(
             }
             val markers = repo.markersOf(tripId)
             val legs = repo.legs(tripId)
-            _state.update { it.copy(segments = segs, markers = markers, legs = legs) }
+            val altitudeSeries = repo.chartSeries(tripId)
+                .mapNotNull { row ->
+                    val alt = row.altitude
+                    val dist = row.distanceM
+                    if (alt != null && dist != null) dist to alt else null
+                }
+                .downsample(MAX_CHART_POINTS)
+            val km = repo.kmSplits(tripId)
+            val gain = repo.gainSplits(tripId)
+            _state.update {
+                it.copy(
+                    segments = segs,
+                    markers = markers,
+                    legs = legs,
+                    altitudeSeries = altitudeSeries,
+                    kmSplits = km,
+                    gainSplits = gain,
+                )
+            }
         }
     }
 
@@ -87,5 +112,22 @@ class TripDetailViewModel(
 
     private companion object {
         const val RENDER_EPSILON_M = 12.0
+
+        /** 图表点数上限（DEV §3.2：抽稀/降采样交给渲染层，1 万点塞进 Compose 会卡） */
+        const val MAX_CHART_POINTS = 600
     }
+}
+
+/** 等距降采样：保留首尾点，中间隔 n 取 1（O(n)，曲线形状基本不变） */
+private fun List<Pair<Double, Double>>.downsample(maxPoints: Int): List<Pair<Double, Double>> {
+    if (size <= maxPoints) return this
+    val step = size.toDouble() / maxPoints
+    val out = ArrayList<Pair<Double, Double>>(maxPoints + 1)
+    var i = 0.0
+    while (i < size - 1) {
+        out.add(this[i.toInt()])
+        i += step
+    }
+    out.add(this[size - 1])
+    return out
 }

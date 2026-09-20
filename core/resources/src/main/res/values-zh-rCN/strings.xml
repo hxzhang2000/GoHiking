@@ -161,6 +161,21 @@
     <string name="plan_list_delete">删除</string>
     <string name="plan_export_route">导出 JSON</string>
 
+    <!-- 图表与分段表 hist_chart_*/hist_splits_*（M4-A，F-HIS-23~25） -->
+    <string name="hist_detail_section_charts">图表</string>
+    <string name="hist_detail_section_splits">分段</string>
+    <string name="hist_chart_altitude">海拔曲线</string>
+    <string name="hist_chart_pace">每公里配速</string>
+    <string name="hist_chart_empty">暂无数据</string>
+    <string name="hist_splits_col_km">公里</string>
+    <string name="hist_splits_col_segment">段</string>
+    <string name="hist_splits_col_distance">距离</string>
+    <string name="hist_splits_col_time">用时</string>
+    <string name="hist_splits_col_pace">配速</string>
+    <string name="hist_splits_col_gain">爬升</string>
+    <string name="hist_splits_km">第 %1$d 公里</string>
+    <string name="hist_splits_gain_no">第 %1$d 段</string>
+
     <!-- 计划 plan_*（P-03 选点与搜索，F-PLAN-01~09） -->
     <string name="error_generic">出了点问题，请重试。</string>
 

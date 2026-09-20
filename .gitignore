@@ -30,6 +30,8 @@ keystore.properties
 .idea/
 .DS_Store
 Thumbs.db
+# Kotlin 2.1+ 会话/构建产物（kotlin daemon 缓存）
+.kotlin/
 
 # ---------- 临时与工具产物 ----------
 # 2026-09-20 起：所有临时输出（构建日志/提取结果/状态快照）统一生成到 tmp-logs/，

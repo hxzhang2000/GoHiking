@@ -67,6 +67,10 @@ class TripRepository @Inject constructor(
     suspend fun pointsOf(tripId: String): List<TrackPointEntity> =
         withContext(Dispatchers.IO) { db.trackPointDao().allOf(tripId) }
 
+    /** 曲线图投影（F-HIS-23/24）：quality==0 三列，抽稀交给渲染层 */
+    suspend fun chartSeries(tripId: String): List<com.gohiking.core.database.entity.ChartPointRow> =
+        withContext(Dispatchers.IO) { db.trackPointDao().chartPoints(tripId) }
+
     suspend fun markersOf(tripId: String): List<MarkerEntity> =
         withContext(Dispatchers.IO) { db.markerDao().allOf(tripId) }
 

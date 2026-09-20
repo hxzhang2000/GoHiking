@@ -76,6 +76,7 @@ fun TripDetailScreen(
     tripId: String,
     onBack: () -> Unit,
     onDeleted: () -> Unit,
+    onExportTrip: ((tripId: String, tripName: String) -> Unit)? = null, // F-IO-01/F-HIS-30（M4 接线）
     modifier: Modifier = Modifier,
 ) {
     val viewModel: TripDetailViewModel = viewModel(
@@ -88,6 +89,7 @@ fun TripDetailScreen(
         viewModel = viewModel,
         onBack = onBack,
         onDeleted = onDeleted,
+        onExportTrip = onExportTrip,
         modifier = modifier,
     )
 }
@@ -97,6 +99,7 @@ private fun TripDetailContent(
     viewModel: TripDetailViewModel,
     onBack: () -> Unit,
     onDeleted: () -> Unit,
+    onExportTrip: ((tripId: String, tripName: String) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -175,6 +178,18 @@ private fun TripDetailContent(
             item { SectionTitle(stringResource(CoreR.string.hist_detail_section_overview)) }
             item { OverviewGrid(trip) }
 
+            // F-HIS-23/24 图表（M4-A：海拔曲线 + 每公里配速）
+            item { SectionTitle(stringResource(CoreR.string.hist_detail_section_charts)) }
+            item { AltitudeChartCard(state.altitudeSeries) }
+            item { PaceChartCard(state.kmSplits) }
+
+            // F-HIS-25 分段表
+            if (state.kmSplits.isNotEmpty() || state.gainSplits.isNotEmpty()) {
+                item { SectionTitle(stringResource(CoreR.string.hist_detail_section_splits)) }
+                if (state.kmSplits.isNotEmpty()) item { KmSplitsTable(state.kmSplits) }
+                if (state.gainSplits.isNotEmpty()) item { GainSplitsTable(state.gainSplits) }
+            }
+
             // F-HIS-26 上山 / 下山
             item { SectionTitle(stringResource(CoreR.string.hist_detail_section_legs)) }
             item {
@@ -242,8 +257,12 @@ private fun TripDetailContent(
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 4.dp),
                 ) {
-                    // F-IO 导出 / 分享属 M3 里程碑，M1 禁用占位（F-HIS-30 完整版届时补齐）
-                    OutlinedButton(enabled = false, onClick = {}, modifier = Modifier.weight(1f)) {
+                    // F-IO-01 单条导出（M4 接线）；分享属后续版本
+                    OutlinedButton(
+                        enabled = onExportTrip != null,
+                        onClick = { onExportTrip?.invoke(trip.id, trip.name) },
+                        modifier = Modifier.weight(1f),
+                    ) {
                         Text(stringResource(CoreR.string.hist_detail_action_export), maxLines = 1)
                     }
                     OutlinedButton(enabled = false, onClick = {}, modifier = Modifier.weight(1f)) {
