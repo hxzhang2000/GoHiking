@@ -9,6 +9,12 @@ import com.gohiking.core.database.entity.MarkerEntity
 import com.gohiking.core.database.entity.RecordingStateEntity
 import com.gohiking.core.database.entity.TrackPointEntity
 import com.gohiking.core.database.entity.TripEntity
+import com.gohiking.core.data.alert.AlertEngine
+import com.gohiking.core.data.alert.AlertSample
+import com.gohiking.core.data.alert.AlertSettings
+import com.gohiking.core.data.alert.AlertSettingsProvider
+import com.gohiking.core.data.alert.AlertVoice
+import com.gohiking.core.data.alert.MarkerDraft
 import com.gohiking.core.data.stats.CalorieCalculator
 import com.gohiking.core.location.LocationProvider
 import com.gohiking.core.location.altitude.AltitudeFuser
@@ -55,6 +61,7 @@ class RecordingSession @Inject constructor(
     private val db: GhDatabase,
     @ApplicationContext private val context: Context,
     @ApplicationScope private val scope: CoroutineScope,
+    private val alertSettingsProvider: AlertSettingsProvider,
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.Idle)
     val state: StateFlow<SessionState> = _state.asStateFlow()
@@ -64,6 +71,30 @@ class RecordingSession @Inject constructor(
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
     val samples: SharedFlow<TrackSample> = _samples.asSharedFlow()
+
+    private val _speakEvents = MutableSharedFlow<AlertVoice>(
+        extraBufferCapacity = 16,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+
+    /** 提醒播报事件（M3-B TTS 消费；已按 voiceEnabled 裁剪，F-ALERT-06） */
+    val speakEvents: SharedFlow<AlertVoice> = _speakEvents.asSharedFlow()
+
+    // 提醒引擎（DEV §4.9）：海拔打点累加器与统计累加器独立（冻结决策 5）
+    private var alertEngine = AlertEngine(alertSettingsProvider.settings.value)
+
+    init {
+        // F-ALERT-03：设置即时生效（含记录过程中变更）
+        scope.launch {
+            alertSettingsProvider.settings.collect { s ->
+                alertEngine.onSettingsChanged(s)
+                val active = _state.value as? SessionState.Active
+                if (active != null && active.alertsEnabled != s.masterEnabled) {
+                    _state.value = active.copy(alertsEnabled = s.masterEnabled)
+                }
+            }
+        }
+    }
 
     // —— 逐场可变状态（start() 时重建，绝不跨场继承）——
     private var tripId: String? = null
@@ -80,7 +111,6 @@ class RecordingSession @Inject constructor(
 
     private var sampler = TrackSampler()
     private var statAccumulator = ThresholdAccumulator(10.0) // 无气压计阈值 10m；有气压计 3m（§4.3.1）
-    private var markAccumulator = ThresholdAccumulator(100.0) // 打点累加器：独立实例（冻结决策 5），默认 100m
     private var hasBarometer = false
     private var altitudeFuser: AltitudeFuser? = null
     private var stepSource: StepSource? = null
@@ -140,7 +170,6 @@ class RecordingSession @Inject constructor(
         lastStatePersistAtMs = lastFlushAtMs
         sampler = TrackSampler()
         statAccumulator = ThresholdAccumulator(if (hasBarometer) 3.0 else 10.0)
-        markAccumulator = ThresholdAccumulator(100.0)
         altitudeFuser = AltitudeFuser(hasBarometer, nowMs = System::currentTimeMillis)
         currentSteps = -1
         stepSource = StepSourceFactory.create(context, hasPermission = true).also { src ->
@@ -151,7 +180,28 @@ class RecordingSession @Inject constructor(
         }
         if (hasBarometer) registerPressureListener()
 
+        alertEngine = AlertEngine(alertSettingsProvider.settings.value)
         startLocationCollection()
+        // ⚠ 修复：start() 此前从未把状态从 Idle 切到 Active（UI 无法进入记录页，真机 P0；
+        // M1/M2 仅编译/单测验证未真机回归，故未暴露）
+        _state.value = SessionState.Active(
+            tripId = requireNotNull(tripId),
+            name = name,
+            plannedRouteId = plannedRouteId,
+            startedAtMs = startedAtMs,
+            currentSegment = 0,
+            status = "RECORDING",
+            distanceM = 0.0,
+            ascentM = 0.0,
+            descentM = 0.0,
+            maxAltitudeM = null,
+            minAltitudeM = null,
+            accumulatedPausedMs = 0,
+            pausedAtMs = null,
+            pointCount = 0,
+            alertsEnabled = alertSettingsProvider.settings.value.masterEnabled,
+            markers = emptyList(),
+        )
         Timber.i("记录开始 id=%s hasBarometer=%s", tripId, hasBarometer)
     }
 
@@ -325,6 +375,7 @@ class RecordingSession @Inject constructor(
     suspend fun restoreFromSnapshot(): Boolean {
         if (_state.value !is SessionState.Idle) return false
         val snap = db.recordingStateDao().get() ?: return false
+        alertEngine = AlertEngine(alertSettingsProvider.settings.value)
         tripId = snap.tripId
         name = ""
         plannedRouteId = null
@@ -350,7 +401,12 @@ class RecordingSession @Inject constructor(
         sampler.reset() // 恢复点与中断点不连线 → 位移基准重建
         statAccumulator = ThresholdAccumulator(if (snap.hasBarometer) 3.0 else 10.0)
         statAccumulator.restore(snap.statAnchorM, snap.ascentAccumM, snap.descentAccumM)
-        markAccumulator = ThresholdAccumulator(100.0)
+        alertEngine.restore(
+            lastDistanceM = snap.lastDistanceMarkM,
+            lastAscentM = snap.lastAscentMarkM,
+            lastDescentM = snap.lastDescentMarkM,
+            elevationAnchor = snap.markAnchorM,
+        )
         altitudeFuser = AltitudeFuser(snap.hasBarometer, nowMs = System::currentTimeMillis)
             .also { it.restoreRef(snap.altitudeRefM, snap.pressureRefHpa) }
         currentSteps = -1
@@ -374,6 +430,8 @@ class RecordingSession @Inject constructor(
             accumulatedPausedMs = snap.accumulatedPausedMs,
             pausedAtMs = null,
             pointCount = 0,
+            alertsEnabled = alertSettingsProvider.settings.value.masterEnabled,
+            markers = emptyList(),
         )
         Timber.w("崩溃恢复 tripId=%s segment=%d", snap.tripId, snap.currentSegment + 1)
         return true
@@ -451,9 +509,25 @@ class RecordingSession @Inject constructor(
         val altitude = if (sample.quality == 0) altitudeFuser?.current() else null
         if (altitude != null) {
             statAccumulator.accept(altitude)
-            markAccumulator.accept(altitude) // 打点累加器：独立实例（冻结决策 5）
             if (maxAltitudeM == null || altitude > maxAltitudeM!!) maxAltitudeM = altitude
             if (minAltitudeM == null || altitude < minAltitudeM!!) minAltitudeM = altitude
+        }
+        // 提醒引擎（DEV §4.9）：仅有效点参与；打点 + 播报（voiceEnabled 裁剪，F-ALERT-06）
+        if (sample.quality == 0) {
+            alertEngine.onSample(
+                AlertSample(
+                    distanceM = distanceM,
+                    altitudeM = altitude,
+                    latitude = fix.lat,
+                    longitude = fix.lng,
+                    timestampMs = fix.timestampMs,
+                ),
+            ).forEach { event ->
+                addAlertMarker(event.marker)
+                if (alertSettingsProvider.settings.value.voiceEnabled) {
+                    _speakEvents.tryEmit(event.voice)
+                }
+            }
         }
         buffer += TrackPointEntity(
             tripId = id,
@@ -514,6 +588,32 @@ class RecordingSession @Inject constructor(
             sequence = seq,
             extraJson = extraJson,
         )
+        publishMarkers()
+    }
+
+    /** 提醒标记（F-ALERT-25/27）：内容来自 AlertEngine.MarkerDraft，序号由引擎按类型维护 */
+    private fun addAlertMarker(d: MarkerDraft) {
+        val s = _state.value as? SessionState.Active ?: return
+        markers += MarkerEntity(
+            id = UUID.randomUUID().toString(),
+            tripId = s.tripId,
+            type = d.type,
+            timestamp = System.currentTimeMillis(),
+            latitude = d.latitude,
+            longitude = d.longitude,
+            altitude = d.altitude,
+            label = null,
+            note = null,
+            sequence = d.sequence,
+            extraJson = d.extraJson,
+        )
+        publishMarkers()
+    }
+
+    /** 标记快照推送到 state（记录页地图实时渲染，F-ALERT-25/30） */
+    private fun publishMarkers() {
+        val s = _state.value as? SessionState.Active ?: return
+        _state.value = s.copy(markers = markers.toList())
     }
 
     private suspend fun flushBuffer(force: Boolean) {
@@ -532,6 +632,7 @@ class RecordingSession @Inject constructor(
 
     private suspend fun persistSessionState() {
         val s = _state.value as? SessionState.Active ?: return
+        val alertBaselines = alertEngine.markBaselines()
         lastStatePersistAtMs = System.currentTimeMillis()
         try {
             db.recordingStateDao().save(
@@ -545,16 +646,16 @@ class RecordingSession @Inject constructor(
                     distanceM = s.distanceM,
                     ascentAccumM = s.ascentM,
                     descentAccumM = s.descentM,
-                    lastDistanceMarkM = 0.0, // 提醒引擎（§4.9）接入后维护
-                    lastAscentMarkM = 0.0,
-                    lastDescentMarkM = 0.0,
+                    lastDistanceMarkM = alertBaselines.first,
+                    lastAscentMarkM = alertBaselines.second,
+                    lastDescentMarkM = alertBaselines.third,
                     stepAtStart = -1, // 级①基准由 SensorCounterStepSource 内部维护，会话级恢复用不到
                     stepSourceUsed = stepSource?.wire ?: StepWire.UNAVAILABLE,
                     hasBarometer = hasBarometer,
                     altitudeRefM = altitudeFuser?.refSnapshot()?.first,
                     pressureRefHpa = altitudeFuser?.refSnapshot()?.second,
                     statAnchorM = statAccumulator.currentAnchor(),
-                    markAnchorM = markAccumulator.currentAnchor(), // 打点累加器锚点（提醒引擎接入后生效）
+                    markAnchorM = alertEngine.currentElevationAnchor(),
                     movingSecBySegmentJson = movingSecBySegment.entries
                         .joinToString(",", prefix = "{", postfix = "}") { (k, v) -> "\"$k\":$v" },
                     updatedAt = lastStatePersistAtMs,

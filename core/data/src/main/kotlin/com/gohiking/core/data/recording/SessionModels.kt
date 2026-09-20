@@ -28,6 +28,8 @@ sealed interface SessionState {
         val currentAltitudeM: Double? = null, // AltitudeFuser 滤波输出；null → UI「—」
         val stepCount: Int = -1, // 计步；-1 = 不可用（四级降级）
         val stepWire: String = "UNAVAILABLE", // SENSOR_COUNTER / SENSOR_DETECTOR / ACCEL_ALGORITHM / UNAVAILABLE / MANUAL
+        val alertsEnabled: Boolean = true, // F-ALERT-04：记录页提醒开关指示
+        val markers: List<MarkerEntity> = emptyList(), // 记录中标记快照（F-ALERT-25/30 实时渲染）
     ) : SessionState {
         val isRecording: Boolean get() = status == "RECORDING"
         val movingDurationSec: Long

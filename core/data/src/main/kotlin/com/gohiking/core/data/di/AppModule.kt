@@ -1,6 +1,8 @@
 package com.gohiking.core.data.di
 
 import com.gohiking.core.common.coroutine.ApplicationScope
+import com.gohiking.core.data.alert.AlertSettingsProvider
+import com.gohiking.core.data.alert.DefaultAlertSettingsProvider
 import com.gohiking.core.location.LocationProvider
 import com.gohiking.core.location.source.AmapLocationSource
 import com.gohiking.core.location.source.FusedLocationSource
@@ -50,4 +52,13 @@ abstract class LocationBindModule {
     @Binds
     @Singleton
     abstract fun bindLocationProvider(impl: SwitchingLocationProvider): LocationProvider
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class AlertBindModule {
+
+    @Binds
+    @Singleton
+    abstract fun bindAlertSettingsProvider(impl: DefaultAlertSettingsProvider): AlertSettingsProvider
 }
