@@ -88,6 +88,9 @@ android {
         abortOnError = true
         // 版本基线由 DEV §7.1.1 锁定（AGP 8.7.3 + Kotlin 2.1.0 + Room 2.6.1，全部核实过），升级由人工裁定而非 lint 驱动
         disable += "GradleDependency"
+        // 同上：CI 的 lint 数据库知道更新的 AGP（9.4.1）而本地不知道，报 AndroidGradlePluginVersion；
+        // AGP 版本由 DEV §7.1.1 锁定，升级人工裁定
+        disable += "AndroidGradlePluginVersion"
         // PRD 9.4：记录页锁定竖屏是有意为之
         disable += "LockedOrientationActivity"
         disable += "DiscouragedApi"
