@@ -1,0 +1,132 @@
+package com.gohiking.feature.history
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.gohiking.core.common.format.Formatters
+import com.gohiking.core.data.repository.TripRepository
+import com.gohiking.core.database.entity.TripEntity
+import com.gohiking.core.database.entity.TripSummaryRow
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+/**
+ * P-10 记录列表（DEV §5.2）。M1 最小切片：
+ * - 列表 / 汇总 / 按月分组 / 名称搜索 / 删除（级联）；
+ * - BatchDelete / BatchExport / Filter 依赖 M3 导出与多选 UI，届时补；
+ * - 轨迹缩略图几何（thumbPoints）属 M4 渲染优化，字段占位。
+ */
+data class TripRowUi(
+    val id: String,
+    val name: String,
+    val dateText: String, // yyyy-MM-dd HH:mm（数字中立格式，M4 i18n 校对）
+    val monthKey: String, // yyyy-MM，groupByMonth 时的分组键
+    val distanceText: String,
+    val durationText: String,
+    val ascentText: String,
+    val paceText: String?, // null → 「—」（F-HIS-34）
+    val thumbPoints: List<Double> = emptyList(), // 占位：缩放后轨迹缩略图折线（lat,lng 交替），M4 实现
+)
+
+data class ListSummaryUi(
+    val count: Int,
+    val totalDistanceText: String,
+    val totalDurationText: String,
+    val totalAscentText: String,
+)
+
+data class HistoryUiState(
+    val trips: List<TripRowUi> = emptyList(),
+    val summary: ListSummaryUi = ListSummaryUi(0, "0 m", "0:00:00", "0 m"),
+    val groupByMonth: Boolean = true,
+    val query: String = "",
+    val empty: Boolean = true,
+    val swipedId: String? = null, // M3 多选/滑动删除时启用
+)
+
+sealed interface HistoryListEvent {
+    /** 打开详情（P-11 属 M4；M1 阶段无消费方，保留事件占位） */
+    data class Open(val id: String) : HistoryListEvent
+
+    data class Delete(val id: String) : HistoryListEvent
+    data class Search(val q: String) : HistoryListEvent
+    data object ToggleGroupByMonth : HistoryListEvent
+}
+
+class HistoryListViewModel(private val repo: TripRepository) : ViewModel() {
+
+    private val rawRows = MutableStateFlow<List<TripRowUi>>(emptyList())
+    private val query = MutableStateFlow("")
+    private val _state = MutableStateFlow(HistoryUiState())
+    val state: StateFlow<HistoryUiState> = _state.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            repo.observeFinished().collect { list ->
+                rawRows.value = list.map { it.toRowUi() }
+                recompute()
+            }
+        }
+        viewModelScope.launch {
+            repo.observeSummary().collect { row ->
+                _state.update { it.copy(summary = row.toUi()) }
+            }
+        }
+        viewModelScope.launch {
+            query.collect { q ->
+                _state.update { it.copy(query = q) }
+                recompute()
+            }
+        }
+    }
+
+    fun onEvent(event: HistoryListEvent) {
+        when (event) {
+            is HistoryListEvent.Open -> Unit // P-11 详情页 M4 接入
+            is HistoryListEvent.Delete -> viewModelScope.launch { repo.delete(event.id) }
+            is HistoryListEvent.Search -> query.value = event.q
+            HistoryListEvent.ToggleGroupByMonth ->
+                _state.update { it.copy(groupByMonth = !it.groupByMonth) }
+        }
+    }
+
+    /** 名称包含（不区分大小写）；分组与否不影响 trips 顺序（startTime DESC，UI 渲染时分组） */
+    private fun recompute() {
+        val q = query.value.trim()
+        val rows = if (q.isEmpty()) {
+            rawRows.value
+        } else {
+            rawRows.value.filter { it.name.contains(q, ignoreCase = true) }
+        }
+        _state.update { it.copy(trips = rows, empty = rows.isEmpty()) }
+    }
+
+    private fun TripEntity.toRowUi(): TripRowUi = TripRowUi(
+        id = id,
+        name = name,
+        dateText = DATE_FORMAT.get().format(Date(startTime)),
+        monthKey = MONTH_FORMAT.get().format(Date(startTime)),
+        distanceText = Formatters.distanceText(distanceM),
+        durationText = Formatters.durationText(durationSec),
+        ascentText = Formatters.metersText(totalAscentM),
+        paceText = Formatters.paceText(avgPaceSecPerKm),
+    )
+
+    private fun TripSummaryRow.toUi(): ListSummaryUi = ListSummaryUi(
+        count = c,
+        totalDistanceText = Formatters.distanceText(d),
+        totalDurationText = Formatters.durationText(t),
+        totalAscentText = Formatters.metersText(a),
+    )
+
+    private companion object {
+        // ThreadLocal 防御：SimpleDateFormat 非线程安全；VM 只在主线程格式化，这里保守处理
+        val DATE_FORMAT = ThreadLocal.withInitial { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ROOT) }
+        val MONTH_FORMAT = ThreadLocal.withInitial { SimpleDateFormat("yyyy-MM", Locale.ROOT) }
+    }
+}

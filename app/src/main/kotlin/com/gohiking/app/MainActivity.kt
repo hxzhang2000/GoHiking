@@ -25,6 +25,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,8 +50,10 @@ import com.amap.api.maps.model.LatLng
 import com.gohiking.core.data.recording.RecordingService
 import com.gohiking.core.data.recording.RecordingSession
 import com.gohiking.core.data.recording.SessionState
+import com.gohiking.core.data.repository.TripRepository
 import com.gohiking.core.designsystem.theme.GhTheme
 import com.gohiking.core.resources.R as CoreR
+import com.gohiking.feature.history.HistoryListScreen
 import com.gohiking.feature.recording.RecordingScreen
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -64,22 +67,24 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
 
     @Inject lateinit var session: RecordingSession
+    @Inject lateinit var tripRepository: TripRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             GhTheme {
-                Root(session = session)
+                Root(session = session, tripRepository = tripRepository)
             }
         }
     }
 }
 
 @Composable
-private fun Root(session: RecordingSession, modifier: Modifier = Modifier) {
+private fun Root(session: RecordingSession, tripRepository: TripRepository, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var agreed by rememberSaveable { mutableStateOf(false) }
+    var showHistory by rememberSaveable { mutableStateOf(false) }
     val sessionState by session.state.collectAsStateWithLifecycle()
 
     if (!agreed) {
@@ -92,8 +97,14 @@ private fun Root(session: RecordingSession, modifier: Modifier = Modifier) {
 
     if (sessionState !is SessionState.Idle) {
         RecordingScreen(session = session, modifier = modifier)
+    } else if (showHistory) {
+        HistoryListScreen(
+            tripRepository = tripRepository,
+            onBack = { showHistory = false },
+            modifier = modifier,
+        )
     } else {
-        MapVerifyScreen(modifier = modifier, session = session)
+        MapVerifyScreen(modifier = modifier, session = session, onOpenHistory = { showHistory = true })
     }
 }
 
@@ -113,15 +124,15 @@ private fun PrivacyGate(onAgree: () -> Unit, onDecline: () -> Unit) {
 }
 
 @Composable
-private fun MapVerifyScreen(session: RecordingSession, modifier: Modifier = Modifier) {
+private fun MapVerifyScreen(session: RecordingSession, modifier: Modifier = Modifier, onOpenHistory: () -> Unit = {}) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
     // 事件日志（新事件插到最前），最多保留 6 条
     val events = remember { mutableStateListOf<String>() }
     var isChinese by rememberSaveable { mutableStateOf(true) }
-    var lastPoiAtMs by remember { mutableStateOf(0L) }
-    var lastMapClickAtMs by remember { mutableStateOf(0L) }
+    var lastPoiAtMs by remember { mutableLongStateOf(0L) }
+    var lastMapClickAtMs by remember { mutableLongStateOf(0L) }
     var locationGranted by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
@@ -260,6 +271,12 @@ private fun MapVerifyScreen(session: RecordingSession, modifier: Modifier = Modi
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             ) {
                 Text(stringResource(CoreR.string.map_test_switch_language))
+            }
+            Button(
+                onClick = onOpenHistory,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            ) {
+                Text(stringResource(CoreR.string.common_tab_history))
             }
         }
     }

@@ -39,11 +39,14 @@ __pycache__/
 *.pyc
 # 本机构建调试日志（gradlew 后台跑的 Out-File 输出）
 build_*.log
+build_*.exit
 build_*_result.txt
 build_*_fail.txt
+extract_*.txt
 diag.txt
 procs.txt
 stop.log
+stack.log
 git_status.txt
 
 # ---------- AI 助手工作区 ----------

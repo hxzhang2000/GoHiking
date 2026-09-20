@@ -55,6 +55,13 @@
     <string name="rec_notif_paused">已暂停</string>
     <string name="rec_notif_distance">距离 %1$.2f km</string>
 
+    <!-- 记录列表（P-10，M1 切片） -->
+    <string name="history_search_hint">搜索行程名称</string>
+    <string name="history_empty">还没有已完成的行程</string>
+    <string name="history_summary_format">%1$s · %2$s · ↑%3$s · %4$d 条</string>
+    <string name="history_group_by_month">按月分组</string>
+    <string name="history_delete_confirm">删除「%1$s」及其全部轨迹数据？此操作不可撤销。</string>
+
     <!-- 通用占位 -->
     <string name="common_stat_unknown">--</string>
 

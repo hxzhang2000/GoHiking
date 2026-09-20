@@ -30,12 +30,16 @@ dependencies {
     implementation(project(":core:designsystem"))
     implementation(project(":core:model"))
     implementation(project(":core:resources"))
+    implementation(project(":core:data")) // TripRepository（P-10 最小切片）
+    implementation(project(":core:database")) // TripEntity / TripSummaryRow（VM 内映射 UI 模型）
+    implementation(project(":core:common")) // Formatters
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
