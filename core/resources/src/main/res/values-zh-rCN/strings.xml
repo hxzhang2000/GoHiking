@@ -257,4 +257,19 @@
     <string name="io_report_title">导入结果报告</string>
     <string name="io_report_summary">成功 %1$d、跳过 %2$d、失败 %3$d。</string>
     <string name="io_report_ok">已导入</string>
+
+    <!-- 照片地图 P-12（M4-B2，F-MEDIA-10~34） -->
+    <string name="photo_map_title">照片地图</string>
+    <string name="photo_map_need_permission">需要照片访问权限</string>
+    <string name="photo_map_need_permission_hint">仅在地图上显示带位置信息的照片与视频，不会上传；扫描在本机完成。</string>
+    <string name="photo_map_grant">去授权</string>
+    <string name="photo_map_scanning">扫描中 %1$d / %2$d</string>
+    <string name="photo_map_empty">未找到带位置信息的照片或视频。</string>
+    <string name="photo_map_approximate">%1$d 张照片使用模糊位置（约 1 km）。授权精确位置后可提升精度。</string>
+    <string name="photo_map_single">照片</string>
+    <string name="photo_map_cluster">%1$d 张照片</string>
+    <string name="photo_map_locating">定位中…</string>
+    <string name="photo_map_viewer_index">%1$d / %2$d</string>
+    <string name="photo_map_play_video">播放视频</string>
+    <string name="common_action_back">返回</string>
 </resources>

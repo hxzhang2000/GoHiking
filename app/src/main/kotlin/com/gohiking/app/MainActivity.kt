@@ -165,6 +165,7 @@ private fun Root(
     var showPlan by rememberSaveable { mutableStateOf(false) }
     var showPlanList by rememberSaveable { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    var showPhotoMap by rememberSaveable { mutableStateOf(false) } // P-12 照片地图（M4-B2）
     val sessionState by session.state.collectAsStateWithLifecycle()
     val searchClient = remember { AmapSearchClient(context) }
     val routeClient = remember { RouteSearchClient(context) }
@@ -353,6 +354,12 @@ private fun Root(
             onBack = { showPlan = false },
             modifier = modifier,
         )
+    } else if (showPhotoMap) {
+        com.gohiking.feature.media.PhotoMapScreen(
+            mediaRepository = mediaRepository,
+            onBack = { showPhotoMap = false },
+            modifier = modifier,
+        )
     } else if (showSettings) {
         SettingsScreen(
             settingsRepository = settingsRepository,
@@ -389,6 +396,7 @@ private fun Root(
             onOpenPlan = { showPlan = true },
             onOpenPlanList = { showPlanList = true },
             onOpenSettings = { showSettings = true },
+            onOpenPhotoMap = { showPhotoMap = true },
         )
     }
 
@@ -484,6 +492,7 @@ private fun MapVerifyScreen(
     onOpenPlan: () -> Unit = {},
     onOpenPlanList: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    onOpenPhotoMap: () -> Unit = {}, // P-12 照片地图（M4-B2）
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -645,6 +654,12 @@ private fun MapVerifyScreen(
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             ) {
                 Text(stringResource(CoreR.string.plan_list_title))
+            }
+            Button(
+                onClick = onOpenPhotoMap, // P-12 照片地图（M4-B2）
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            ) {
+                Text(stringResource(CoreR.string.photo_map_title))
             }
             Button(
                 onClick = onOpenSettings, // P-14 设置页（M3-C）

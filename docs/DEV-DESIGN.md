@@ -2091,7 +2091,8 @@ build/
 | `F-I18N` 国际化 | `:core:resources`、全模块 | M0 建结构 / M4 校对 | PRD 9.7、§7.4、§7.5 |
 | 权限清单（PRD 10） | `:feature:home`（P-01）、各模块按需 | M0 / 各里程碑 | §1.5、§6.1–§6.3 |
 
-> **P2 暂缓登记（DoD-1 的边界）**：五条 P2 需求——`F-HIS-29`、`F-ALERT-31`、`F-ALERT-41`、`F-MEDIA-42`、`F-IO-32`——在本文档暂无实现落点，属**有意暂缓**（v1.0 不做），不是遗漏；M4 收尾时统一复核。DoD-1 的「逐条可追」对这五条以本登记为准。
+> **P2 暂缓登记（DoD-1 的边界）**：原五条——`F-HIS-29`、`F-ALERT-31`、`F-ALERT-41`、`F-MEDIA-42`、`F-IO-32`——在本文档暂无实现落点，属**有意暂缓**（v1.0 不做），不是遗漏；M4 收尾时统一复核。DoD-1 的「逐条可追」对这些条以本登记为准。
+> **M4-B2 追加（2026-09-20，照片地图落地时）**：`F-MEDIA-24`（BottomSheet 半屏/全屏拖动）、`F-MEDIA-35`（查看器「在地图上查看」）、`F-MEDIA-36`（分享/删除）三条 P2 同样暂缓；实现简化两项见 §9.3 D-26。
 
 ### 9.2 ⚠ TODO(M0) 实测与查证清单（**动工前必须清空**）
 
@@ -2182,6 +2183,7 @@ build/
 | D-21 | **CI/CD（GitHub Actions）**：push `v*` tag → 自动构建 release APK（`GoHiking-release-vX-Y-Z.apk`，版本号取自 gradle.properties）并创建 GitHub Release，Release 说明用 awk 从 CHANGELOG 提取 `## [vTAG]` 到下一个小节；签名双模式（Secrets 配 `SIGNING_KEYSTORE_BASE64` 等用正式 keystore，未配置则生成一次性 CI keystore 兜底）；另有 test（testDebugUnitTest）与 lint（lintDebug，阻塞）两个 job；CI 中 wrapper `distributionUrl` 被 sed 覆盖为网络地址（本地是 `file:///` 引用） | 用户要求参照 NASMusicTV 项目复制 tag→Release 流水线 | 实现补充（2026-09-20，版本管理体系落地后） |
 | D-24 | **`media_index` 增全键行 `MediaIndexKeyRow` 与 `indexKeys()` 查询**：增量比对（F-MEDIA-09）与删除同步必须按复合主键 `(mediaStoreId, mediaType)` 完整键进行——既有 `indexFingerprint()` 只有 id+dateModifiedMs，image/video 同 id 重号时无法区分、会把 VIDEO 误当 IMAGE 删除 | F-MEDIA-09 落地时发现（M4-B1，2026-09-20）；配套 `deleteIndex(id, type)` 按键删除 | 实现补充（2026-09-20，M4-B1 媒体扫描落地时） |
 | D-25 | **MediaStore LATITUDE/LONGITUDE 常量在 compileSdk 29+ 已移除**：位置查询改用列名字符串投影 `arrayOf("latitude", "longitude")`（旧设备的媒体库中列仍存在，Q+ 常为 null 再走 EXIF） | 编译实测（M4-B1）；`MediaStore.MediaColumns.LATITUDE` 在 platform-35 android.jar 不存在，API 29 起随模糊化一起移除 | 实现补充（2026-09-20，M4-B1 媒体扫描落地时） |
+| D-26 | **照片地图 P-12 v1.0 简化项**：① 全屏查看器做双指缩放 + 双击放大（`transformable` + `detectTapGestures`），**拖动平移暂缓**（与 HorizontalPager 单指手势冲突，v1.1）；② 视频（F-MEDIA-33）走系统播放器 Intent，内置播放器 v1.1；③ marker 簇下标存 `Marker.title`（不展示）用于点击回查；单点簇异步 Coil 解码圆形缩略图，失败回退数量气泡 | F-MEDIA-31 的「拖动平移」与 F-MEDIA-33 的「内置播放器」属实现深度问题，非需求变更；用户可感知行为仅少「平移」一项，已在暂缓登记 | 实现补充（2026-09-20，M4-B2 照片地图落地时） |
 
 **登记规则**：任何实现层新增项都要在此登记。若某项实质上改变了用户可感知的行为，**必须先回改 PRD**，不能只登记在这里。
 

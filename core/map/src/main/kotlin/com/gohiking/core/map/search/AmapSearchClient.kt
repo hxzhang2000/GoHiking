@@ -4,6 +4,9 @@ import android.content.Context
 import com.amap.api.maps.model.LatLng
 import com.amap.api.services.core.LatLonPoint
 import com.amap.api.services.core.PoiItem
+import com.amap.api.services.geocoder.GeocodeSearch
+import com.amap.api.services.geocoder.RegeocodeQuery
+import com.amap.api.services.geocoder.RegeocodeResult
 import com.amap.api.services.help.Inputtips
 import com.amap.api.services.help.InputtipsQuery
 import com.amap.api.services.help.Tip
@@ -102,6 +105,43 @@ class AmapSearchClient(private val context: Context) {
         }
     } catch (e: Exception) {
         SearchOutcome.Failed(e.message)
+    }
+
+    /**
+     * 逆地理编码（F-MEDIA-23 照片位置描述）。坐标必须已是 GCJ-02（与高德同系，不做转换）。
+     * 返回「省市区 + 名称/道路」拼接；无网或失败返回 null（调用方显示「—」，不阻塞 UI）。
+     */
+    suspend fun regeocode(latitude: Double, longitude: Double): String? = try {
+        withTimeout(SEARCH_TIMEOUT_MS) {
+            suspendCancellableCoroutine { cont ->
+                try {
+                    val geocodeSearch = GeocodeSearch(context)
+                    geocodeSearch.setOnGeocodeSearchListener(object : GeocodeSearch.OnGeocodeSearchListener {
+                        override fun onRegeocodeSearched(result: RegeocodeResult?, rCode: Int) {
+                            if (!cont.isActive) return
+                            val addr = result?.regeocodeAddress
+                            val desc = listOfNotNull(addr?.province, addr?.city, addr?.district)
+                                .distinct()
+                                .joinToString("")
+                                .ifEmpty { addr?.formatAddress }
+                            cont.resume(desc?.takeIf { it.isNotBlank() })
+                        }
+
+                        override fun onGeocodeSearched(result: com.amap.api.services.geocoder.GeocodeResult?, rCode: Int) = Unit
+                    })
+                    val query = RegeocodeQuery(
+                        LatLonPoint(latitude, longitude),
+                        200f,
+                        GeocodeSearch.AMAP,
+                    )
+                    geocodeSearch.getFromLocationAsyn(query)
+                } catch (e: Exception) {
+                    if (cont.isActive) cont.resume(null)
+                }
+            }
+        }
+    } catch (e: Exception) {
+        null // F-MEDIA-23：离线显示「—」，不抛错
     }
 
     private inline fun <T> outcome(

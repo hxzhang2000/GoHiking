@@ -69,6 +69,9 @@ class MediaRepository @Inject constructor(
         hits.map { candidates[it] }.sortedBy { it.dateTakenMs ?: it.dateModifiedMs }
     }
 
+    /** 全部有 GCJ-02 坐标的媒体（照片地图 P-12 数据源；mediaDao.allLocated） */
+    suspend fun located(): List<MediaIndexEntity> = withContext(Dispatchers.IO) { mediaDao.allLocated() }
+
     /** 已建立引用的媒体（media_ref，导入/手动关联用） */
     suspend fun refsOf(tripId: String) = withContext(Dispatchers.IO) { mediaDao.refsOf(tripId) }
 }
