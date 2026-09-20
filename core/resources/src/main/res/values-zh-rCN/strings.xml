@@ -35,7 +35,6 @@
     <!-- 记录（M1 切片） -->
     <string name="home_start_record">开始记录</string>
     <string name="rec_need_permission">需要定位权限才能记录轨迹。</string>
-    <string name="rec_name_default">新的记录</string>
     <string name="rec_status_recording">正在记录</string>
     <string name="rec_status_paused">已暂停</string>
     <string name="rec_stat_distance">距离</string>
@@ -66,6 +65,10 @@
     <string name="rec_action_marker">打点</string>
     <string name="rec_marker_dialog_title">添加标记</string>
     <string name="rec_marker_note_hint">备注（如：补水点、危险路段）</string>
+    <string name="rec_start_dialog_title">开始记录</string>
+    <string name="rec_start_name_hint">行程名称（可选）</string>
+    <string name="rec_stop_hint">长按停止（1.5 秒）</string>
+    <string name="rec_stop_holding">继续按住…</string>
 
     <!-- 行程详情（P-11 M1 切片：F-HIS-20~22/26/27/30） -->
     <string name="hist_detail_loading">加载中…</string>

@@ -36,7 +36,6 @@
     <!-- 记录（M1 切片） -->
     <string name="home_start_record">Start hike</string>
     <string name="rec_need_permission">Location permission is required to record a track.</string>
-    <string name="rec_name_default">New hike</string>
     <string name="rec_status_recording">Recording</string>
     <string name="rec_status_paused">Paused</string>
     <string name="rec_stat_distance">Distance</string>
@@ -67,6 +66,10 @@
     <string name="rec_action_marker">Marker</string>
     <string name="rec_marker_dialog_title">Drop a marker</string>
     <string name="rec_marker_note_hint">Note (e.g. water spot, hazard)</string>
+    <string name="rec_start_dialog_title">Start recording</string>
+    <string name="rec_start_name_hint">Trip name (optional)</string>
+    <string name="rec_stop_hint">Hold to stop (1.5 s)</string>
+    <string name="rec_stop_holding">Keep holding…</string>
 
     <!-- 行程详情（P-11 M1 切片：F-HIS-20~22/26/27/30） -->
     <string name="hist_detail_loading">Loading…</string>

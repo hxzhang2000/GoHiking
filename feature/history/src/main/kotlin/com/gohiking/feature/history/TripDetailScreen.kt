@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -336,6 +337,7 @@ private fun TripMap(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val trackWidthPx = with(LocalDensity.current) { 8.dp.toPx() } // PRD F-REC-03：线宽 8dp
 
     // 隐私合规：进入本页前 Root 层 PrivacyGate 已同意；此处调用幂等（DEV §1.5 红线）
     val mapView = remember {
@@ -374,8 +376,8 @@ private fun TripMap(
                 aMap.addPolyline(
                     PolylineOptions()
                         .addAll(latLngs)
-                        .width(10f)
-                        .color(TRACK_RED), // 红色轨迹（F-REC-05 / F-HIS-21）
+                        .width(trackWidthPx)
+                        .color(TRACK_RED), // 红色轨迹 #E24B4A（F-REC-03 / F-HIS-21）
                 )
             }
         }
@@ -554,7 +556,7 @@ private fun markerTypeColor(type: String) = when (type) {
     else -> androidx.compose.ui.graphics.Color(0xFF1E88E5)
 }
 
-private val TRACK_RED = 0xFFE53935.toInt()
+private val TRACK_RED = 0xFFE24B4A.toInt() // PRD F-REC-03 权威色值
 
 // ThreadLocal 防御：SimpleDateFormat 非线程安全
 private val DATE_FORMAT = ThreadLocal.withInitial { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ROOT) }

@@ -21,6 +21,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -98,7 +99,7 @@ private fun Root(session: RecordingSession, tripRepository: TripRepository, modi
     }
 
     if (sessionState !is SessionState.Idle) {
-        RecordingScreen(session = session, modifier = modifier)
+        RecordingScreen(session = session, tripRepository = tripRepository, modifier = modifier)
     } else if (openTripId != null) {
         TripDetailScreen(
             tripRepository = tripRepository,
@@ -144,6 +145,8 @@ private fun MapVerifyScreen(session: RecordingSession, modifier: Modifier = Modi
     var isChinese by rememberSaveable { mutableStateOf(true) }
     var lastPoiAtMs by remember { mutableLongStateOf(0L) }
     var lastMapClickAtMs by remember { mutableLongStateOf(0L) }
+    var showStartDialog by rememberSaveable { mutableStateOf(false) } // F-REC-02：开始前可选命名
+    var startName by rememberSaveable { mutableStateOf("") }
     var locationGranted by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
@@ -212,7 +215,8 @@ private fun MapVerifyScreen(session: RecordingSession, modifier: Modifier = Modi
         locationGranted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         if (locationGranted) {
-            session.start(context.getString(CoreR.string.rec_name_default), plannedRouteId = null)
+            session.start(startName.trim(), plannedRouteId = null) // 空名 → stop() 日期时间命名（F-REC-08）
+            startName = ""
             RecordingService.start(context)
         } else {
             showPermissionHint = true
@@ -260,14 +264,7 @@ private fun MapVerifyScreen(session: RecordingSession, modifier: Modifier = Modi
                 }
             }
             Button(
-                onClick = {
-                    val permissions = buildList {
-                        add(Manifest.permission.ACCESS_FINE_LOCATION)
-                        add(Manifest.permission.ACCESS_COARSE_LOCATION)
-                        if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
-                    }.toTypedArray()
-                    permissionLauncher.launch(permissions)
-                },
+                onClick = { showStartDialog = true }, // F-REC-02：先弹可选命名，不阻塞
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             ) {
                 Text(stringResource(CoreR.string.home_start_record))
@@ -290,6 +287,39 @@ private fun MapVerifyScreen(session: RecordingSession, modifier: Modifier = Modi
                 Text(stringResource(CoreR.string.common_tab_history))
             }
         }
+    }
+
+    // F-REC-02：开始前可选命名；关联计划线路属 F-PLAN，M2 接入
+    if (showStartDialog) {
+        AlertDialog(
+            onDismissRequest = { showStartDialog = false },
+            title = { Text(stringResource(CoreR.string.rec_start_dialog_title)) },
+            text = {
+                OutlinedTextField(
+                    value = startName,
+                    onValueChange = { startName = it },
+                    placeholder = { Text(stringResource(CoreR.string.rec_start_name_hint)) },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showStartDialog = false
+                    val permissions = buildList {
+                        add(Manifest.permission.ACCESS_FINE_LOCATION)
+                        add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                        if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+                    }.toTypedArray()
+                    permissionLauncher.launch(permissions)
+                }) { Text(stringResource(CoreR.string.common_action_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showStartDialog = false
+                    startName = ""
+                }) { Text(stringResource(CoreR.string.common_action_cancel)) }
+            },
+        )
     }
 
     if (showPermissionHint) {

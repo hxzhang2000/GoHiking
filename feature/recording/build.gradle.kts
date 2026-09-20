@@ -30,7 +30,11 @@ dependencies {
     implementation(project(":core:designsystem"))
     implementation(project(":core:model"))
     implementation(project(":core:resources"))
-    implementation(project(":core:data")) // RecordingSession（M1 切片：UI 直读会话状态）
+    implementation(project(":core:data")) // RecordingSession / TripRepository（M1 切片：UI 直读会话状态）
+    implementation(project(":core:common")) // Formatters（记录页统计展示）
+    implementation(project(":core:database")) // TrackPointEntity / TripEntity（地图轨迹与保存弹窗）
+
+    implementation(libs.amap.map3d) // 记录页实时轨迹地图（F-REC-03）
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
