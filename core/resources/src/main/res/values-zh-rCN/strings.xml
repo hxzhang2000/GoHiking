@@ -272,4 +272,6 @@
     <string name="photo_map_viewer_index">%1$d / %2$d</string>
     <string name="photo_map_play_video">播放视频</string>
     <string name="common_action_back">返回</string>
+    <string name="plan_manual_default">手动线路 %1$s</string>
+    <string name="plan_route_default">计划线路 %1$s</string>
 </resources>

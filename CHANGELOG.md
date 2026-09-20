@@ -18,20 +18,27 @@
 4. **versionCode**：每次对外分发的 APK 递增 +1；开发期本地构建不递增。
 5. 里程碑定义见 `docs/PRD.md` §10 路线图；文档修订另见各文档自身的版本记录。
 
-## [Unreleased]
+## [v0.4.0] - 2026-09-20
+
+> M3 提醒与数据交换 + M4 照片地图与打磨里程碑。打 `v0.4.0` tag 推送后，CI 自动提取本节生成 GitHub Release 说明。
 
 ### Added
-- 计划线路单文件导出（M3-E，F-PLAN-43）：计划列表页每条线路可导出为 gohiking.planned_route JSON（含两段折线与途经点，坐标系随导出设置）
-- 导出/导入引擎 + 设置页数据操作入口（M3-D，PRD 7.2~7.5）：批量导出全部记录 JSON（SAF 选目录）、全量 ZIP 备份（manifest + SHA-256 校验和 + settings.json）、GPX 1.1 恒 WGS-84 导出（F-IO-04/14/15）；导入 JSON/ZIP 多选，预览（数量/冲突/坐标系转换告知）、四种冲突策略、逐条事务、结果报告（F-IO-20~31/40~44）；ZIP Slip / Zip Bomb / 流式解压三道安全防线（F-IO-60~63）；settings.json 默认不导入（F-IO-36/37）
+- 计划线路方向箭头（M2 补录，F-PLAN-37）：候选/选定/返程/手动线沿线 chevron 箭头指示行进方向；记录页关联蓝线同步（D-23）
+- 记录中关联计划线路（M2 补录，F-PLAN-44）：蓝线与红线同屏对比，可更换/取消关联；关联后未命名记录采用计划名（F-REC-08）
 - 提醒触发引擎（M3-A，F-ALERT-01~26）：距离/海拔打点与上下山判定，三基线随 recording_state 持久化，进程被杀恢复后不重复触发（DEV §4.9）；同时修复 `RecordingSession.start()` 未置 Active 导致记录页永不进入的 P0 缺陷
 - TTS 语音播报（M3-B，F-ALERT-40~44）：跟随系统语言、音频焦点让行、未就绪静默；记录页提醒开关指示（F-ALERT-04）
 - 设置页 + DataStore 设置存储（M3-C，F-SET-01~06）：6 分组 27 键即时读写，阈值范围/步进校验（F-ALERT-12/22、F-SET-05）、无气压计海拔间隔下限 30m 提示（F-REC-63）、语言切换重启生效（F-I18N-11）、恢复默认（F-SET-03）
-- 计划线路方向箭头（F-PLAN-37）：候选/选定/返程/手动线沿线 chevron 箭头指示行进方向；记录页关联蓝线同步（D-23）
-- 记录中关联计划线路（F-PLAN-44）：蓝线与红线同屏对比，可更换/取消关联；关联后未命名记录采用计划名（F-REC-08）
+- 导出/导入引擎 + 设置页数据操作入口（M3-D，PRD 7.2~7.5）：批量导出全部记录 JSON（SAF 选目录）、全量 ZIP 备份（manifest + SHA-256 校验和 + settings.json）、GPX 1.1 恒 WGS-84 导出（F-IO-04/14/15）；导入 JSON/ZIP 多选，预览（数量/冲突/坐标系转换告知）、四种冲突策略、逐条事务、结果报告（F-IO-20~31/40~44）；ZIP Slip / Zip Bomb / 流式解压三道安全防线（F-IO-60~63）；settings.json 默认不导入（F-IO-36/37）
+- 计划线路单文件导出（M3-E，F-PLAN-43）：计划列表页每条线路可导出为 gohiking.planned_route JSON（含两段折线与途经点，坐标系随导出设置）
+- 详情页图表与分段表（M4-A，F-HIS-23~25）：海拔曲线（降采样 ≤600 点）+ 每公里配速柱状图 + 公里/爬升分段表（Vico 2.1.4——3.3.1 需 Kotlin 2.4，与构建基线冲突，修订 T-10）
+- 详情页照片条（M4-B1，F-HIS-28 / F-MEDIA-40~43）：媒体库全量扫描缓存（MediaStore + EXIF GPS，WGS-84→GCJ-02 入库一次转换，ACCESS_MEDIA_LOCATION 未授标记模糊；±30min + 500m 同系判距，增量比对 + 删除同步）
+- 照片地图页（M4-B2，P-12，F-MEDIA-10~15/20~23/25/30~34）：网格聚类聚合气泡（zoom 防抖 150ms 重建、四级直径、单点缩略图）、BottomSheet 缩略图条（拍摄时间 + 逆地理位置，离线「—」）、选择定位地图、全屏查看器（双指缩放/双击放大/翻页/序号时间）；媒体权限进页按需申请（F-MEDIA-04/05）；视频系统播放器
+- 详情页单条记录导出按钮（F-IO-01/F-HIS-30）
 - CI：GitHub Actions 打 `v*` tag 自动构建 release APK 并创建 GitHub Release，Release 说明自动取自 CHANGELOG 对应小节（参照 NASMusicTV）；另含 test / lint 两个阻塞门禁 job
 
 ### Changed
 - 日期格式化统一迁移到 `java.time.format.DateTimeFormatter`（替代 `ThreadLocal<SimpleDateFormat>`，消除 K2 可空接收者告警）
+- 图表库由 Vico 3.3.1 降为 2.1.4（Kotlin metadata 2.4.0 与 §7.1.1 Kotlin 2.1.0 基线不兼容，编译失败实测）
 
 ## [v0.3.0] - 2026-09-20
 

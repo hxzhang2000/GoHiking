@@ -81,6 +81,7 @@ fun PlanScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val appContext = LocalContext.current.applicationContext
     val viewModel: PlanViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
@@ -90,6 +91,7 @@ fun PlanScreen(
                     locationProvider,
                     plannedRouteDao,
                     elevationRepository::query,
+                    appContext,
                 )
             }
         },

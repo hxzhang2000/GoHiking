@@ -111,6 +111,8 @@ class PlanViewModel(
     private val locationProvider: LocationProvider,
     private val routeDao: PlannedRouteDao,
     private val queryElevation: suspend (List<LatLngValue>) -> GhResult<List<Double?>>,
+    /** F-I18N-40 默认名本地化：application context 取 core:resources 字符串（跟随系统语言） */
+    private val appContext: android.content.Context,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(PlanUiState())
@@ -468,7 +470,8 @@ class PlanViewModel(
     }
 
     private fun manualRouteName(s: PlanUiState): String =
-        s.manualWaypoints.lastOrNull()?.name ?: ("手动线路 " + LocalDateTime.now().format(DATE_TIME_FORMAT))
+        s.manualWaypoints.lastOrNull()?.name
+            ?: appContext.getString(com.gohiking.core.resources.R.string.plan_manual_default, LocalDateTime.now().format(DATE_TIME_FORMAT))
 
     /** 相邻途经点连线重建（F-PLAN-23/24）：直线直连；吸附逐段步行规划、失败回退直线 */
     private fun rebuildManualSegments() {
@@ -633,7 +636,7 @@ class PlanViewModel(
         val a = s.start?.name
         val b = s.end?.name
         if (a != null && b != null) return "$a → $b"
-        return "计划线路 " + LocalDateTime.now().format(DATE_TIME_FORMAT)
+        return appContext.getString(com.gohiking.core.resources.R.string.plan_route_default, LocalDateTime.now().format(DATE_TIME_FORMAT))
     }
 
     /** 落点：按激活目标写入；写完自动切到另一个未设置的目标（F-PLAN-03→04 顺序引导） */
