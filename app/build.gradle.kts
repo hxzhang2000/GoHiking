@@ -23,8 +23,9 @@ android {
         applicationId = "com.gohiking.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0" // 与 PRD 7.3 generator.versionName 一致
+        versionCode = (project.findProperty("gohiking.versionCode") as String?)?.toInt() ?: 1
+        // 应用版本单一事实源 = gradle.properties 的 gohiking.versionName（升级流程见 CHANGELOG.md）
+        versionName = (project.findProperty("gohiking.versionName") as String?) ?: "0.3.0"
         // AGP 8.7.3 < 8.8 → 用 resourceConfigurations；AGP ≥ 8.8 换 androidResources.localeFilters（DEV §7.1 T-19）
         resourceConfigurations += listOf("en", "zh-rCN")
         vectorDrawables.useSupportLibrary = true

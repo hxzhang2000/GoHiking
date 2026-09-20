@@ -1,0 +1,45 @@
+# 更新日志（CHANGELOG）
+
+所有对外可感知的变更记录在此。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
+版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+
+## 版本管理规则（2026-09-20 建立）
+
+1. **版本号唯一来源**：`gradle.properties` 的 `gohiking.versionName` / `gohiking.versionCode`。
+   `app/build.gradle.kts` 只读取，不硬编码——升版本**只改这一处**。
+2. **语义化版本** `MAJOR.MINOR.PATCH`：
+   - `0.x.y` = 开发期（首个正式发布为 `1.0.0`）；
+   - MINOR 位对应里程碑批次（0.1.0=M0 骨架 / 0.2.0=M1 记录 / 0.3.0=M2 计划线路）；
+   - PATCH 位用于开发期内的修复回填。
+3. **升版本必做**：
+   - 改 `gradle.properties`；
+   - 在本文件 `[Unreleased]` 下补条目（发布时改为版本号 + 日期）；
+   - 若 PRD 7.3 的 `generator.versionName` 引用应用版本，随 release 同步。
+4. **versionCode**：每次对外分发的 APK 递增 +1；开发期本地构建不递增。
+5. 里程碑定义见 `docs/PRD.md` §10 路线图；文档修订另见各文档自身的版本记录。
+
+## [Unreleased]
+
+### 0.3.0 — M2 计划线路（进行中）
+
+- 选点与搜索（P-03）：地图点选 / 输入联想 / 底图 POI / 当前位置为起点，POI 气泡与拖动调整（F-PLAN-01~09）
+- 自动推荐 3 条步行线路（P-04）：候选折线三色渲染、点击高亮、选定落库（F-PLAN-10~16）
+- 爬升/难度估算：`core:elevation` 高程三级降级（内存/DB 缓存 → DEM 瓦片占位 → Open-Meteo 远程批量），`RouteEvaluator` 50m 重采样 + 10m 爬升阈值 + 难度评级（D-18）
+- 计划确认态：去程/返程两段（返程默认原路返回、可独立重新规划），全程汇总，两段同事务落库（F-PLAN-30/34/35/36/38/40）
+- 手动打点兜底（P-05）：依次加途经点、直线虚线/路径吸附、撤销/拖动/删除、上限 50、同样评估（F-PLAN-20~29）
+- 计划列表管理（P-06）：列表展示、重命名、删除（F-PLAN-41/42）
+- 高德 SDK 切换官方三合一包 `3dmap-location-search`（D-17）
+
+### 0.2.0 — M1 记录与历史（已完成）
+
+- 记录页：开始/暂停/继续/结束、实时折线与配速、`RecordingSession` 单一状态源、前后台服务
+- 统计：距离/时长/配速/爬升（气压计可选，五级降级）/卡路里 MET 估算
+- 历史列表与详情（P-10）：Room 持久化、按 segment 抽稀渲染
+- 数据层：`recording_state` 每 10 秒持久化（D-01）、`track_point.distanceM`（D-03）
+
+### 0.1.0 — M0 工程骨架（已完成）
+
+- 18 模块工程（10 core + 7 feature + app）、Hilt/KSP/Room 基线
+- 高德地图接入：隐私合规门（同意后才初始化）、地图语言切换、POI/空白点选回调实测
+- 构建基线锁定：AGP 8.7.3 + Gradle 8.9 + JDK 17 + Kotlin 2.1.0（DEV §7.1.1）
+- 单元测试基线（core:common / core:location / core:data）
