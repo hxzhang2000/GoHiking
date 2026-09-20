@@ -54,6 +54,7 @@ import com.gohiking.core.data.repository.TripRepository
 import com.gohiking.core.designsystem.theme.GhTheme
 import com.gohiking.core.resources.R as CoreR
 import com.gohiking.feature.history.HistoryListScreen
+import com.gohiking.feature.history.TripDetailScreen
 import com.gohiking.feature.recording.RecordingScreen
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -85,6 +86,7 @@ private fun Root(session: RecordingSession, tripRepository: TripRepository, modi
     val context = LocalContext.current
     var agreed by rememberSaveable { mutableStateOf(false) }
     var showHistory by rememberSaveable { mutableStateOf(false) }
+    var openTripId by rememberSaveable { mutableStateOf<String?>(null) }
     val sessionState by session.state.collectAsStateWithLifecycle()
 
     if (!agreed) {
@@ -97,10 +99,19 @@ private fun Root(session: RecordingSession, tripRepository: TripRepository, modi
 
     if (sessionState !is SessionState.Idle) {
         RecordingScreen(session = session, modifier = modifier)
+    } else if (openTripId != null) {
+        TripDetailScreen(
+            tripRepository = tripRepository,
+            tripId = openTripId!!,
+            onBack = { openTripId = null },
+            onDeleted = { openTripId = null },
+            modifier = modifier,
+        )
     } else if (showHistory) {
         HistoryListScreen(
             tripRepository = tripRepository,
             onBack = { showHistory = false },
+            onOpenTrip = { openTripId = it },
             modifier = modifier,
         )
     } else {

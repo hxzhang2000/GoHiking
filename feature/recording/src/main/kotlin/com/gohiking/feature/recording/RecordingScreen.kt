@@ -11,6 +11,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -45,6 +46,8 @@ fun RecordingScreen(
     val state by session.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var pendingDraft by remember { mutableStateOf<com.gohiking.core.data.recording.TripDraft?>(null) }
+    var showMarkerDialog by remember { mutableStateOf(false) }
+    var markerNote by remember { mutableStateOf("") }
 
     val active = state as? SessionState.Active
 
@@ -106,6 +109,13 @@ fun RecordingScreen(
                     ) {
                         Text(stringResource(CoreR.string.rec_action_summit))
                     }
+                    Button(
+                        onClick = { showMarkerDialog = true },
+                        modifier = Modifier.weight(1f),
+                        enabled = active.isRecording,
+                    ) {
+                        Text(stringResource(CoreR.string.rec_action_marker))
+                    }
                 }
                 Button(
                     onClick = {
@@ -117,6 +127,37 @@ fun RecordingScreen(
                 }
             }
         }
+    }
+
+    // F-REC-40/41：手动打点 + 备注输入；标记以「橙色水滴」渲染在详情页地图（F-REC-42）
+    if (showMarkerDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showMarkerDialog = false
+                markerNote = ""
+            },
+            title = { Text(stringResource(CoreR.string.rec_marker_dialog_title)) },
+            text = {
+                OutlinedTextField(
+                    value = markerNote,
+                    onValueChange = { markerNote = it },
+                    placeholder = { Text(stringResource(CoreR.string.rec_marker_note_hint)) },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    session.dropMarker(markerNote.trim())
+                    markerNote = ""
+                    showMarkerDialog = false
+                }) { Text(stringResource(CoreR.string.common_action_save)) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showMarkerDialog = false
+                    markerNote = ""
+                }) { Text(stringResource(CoreR.string.common_action_cancel)) }
+            },
+        )
     }
 
     pendingDraft?.let { draft ->

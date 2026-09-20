@@ -40,6 +40,19 @@ class TripRepository @Inject constructor(
 
     suspend fun byId(id: String): TripEntity? = db.tripDao().byId(id)
 
+    /** 单条行程流（详情页 F-HIS-20：重命名/编辑备注后自动刷新） */
+    fun observeById(id: String): Flow<TripEntity?> = db.tripDao().observeById(id)
+
+    /** 重命名（F-HIS-30） */
+    suspend fun rename(id: String, name: String): Unit = withContext(Dispatchers.IO) {
+        db.tripDao().byId(id)?.let { db.tripDao().update(it.copy(name = name)) }
+    }
+
+    /** 编辑备注（F-HIS-30）；null 清空备注 */
+    suspend fun updateNote(id: String, note: String?): Unit = withContext(Dispatchers.IO) {
+        db.tripDao().byId(id)?.let { db.tripDao().update(it.copy(note = note)) }
+    }
+
     /** 级联删除：一个事务内删点/标记/媒体引用/行程，并失效分段缓存 */
     suspend fun delete(id: String): Unit = withContext(Dispatchers.IO) {
         db.withTransaction {

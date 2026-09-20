@@ -35,4 +35,16 @@ object Formatters {
 
     /** 海拔/爬升：整数米（"1234 m"）；null 按 0（调用方应优先用 common_stat_unknown 处理「—」） */
     fun metersText(meters: Double?): String = "${meters?.toInt() ?: 0} m"
+
+    /** 速度：米/秒 → "4.2 km/h"；null 或非正返回 null（界面显示「—」） */
+    fun speedText(speedMps: Double?): String? {
+        if (speedMps == null || speedMps <= 0.0) return null
+        return String.format(Locale.ROOT, "%.1f km/h", speedMps * 3.6)
+    }
+
+    /** 卡路里：整数 "512 kcal"；null 或非正返回 null（界面显示「—」） */
+    fun kcalText(kcal: Double?): String? {
+        if (kcal == null || kcal <= 0.0) return null
+        return "${kcal.toInt()} kcal"
+    }
 }

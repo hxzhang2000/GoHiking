@@ -62,6 +62,41 @@
     <string name="history_group_by_month">按月分组</string>
     <string name="history_delete_confirm">删除「%1$s」及其全部轨迹数据？此操作不可撤销。</string>
 
+    <!-- 手动打点（F-REC-40~42） -->
+    <string name="rec_action_marker">打点</string>
+    <string name="rec_marker_dialog_title">添加标记</string>
+    <string name="rec_marker_note_hint">备注（如：补水点、危险路段）</string>
+
+    <!-- 行程详情（P-11 M1 切片：F-HIS-20~22/26/27/30） -->
+    <string name="hist_detail_loading">加载中…</string>
+    <string name="hist_detail_section_overview">概览</string>
+    <string name="hist_detail_section_legs">上山 / 下山</string>
+    <string name="hist_detail_section_markers">标记</string>
+    <string name="hist_leg_up">上山</string>
+    <string name="hist_leg_down">下山</string>
+    <string name="hist_legs_none">本次行程没有登顶标记</string>
+    <string name="hist_overview_total_duration">总时长</string>
+    <string name="hist_overview_paused">暂停时长</string>
+    <string name="hist_overview_descent">累计下降</string>
+    <string name="hist_overview_max_alt">最高海拔</string>
+    <string name="hist_overview_min_alt">最低海拔</string>
+    <string name="hist_overview_avg_speed">平均速度</string>
+    <string name="hist_overview_avg_pace">平均配速</string>
+    <string name="hist_overview_calories">卡路里</string>
+    <string name="hist_detail_action_rename">重命名</string>
+    <string name="hist_detail_action_note">编辑备注</string>
+    <string name="hist_detail_action_export">导出</string>
+    <string name="hist_detail_action_share">分享</string>
+    <string name="hist_detail_delete_confirm">删除「%1$s」？此操作不可撤销。</string>
+    <string name="hist_detail_rename_hint">行程名称</string>
+    <string name="hist_detail_note_hint">备注</string>
+    <string name="hist_marker_type_summit">登顶</string>
+    <string name="hist_marker_type_manual">手动标记</string>
+    <string name="hist_marker_type_alert_distance">距离提醒</string>
+    <string name="hist_marker_type_alert_ascent">爬升提醒</string>
+    <string name="hist_marker_type_alert_descent">下降提醒</string>
+    <string name="hist_marker_type_unknown">未知类型</string>
+
     <!-- 通用占位 -->
     <string name="common_stat_unknown">--</string>
 

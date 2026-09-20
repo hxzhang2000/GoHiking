@@ -32,7 +32,9 @@ dependencies {
     implementation(project(":core:resources"))
     implementation(project(":core:data")) // TripRepository（P-10 最小切片）
     implementation(project(":core:database")) // TripEntity / TripSummaryRow（VM 内映射 UI 模型）
-    implementation(project(":core:common")) // Formatters
+    implementation(project(":core:common")) // Formatters / PolylineSimplifier
+
+    implementation(libs.amap.map3d) // 详情页地图（F-HIS-21）
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

@@ -63,6 +63,41 @@
     <string name="history_group_by_month">By month</string>
     <string name="history_delete_confirm">Delete "%1$s" and all its track data? This cannot be undone.</string>
 
+    <!-- 手动打点（F-REC-40~42） -->
+    <string name="rec_action_marker">Marker</string>
+    <string name="rec_marker_dialog_title">Drop a marker</string>
+    <string name="rec_marker_note_hint">Note (e.g. water spot, hazard)</string>
+
+    <!-- 行程详情（P-11 M1 切片：F-HIS-20~22/26/27/30） -->
+    <string name="hist_detail_loading">Loading…</string>
+    <string name="hist_detail_section_overview">Overview</string>
+    <string name="hist_detail_section_legs">Uphill / downhill</string>
+    <string name="hist_detail_section_markers">Markers</string>
+    <string name="hist_leg_up">Uphill</string>
+    <string name="hist_leg_down">Downhill</string>
+    <string name="hist_legs_none">No summit marker in this trip</string>
+    <string name="hist_overview_total_duration">Total time</string>
+    <string name="hist_overview_paused">Paused</string>
+    <string name="hist_overview_descent">Descent</string>
+    <string name="hist_overview_max_alt">Max altitude</string>
+    <string name="hist_overview_min_alt">Min altitude</string>
+    <string name="hist_overview_avg_speed">Avg speed</string>
+    <string name="hist_overview_avg_pace">Avg pace</string>
+    <string name="hist_overview_calories">Calories</string>
+    <string name="hist_detail_action_rename">Rename</string>
+    <string name="hist_detail_action_note">Edit note</string>
+    <string name="hist_detail_action_export">Export</string>
+    <string name="hist_detail_action_share">Share</string>
+    <string name="hist_detail_delete_confirm">Delete "%1$s"? This cannot be undone.</string>
+    <string name="hist_detail_rename_hint">Trip name</string>
+    <string name="hist_detail_note_hint">Note</string>
+    <string name="hist_marker_type_summit">Summit</string>
+    <string name="hist_marker_type_manual">Marker</string>
+    <string name="hist_marker_type_alert_distance">Distance alert</string>
+    <string name="hist_marker_type_alert_ascent">Ascent alert</string>
+    <string name="hist_marker_type_alert_descent">Descent alert</string>
+    <string name="hist_marker_type_unknown">Unknown</string>
+
     <!-- 通用占位 -->
     <string name="common_stat_unknown">--</string>
 

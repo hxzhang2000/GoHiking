@@ -41,4 +41,22 @@ class FormattersTest {
         assertEquals("1234 m", Formatters.metersText(1234.6))
         assertEquals("0 m", Formatters.metersText(null))
     }
+
+    @Test
+    fun `speed - mps to kmh, null for missing or non-positive`() {
+        assertNull(Formatters.speedText(null))
+        assertNull(Formatters.speedText(0.0))
+        assertNull(Formatters.speedText(-1.0))
+        assertEquals("4.2 km/h", Formatters.speedText(1.1666667)) // 1.1667 m/s ≈ 4.2 km/h
+        assertEquals("0.0 km/h", Formatters.speedText(0.001))
+    }
+
+    @Test
+    fun `kcal - integer with unit, null for missing or non-positive`() {
+        assertNull(Formatters.kcalText(null))
+        assertNull(Formatters.kcalText(0.0))
+        assertNull(Formatters.kcalText(-5.0))
+        assertEquals("512 kcal", Formatters.kcalText(512.4))
+        assertEquals("1 kcal", Formatters.kcalText(1.2))
+    }
 }

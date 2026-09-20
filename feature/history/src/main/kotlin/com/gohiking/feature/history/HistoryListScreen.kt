@@ -47,6 +47,7 @@ import com.gohiking.core.resources.R as CoreR
 fun HistoryListScreen(
     tripRepository: TripRepository,
     onBack: () -> Unit,
+    onOpenTrip: (String) -> Unit = {}, // M1 详情页接入；默认空实现保持兼容
     modifier: Modifier = Modifier,
 ) {
     val viewModel: HistoryListViewModel = viewModel(
@@ -54,13 +55,19 @@ fun HistoryListScreen(
             initializer { HistoryListViewModel(tripRepository) }
         },
     )
-    HistoryListContent(viewModel = viewModel, onBack = onBack, modifier = modifier)
+    HistoryListContent(
+        viewModel = viewModel,
+        onBack = onBack,
+        onOpenTrip = onOpenTrip,
+        modifier = modifier,
+    )
 }
 
 @Composable
 private fun HistoryListContent(
     viewModel: HistoryListViewModel,
     onBack: () -> Unit,
+    onOpenTrip: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -174,6 +181,7 @@ private fun HistoryListContent(
                     )
 
                     is ListItem.Trip -> Surface(
+                        onClick = { onOpenTrip(item.trip.id) },
                         tonalElevation = 2.dp,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth(),
