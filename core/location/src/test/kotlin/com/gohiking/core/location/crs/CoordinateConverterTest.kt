@@ -38,8 +38,7 @@ class CoordinateConverterTest {
     }
 
     @Test
-    fun `gcjToWgs_迭代次数_小于5`() {
-        // DEV §4.11：gcjToWgs_迭代收敛 断言「迭代次数 < 5」
+    fun `gcjToWgs_迭代次数_小于5`() {        // DEV §4.11：gcjToWgs_迭代收敛 断言「迭代次数 < 5」
         var iterations = 0
         var wLat = 39.9; var wLng = 116.3
         repeat(CoordinateConverter.MAX_ITER) {
@@ -50,5 +49,25 @@ class CoordinateConverterTest {
             iterations++
         }
         assertTrue("期望 <5 次收敛，实际 $iterations", iterations < 5)
+    }
+
+    /**
+     * H-10 回归：比对**标准公开算法**的基准值。
+     * transformLat 的第二个多项式项系数曾误写为 20（应为 40），
+     * 导致纬度方向系统性偏差最多约 13.4 m；这里用三个城市把标准值钉死。
+     */
+    @Test
+    fun `符合标准算法基准值_H10回归`() {
+        // (wgsLat, wgsLng) -> (gcjLat, gcjLng)，取自公开参考实现的精确输出
+        val samples = listOf(
+            Triple(39.908722, 116.397499, 39.910125500 to 116.403742575), // 北京
+            Triple(30.657200, 104.066500, 30.654779283 to 104.069008781), // 成都
+            Triple(30.545400, 114.305500, 30.542973324 to 114.310940794), // 武汉（偏差最大）
+        )
+        for ((wLat, wLng, expected) in samples) {
+            val actual = CoordinateConverter.wgs84ToGcj02(wLat, wLng)
+            assertEquals("lat @$wLat", expected.first, actual.first, 1e-8)
+            assertEquals("lng @$wLng", expected.second, actual.second, 1e-8)
+        }
     }
 }

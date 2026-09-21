@@ -6,9 +6,11 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import java.util.Locale
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -18,7 +20,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -28,6 +33,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -64,6 +70,8 @@ import com.gohiking.core.data.recording.RecordingService
 import com.gohiking.core.data.recording.RecordingSession
 import com.gohiking.core.data.recording.SessionState
 import com.gohiking.core.data.repository.TripRepository
+import com.gohiking.core.common.format.DisplayUnitProvider
+import com.gohiking.core.common.format.DisplayUnits
 import com.gohiking.core.datastore.AppSettings
 import com.gohiking.core.datastore.SettingsRepository
 import com.gohiking.core.datastore.readLanguageBlocking
@@ -88,7 +96,19 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+
+/**
+ * 用户可见错误：携带 stringResource 的 id 与插值参数，而不是已经拼好的中文（H-09）。
+ * 这样英文/中文跟随系统 locale，且 lint / checkStringKeys 能覆盖到。
+ */
+private class UserMessageError(val resId: Int, val args: List<Any?>) : RuntimeException()
+
+/** 抛出一个用户可见错误（文案在 core/resources，%1$s 等占位符由 [args] 填充） */
+private fun userError(resId: Int, vararg args: Any?): Nothing = throw UserMessageError(resId, args.toList())
+
+private const val LOG_TAG = "GoHiking"
 
 /**
  * M1 壳：①隐私同意门（DEV §1.5 红线：高德 SDK 必须在用户同意后才初始化）；
@@ -159,7 +179,7 @@ private fun Root(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    var agreed by rememberSaveable { mutableStateOf(false) }
+    var agreed by remember { mutableStateOf<Boolean?>(null) } // null = 尚未从 DataStore 读取
     var showHistory by rememberSaveable { mutableStateOf(false) }
     var openTripId by rememberSaveable { mutableStateOf<String?>(null) }
     var showPlan by rememberSaveable { mutableStateOf(false) }
@@ -181,25 +201,49 @@ private fun Root(
     var ioProgress by remember { mutableStateOf<com.gohiking.core.data.io.ImportEngine.Progress?>(null) }
     var ioDoneMsg by remember { mutableStateOf<String?>(null) }
     var ioErrorMsg by remember { mutableStateOf<String?>(null) }
+    var ioErrorRes by remember { mutableStateOf<Pair<Int, List<Any?>>?>(null) }
     var pendingImport by remember { mutableStateOf<Pair<List<ParsedFile>, List<String>>?>(null) }
     var importPreview by remember { mutableStateOf<com.gohiking.core.data.io.ImportEngine.ImportPreview?>(null) }
     var importPolicy by remember { mutableStateOf(ConflictPolicy.SKIP) }
+    var importDecisions by remember { mutableStateOf<Map<String, ConflictPolicy>>(emptyMap()) }
     var importReport by remember { mutableStateOf<com.gohiking.core.data.io.ImportEngine.ImportReport?>(null) }
     val generator = GeneratorInfo(versionName = BuildConfig.VERSION_NAME, versionCode = BuildConfig.VERSION_CODE)
 
     fun ioRun(block: suspend () -> Unit) {
         ioJob = scope.launch {
             ioBusy = true
+            ioErrorMsg = null
+            ioErrorRes = null
             try {
                 block()
             } catch (e: CancellationException) {
                 // 用户取消：已导入/已导出的保留（F-IO-11/29）
+            } catch (e: UserMessageError) {
+                ioErrorRes = e.resId to e.args
             } catch (t: Throwable) {
-                ioErrorMsg = t.message ?: t::class.java.simpleName
+                // M-10：不把异常类名抛给用户，统一走 error_generic
+                Log.w(LOG_TAG, "IO 失败", t)
+                ioErrorMsg = t::class.java.simpleName
             } finally {
                 ioBusy = false
                 ioProgress = null
             }
+        }
+    }
+
+    // M-02：同意状态以 DataStore 为准。此前只用 rememberSaveable：冷启动需重弹，
+    // 而进程被杀后由 Bundle 恢复 true 又会绕过同意直接调用隐私 API。
+    LaunchedEffect(Unit) {
+        agreed = settingsRepository.settings.first().privacyAgreed
+    }
+
+    // H-02：单位/配速显示设置此前从不生效（AppSettings 三项除备份序列化外零读取点），
+    // 这里把设置同步给 core:common 的展示层单例。
+    LaunchedEffect(Unit) {
+        settingsRepository.settings.collect { s ->
+            DisplayUnitProvider.update(
+                DisplayUnits.fromStrings(s.unitDistance, s.unitAltitude, s.unitPaceDisplay)
+            )
         }
     }
 
@@ -216,7 +260,7 @@ private fun Root(
                 ioProgress = com.gohiking.core.data.io.ImportEngine.Progress(0, total)
             }) { fileName, content ->
                 val docUri = android.provider.DocumentsContract.createDocument(resolver, treeUri, "application/json", fileName)
-                    ?: error("无法在所选目录创建文件：$fileName")
+                    ?: userError(CoreR.string.io_error_create_file, fileName)
                 resolver.openOutputStream(docUri)?.use { content(it) }
                 done++
                 ioProgress = com.gohiking.core.data.io.ImportEngine.Progress(done, ioProgress?.total ?: 0)
@@ -243,7 +287,7 @@ private fun Root(
                     output = out,
                 )
                 ioDoneMsg = n.toString()
-            } ?: error("无法写入所选文件")
+            } ?: userError(CoreR.string.io_error_write_file)
         }
     }
 
@@ -260,9 +304,9 @@ private fun Root(
             val resolver = context.contentResolver
             resolver.openOutputStream(uri)?.use { out ->
                 if (!ioRepository.writeTripJson(tripId, crs, generator, out)) {
-                    error("记录不存在：$tripId")
+                    userError(CoreR.string.io_error_trip_missing, tripId)
                 }
-            } ?: error("无法写入所选文件")
+            } ?: userError(CoreR.string.io_error_write_file)
             ioDoneMsg = "1"
         }
     }
@@ -280,9 +324,9 @@ private fun Root(
             val resolver = context.contentResolver
             resolver.openOutputStream(uri)?.use { out ->
                 if (!ioRepository.writePlannedRoute(routeId, crs, generator, out)) {
-                    error("计划线路不存在：$routeId")
+                    userError(CoreR.string.io_error_route_missing, routeId)
                 }
-            } ?: error("无法写入所选文件")
+            } ?: userError(CoreR.string.io_error_write_file)
             ioDoneMsg = "1"
         }
     }
@@ -295,23 +339,97 @@ private fun Root(
         ioRun {
             val resolver = context.contentResolver
             val sources = uris.map { uri ->
-                val name = queryDisplayName(resolver, uri) ?: uri.lastPathSegment ?: "unknown"
+                val name = queryDisplayName(resolver, uri)
+                    ?: uri.lastPathSegment
+                    ?: context.getString(CoreR.string.common_unknown_file)
                 val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
-                    ?: error("无法打开：$name")
+                    ?: userError(CoreR.string.io_error_open_file, name)
                 name to bytes
             }
             val parsed = ioRepository.parseImportSources(sources)
+            // H-01：ioImportConflictPolicy 此前从不读取，策略恒为初始 SKIP
+            importPolicy = runCatching {
+                ConflictPolicy.valueOf(settingsRepository.settings.first().ioImportConflictPolicy.uppercase())
+            }.getOrDefault(ConflictPolicy.SKIP)
+            importDecisions = emptyMap()
             pendingImport = parsed.files to parsed.warnings
             importPreview = ioRepository.preview(parsed.files)
         }
     }
 
-    if (!agreed) {
+    if (agreed == null) {
+        // 尚未读到同意状态：不组合任何地图/定位，避免先于同意初始化 SDK（DEV §1.5 红线）
+        Box(modifier = modifier.fillMaxSize())
+        return
+    }
+
+    if (agreed != true) {
         PrivacyGate(
-            onAgree = { agreed = true },
+            onAgree = {
+                agreed = true
+                // C-03：定位 SDK 的合规调用必须由明确的用户同意驱动
+                com.gohiking.core.location.PrivacyConsent.markAgreed()
+                scope.launch { settingsRepository.setPrivacyAgreed(true) }
+            },
             onDecline = { (context as? Activity)?.finish() },
         )
         return
+    }
+
+    fun goBack() {
+        when {
+            openTripId != null -> openTripId = null
+            showPlanList -> showPlanList = false
+            showPlan -> showPlan = false
+            showPhotoMap -> showPhotoMap = false
+            showSettings -> showSettings = false
+            showHistory -> showHistory = false
+            else -> (context as? Activity)?.moveTaskToBack(true)
+        }
+    }
+
+    // C-04：系统返回键分发。此前全仓库无 BackHandler，7 个子页面都给了 onBack
+    // 却没接在系统返回键上，任意子页返回键 = finish() 整个 App。
+    BackHandler {
+        if (sessionState !is SessionState.Idle) {
+            // 记录中：退到后台即可，前台服务维持采集
+            (context as? Activity)?.moveTaskToBack(true)
+        } else {
+            goBack()
+        }
+    }
+
+    // C-02（F-REC-09）：崩溃/进程被杀后恢复未结束的记录。
+    // 此前 hasRecoverableSession()/restoreFromSnapshot() 从未被调用，快照只写不读。
+    var restorePrompt by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (session.state.value is SessionState.Idle && session.hasRecoverableSession()) {
+            restorePrompt = true
+        }
+    }
+    if (restorePrompt) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text(stringResource(CoreR.string.rec_restore_title)) },
+            text = { Text(stringResource(CoreR.string.rec_restore_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    restorePrompt = false
+                    scope.launch {
+                        if (session.restoreFromSnapshot()) {
+                            runCatching { RecordingService.start(context) }
+                                .onFailure { Log.w(LOG_TAG, "恢复后启动前台服务失败", it) }
+                        }
+                    }
+                }) { Text(stringResource(CoreR.string.rec_restore_continue)) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    restorePrompt = false
+                    scope.launch { session.discardRecoverable() }
+                }) { Text(stringResource(CoreR.string.rec_action_discard)) }
+            },
+        )
     }
 
     if (sessionState !is SessionState.Idle) {
@@ -415,11 +533,31 @@ private fun Root(
             extraWarnings = pendingImport?.second ?: emptyList(),
             policy = importPolicy,
             onPolicyChange = { importPolicy = it },
+            decisions = importDecisions,
+            onDecisionChange = { name, p -> importDecisions = importDecisions + (name to p) },
+            conflictFiles = run {
+                // 预览里的 conflictTrips/conflictRoutes 是 id，而 decisions 按**文件名**索引
+                val fs = pendingImport?.first.orEmpty()
+                fs.mapNotNull {
+                    when (it) {
+                        is ParsedFile.TripFile ->
+                            it.name.takeIf { _ -> it.envelope.trip.id in preview.conflictTrips }
+                        is ParsedFile.RouteFile ->
+                            it.name.takeIf { _ -> (it.envelope.plannedRoute.id ?: "") in preview.conflictRoutes }
+                        else -> null
+                    }
+                }
+            },
             onConfirm = {
                 val files = pendingImport?.first ?: return@ImportPreviewDialog
                 importPreview = null
                 ioRun {
-                    val report = ioRepository.executeImport(files, importPolicy) { done, total ->
+                    val report = ioRepository.executeImport(
+                        files = files,
+                        policy = importPolicy,
+                        // H-01：必须把 UI 的逐条决策传下去，否则 ASK 会把全部 trip 判 SKIPPED
+                        decisions = importDecisions,
+                    ) { done, total ->
                         ioProgress = com.gohiking.core.data.io.ImportEngine.Progress(done, total)
                     }
                     importReport = report
@@ -448,13 +586,29 @@ private fun Root(
             },
         )
     }
-    ioErrorMsg?.let { msg ->
+    val errorResPair = ioErrorRes
+    if (errorResPair != null) {
+        AlertDialog(
+            onDismissRequest = { ioErrorRes = null },
+            title = { Text(stringResource(CoreR.string.io_error)) },
+            text = { Text(stringResource(errorResPair.first, *errorResPair.second.toTypedArray())) },
+            confirmButton = {
+                TextButton(onClick = { ioErrorRes = null }) {
+                    Text(stringResource(CoreR.string.common_action_confirm))
+                }
+            },
+        )
+    }
+    if (ioErrorMsg != null) {
         AlertDialog(
             onDismissRequest = { ioErrorMsg = null },
             title = { Text(stringResource(CoreR.string.io_error)) },
-            text = { Text(msg) }, // F-IO-34：给出具体原因
+            // M-10：error_generic 此前定义了却全仓库未引用，异常类名不该给用户看
+            text = { Text(stringResource(CoreR.string.error_generic)) },
             confirmButton = {
-                TextButton(onClick = { ioErrorMsg = null }) { Text(stringResource(CoreR.string.common_action_confirm)) }
+                TextButton(onClick = { ioErrorMsg = null }) {
+                    Text(stringResource(CoreR.string.common_action_confirm))
+                }
             },
         )
     }
@@ -504,13 +658,21 @@ private fun MapVerifyScreen(
     var lastMapClickAtMs by remember { mutableLongStateOf(0L) }
     var showStartDialog by rememberSaveable { mutableStateOf(false) } // F-REC-02：开始前可选命名
     var startName by rememberSaveable { mutableStateOf("") }
-    var locationGranted by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED,
-        )
-    }
+    // L-28：此前是只写不读的 State（每次授权回调都触发一次无用的重组），改为局部变量
+    fun locationGranted(): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+
     var showPermissionHint by remember { mutableStateOf(false) }
+    // H-05：权限回调处于 ON_START 阶段，此时 startForegroundService 在 Android 12+ 可能被拒。
+    // 延到下一个组合帧（ON_RESUME 之后）再启动，降级为「服务起不来但不崩」。
+    var pendingServiceStart by remember { mutableStateOf(false) }
+    LaunchedEffect(pendingServiceStart) {
+        if (!pendingServiceStart) return@LaunchedEffect
+        pendingServiceStart = false
+        runCatching { RecordingService.start(context) }
+            .onFailure { Log.w(LOG_TAG, "RecordingService.start 失败", it) }
+    }
 
     fun log(text: String) {
         events.add(0, text)
@@ -542,7 +704,7 @@ private fun MapVerifyScreen(
             }
             map.setOnPOIClickListener { poi ->
                 lastPoiAtMs = System.currentTimeMillis()
-                log(context.getString(CoreR.string.map_test_log_poi, poi.name ?: "?"))
+                log(context.getString(CoreR.string.map_test_log_poi, poi.name ?: context.getString(CoreR.string.plan_poi_unnamed)))
                 if (lastMapClickAtMs > 0 && kotlin.math.abs(lastPoiAtMs - lastMapClickAtMs) < 600) {
                     log(context.getString(CoreR.string.map_test_log_both))
                 }
@@ -561,6 +723,8 @@ private fun MapVerifyScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            // M-01：从详情页返回时 Activity 并未 pause，必须保证 pause→destroy 的调用顺序
+            mapView.onPause()
             mapView.onDestroy()
         }
     }
@@ -569,12 +733,12 @@ private fun MapVerifyScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { grants ->
-        locationGranted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+        val granted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        if (locationGranted) {
+        if (granted) {
             session.start(startName.trim(), plannedRouteId = null) // 空名 → stop() 日期时间命名（F-REC-08）
             startName = ""
-            RecordingService.start(context)
+            pendingServiceStart = true // H-05：延后到 ON_RESUME 之后
         } else {
             showPermissionHint = true
         }
@@ -589,7 +753,9 @@ private fun MapVerifyScreen(
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = 48.dp),
+                // M-09：edge-to-edge 下不能被状态栏遮挡
+                .statusBarsPadding()
+                .padding(top = 8.dp),
         ) {
             Text(
                 text = stringResource(CoreR.string.map_verify_badge),
@@ -601,6 +767,7 @@ private fun MapVerifyScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
+                .navigationBarsPadding()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {

@@ -1,5 +1,7 @@
 package com.gohiking.feature.history
 
+import timber.log.Timber
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gohiking.core.common.geo.PolylineSimplifier
@@ -18,6 +20,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 
 /**
@@ -113,14 +117,27 @@ class TripDetailViewModel(
             return
         }
         runCatching { mediaRepository.rescan(appContext) }
-        val trip = _state.value.trip ?: return
-        val end = trip.endTime ?: points.maxOfOrNull { it.timestamp } ?: trip.startTime
-        val photos = mediaRepository.photosForTrip(
-            tripId = tripId,
-            tripStartMs = trip.startTime,
-            tripEndMs = end,
-            trackPointsGcj = points.map { MediaTripMatcher.TrackPointGcj(it.latitude, it.longitude) },
-        )
+            .onFailure { Timber.w(it, "媒体增量扫描失败") }
+        // H-13：此前直接读 _state.value.trip，而 trip 由另一个协程的 observeById 写入，
+        // 两者无同步 —— IO 太快时 trip 还是 null，照片条就永久不显示且无重试。
+        // 改为直接向仓库取一次（repo 已有 byId），拿不到就等 flow 的首个非空值。
+        var trip = repo.byId(tripId)
+        if (trip == null) {
+            withTimeoutOrNull(LOAD_TRIP_TIMEOUT_MS) {
+                repo.observeById(tripId).first { it != null }
+            }?.let { trip = it }
+        }
+        val t = trip ?: return
+        val end = t.endTime ?: points.maxOfOrNull { it.timestamp } ?: t.startTime
+        // M：photosForTrip 裸调用，MediaStore 异常会直接打到全局 handler
+        val photos = runCatching {
+            mediaRepository.photosForTrip(
+                tripId = tripId,
+                tripStartMs = t.startTime,
+                tripEndMs = end,
+                trackPointsGcj = points.map { MediaTripMatcher.TrackPointGcj(it.latitude, it.longitude) },
+            )
+        }.onFailure { Timber.w(it, "照片匹配失败") }.getOrDefault(emptyList())
         _state.update { it.copy(photos = photos) }
     }
 

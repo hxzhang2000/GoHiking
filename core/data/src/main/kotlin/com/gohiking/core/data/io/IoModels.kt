@@ -243,7 +243,11 @@ sealed interface ParsedFile {
     data class RouteFile(override val name: String, val envelope: PlannedRouteEnvelope) : ParsedFile
 
     /** 不符合 schema 或版本不兼容；reason 面向结果报告（F-IO-34） */
-    data class Invalid(override val name: String, val reason: String) : ParsedFile
+    data class Invalid(
+        override val name: String,
+        val code: ImportReasonCode,
+        val arg: String? = null,
+    ) : ParsedFile
 }
 
 /** 冲突策略（F-IO-27/40~43）；默认跳过（F-IO-42） */

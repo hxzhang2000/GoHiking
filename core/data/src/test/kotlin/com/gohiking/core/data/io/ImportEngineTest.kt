@@ -67,14 +67,17 @@ class ImportEngineTest {
         val eng = ImportEngine(sink)
         val report = eng.execute(
             listOf(
-                ParsedFile.Invalid("bad.json", "解析失败：schema 缺失"),
+                ParsedFile.Invalid("bad.json", ImportReasonCode.PARSE_FAILED, arg = "schema missing"),
                 tripFile(id = "t2"),
             ),
         )
         assertEquals(1, report.imported)
         assertEquals(1, report.failed)
         assertEquals(0, report.skipped)
-        assertTrue(report.items.first { it.name == "bad.json" }.reason!!.contains("schema"))
+        assertEquals(
+            ImportReasonCode.PARSE_FAILED,
+            report.items.first { it.name == "bad.json" }.reason,
+        )
         assertEquals(1, sink.trips.size)
     }
 
@@ -90,7 +93,9 @@ class ImportEngineTest {
         assertTrue(preview.suspectedDupTrips.contains("t-other")) // F-IO-41
         val report = eng.execute(listOf(file))
         assertEquals(1, report.imported) // 不自动合并，照常导入
-        assertTrue(report.warnings.any { it.contains("疑似重复") })
+        assertTrue(
+            report.warnings.any { it.code == ImportWarningCode.SUSPECTED_DUPLICATE }
+        ) // F-IO-41
     }
 
     @Test
@@ -102,7 +107,7 @@ class ImportEngineTest {
         val preview = eng.preview(listOf(ParsedFile.TripFile("a.json", stripped)))
         assertTrue(preview.crsValues.contains("WGS-84")) // PRD 7.5：缺失按 WGS-84
         val report = eng.execute(listOf(ParsedFile.TripFile("a.json", stripped)))
-        assertTrue(report.warnings.any { it.contains("WGS-84") })
+        assertTrue(report.warnings.any { it.code == ImportWarningCode.CRS_MISSING })
     }
 
     @Test

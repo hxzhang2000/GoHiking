@@ -91,7 +91,7 @@ class BackupSecurityTest {
             }
         }
         val contents = BackupReader.read(ByteArrayInputStream(out.toByteArray()))
-        assertTrue(contents.warnings.any { it.contains("Zip Bomb") })
+        assertTrue(contents.warnings.any { it.code == ImportWarningCode.ENTRY_LIMIT })
     }
 
     @Test
@@ -131,7 +131,7 @@ class BackupSecurityTest {
         }
         val contents = BackupReader.read(ByteArrayInputStream(out.toByteArray()))
         assertEquals(1, contents.trips.size)
-        assertTrue(contents.warnings.any { it.contains("不一致") })
+        assertTrue(contents.warnings.any { it.code == ImportWarningCode.MANIFEST_COUNT_MISMATCH })
     }
 
     @Test

@@ -22,8 +22,9 @@ import com.gohiking.core.database.entity.TripEntity
 
 /**
  * GoHiking 本地库（PRD 7.1 + DEV §3.1.1 共 10 表）。
- * 版本 1（v1.0 首发）；禁止 fallbackToDestructiveMigration（PRD 9.5「数据属于用户」），
- * v1.1 起每加表/字段 +1 版本并写 Migration（Migrations.kt）+ MigrationTestHelper 测试。
+ * 版本 2（v2 见 MIGRATION_1_2：planned_route/planned_leg 的高程与难度列改为可空，H-06）；
+ * 禁止 fallbackToDestructiveMigration（PRD 9.5「数据属于用户」），
+ * 每加表/字段 +1 版本并写 Migration（Migrations.kt）+ MigrationTestHelper 测试。
  */
 @Database(
     entities = [
@@ -38,7 +39,7 @@ import com.gohiking.core.database.entity.TripEntity
         RecordingStateEntity::class,
         ElevationCacheEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class GhDatabase : RoomDatabase() {

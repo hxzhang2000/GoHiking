@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -83,10 +85,14 @@ fun PaceChartCard(kmSplits: List<KmSplit>, modifier: Modifier = Modifier) {
         title = stringResource(CoreR.string.hist_chart_pace),
         modifier = modifier,
     ) {
-        val paces = kmSplits.mapNotNull { it.paceSecPerKm }
-        if (paces.size < 2) {
+        // M-07：不能直接用 mapNotNull 丢掉 null 公里——丢掉后柱子左移，
+        // 与 KmSplitsTable 里「第 n 公里」对不上。改为记住每根柱子真实的公里序号。
+        val entries = kmSplits.mapIndexedNotNull { i, s -> s.paceSecPerKm?.let { (i + 1) to it } }
+        if (entries.size < 2) {
             ChartEmpty()
         } else {
+            val paces = entries.map { it.second }
+            val kmNumbers = entries.map { it.first }
             val producer = remember { CartesianChartModelProducer() }
             LaunchedEffect(paces) {
                 producer.runTransaction {
@@ -101,7 +107,11 @@ fun PaceChartCard(kmSplits: List<KmSplit>, modifier: Modifier = Modifier) {
                             Formatters.paceText(value.toLong()) ?: ""
                         },
                     ),
-                    bottomAxis = HorizontalAxis.rememberBottom(),
+                    bottomAxis = HorizontalAxis.rememberBottom(
+                        valueFormatter = CartesianValueFormatter { _, value, _ ->
+                            kmNumbers.getOrNull(value.toInt())?.toString() ?: ""
+                        },
+                    ),
                 ),
                 modelProducer = producer,
                 modifier = Modifier
@@ -153,7 +163,8 @@ fun KmSplitsTable(kmSplits: List<KmSplit>, modifier: Modifier = Modifier) {
                 stringResource(CoreR.string.hist_splits_km, s.index + 1),
                 Formatters.distanceText(s.distanceM),
                 Formatters.durationText(s.movingSec),
-                s.paceSecPerKm?.let { Formatters.paceText(it) } ?: "—",
+                s.paceSecPerKm?.let { Formatters.paceText(it) }
+                    ?: stringResource(CoreR.string.common_stat_unknown),
             )
         },
         modifier = modifier,
@@ -173,9 +184,10 @@ fun GainSplitsTable(gainSplits: List<GainSplit>, modifier: Modifier = Modifier) 
         rows = gainSplits.map { s ->
             listOf(
                 stringResource(CoreR.string.hist_splits_gain_no, s.index + 1),
-                "+" + Formatters.metersText(s.gainM),
+                stringResource(CoreR.string.common_stat_gain, Formatters.metersText(s.gainM)),
                 Formatters.distanceText(s.distanceM),
-                s.paceSecPerKm?.let { Formatters.paceText(it) } ?: "—",
+                s.paceSecPerKm?.let { Formatters.paceText(it) }
+                    ?: stringResource(CoreR.string.common_stat_unknown),
             )
         },
         modifier = modifier,
@@ -202,15 +214,22 @@ private fun SplitsTable(headers: List<String>, rows: List<List<String>>, modifie
                     )
                 }
             }
-            rows.forEach { row ->
-                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    row.forEach {
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            modifier = Modifier.weight(1f),
-                        )
+            // H-14：分段可能几十上百行，普通 Column 会一次性组合全部行。
+            // 外层已是纵向滚动容器，这里禁掉自身滚动即可享受 Lazy 的按需组合。
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                userScrollEnabled = false,
+            ) {
+                itemsIndexed(rows) { _, row ->
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        row.forEach {
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                     }
                 }
             }

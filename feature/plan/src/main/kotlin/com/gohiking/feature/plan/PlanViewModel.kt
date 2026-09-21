@@ -1,5 +1,7 @@
 package com.gohiking.feature.plan
 
+import kotlin.math.ceil
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.amap.api.maps.model.LatLng
@@ -31,6 +33,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -97,6 +100,8 @@ data class PlanUiState(
     val manualDifficulty: Difficulty? = null,
     val manualSavedRouteId: String? = null,
     val manualLimitHit: Boolean = false, // F-PLAN-28 超上限提示
+    // M-05：保存进行中标志，防止连点产生两条相同线路
+    val saving: Boolean = false,
 )
 
 /**
@@ -120,6 +125,9 @@ class PlanViewModel(
 
     private var planJob: kotlinx.coroutines.Job? = null
     private var manualJob: kotlinx.coroutines.Job? = null
+    // H-11：搜索协程必须可取消，否则每敲一个字符都留一条在飞的请求（乱序覆盖）
+    private var searchJob: kotlinx.coroutines.Job? = null
+    private var returnJob: kotlinx.coroutines.Job? = null
 
     /** F-PLAN-03/04：地图空白点选；手动模式下 = 添加途经点（F-PLAN-21） */
     fun onMapTap(latLng: LatLng) {
@@ -150,14 +158,22 @@ class PlanViewModel(
         replan()
     }
 
-    /** 搜索框输入变化（防抖在 UI 层做，VM 只负责发请求） */
+    /**
+     * 搜索框输入变化。
+     * H-11：注释原本写「防抖在 UI 层做」，但 UI 层根本没做 —— 每个字符一条永不取消的协程，
+     * 慢的旧响应会覆盖快的新响应。改在 VM 内取消上一条 + 300ms 防抖。
+     */
     fun onSearchInput(keyword: String, center: LatLng?) {
         val kw = keyword.trim()
+        searchJob?.cancel()
         if (kw.isEmpty()) {
             _state.update { it.copy(suggestions = emptyList(), hint = SearchHint.NONE) }
             return
         }
-        viewModelScope.launch { search(kw, center) }
+        searchJob = viewModelScope.launch {
+            delay(SEARCH_DEBOUNCE_MS)
+            search(kw, center)
+        }
     }
 
     /** 联想候选被选中：真实 POI 直接落点；「只是个词」→ 拿词再发一次关键词搜索（PRD 6.2.1 细节 1） */
@@ -170,7 +186,8 @@ class PlanViewModel(
                 assign(PlanPoint(name = s.name, latLng = latLng))
             }
         } else {
-            viewModelScope.launch { search(s.name, center) }
+            searchJob?.cancel()
+            searchJob = viewModelScope.launch { search(s.name, center) }
         }
     }
 
@@ -204,13 +221,13 @@ class PlanViewModel(
 
     /** 重选：清空起终点与全部候选，回到起点 */
     fun reset() {
-        planJob?.cancel()
+        cancelAll()
         _state.update { PlanUiState(activeTarget = SelectTarget.START) }
     }
 
     /** F-PLAN-20：进入手动打点模式（自动规划失败或用户主动）；已选起终点转为初始途经点 */
     fun enterManualMode() {
-        planJob?.cancel()
+        cancelAll()
         val s = _state.value
         val carried = listOfNotNull(s.start, s.end)
         _state.update { PlanUiState(manualMode = true, manualWaypoints = carried) }
@@ -219,7 +236,7 @@ class PlanViewModel(
 
     /** 退出手动模式，回到选点态 */
     fun exitManualMode() {
-        manualJob?.cancel()
+        cancelAll()
         _state.update { PlanUiState(activeTarget = SelectTarget.START) }
     }
 
@@ -267,12 +284,22 @@ class PlanViewModel(
         if (!s.confirming || s.returnPlanning) return
         val a = s.start?.latLng ?: return
         val b = s.end?.latLng ?: return
-        viewModelScope.launch {
+        returnJob?.cancel()
+        returnJob = viewModelScope.launch {
             _state.update { it.copy(returnPlanning = true) }
+            // M-06：异常时 returnPlanning 必须复位，否则按钮被转圈图标永久替换
+            try {
+                replanReturnInternal(b, a)
+            } finally {
+                _state.update { it.copy(returnPlanning = false) }
+            }
+        }
+    }
+
+    private suspend fun replanReturnInternal(b: LatLng, a: LatLng) {
             val paths = routeClient.walkRoutes(b, a) // 返程：终点 → 起点
             if (paths.isEmpty()) {
-                _state.update { it.copy(returnPlanning = false) } // 保留原路返回
-                return@launch
+                return // 保留原路返回
             }
             val rp = paths.first()
             _state.update {
@@ -288,15 +315,28 @@ class PlanViewModel(
                 null
             }
             _state.update { it.copy(returnMetrics = metrics, returnDifficulty = difficulty) }
-        }
     }
 
     /** 确认态保存计划（F-PLAN-40 命名由 UI 对话框传入；OUTBOUND + RETURN 两段同事务落库） */
     fun savePlan(name: String?) {
         val s = _state.value
         val c = s.candidates.getOrNull(s.chosenIndex) ?: return
-        if (s.chosenRouteId != null) return // 已落库，防重复
+        if (s.chosenRouteId != null || s.saving) return // M-05：已落库或正在保存 → 忽略重复点击
+        _state.update { it.copy(saving = true) }
         viewModelScope.launch {
+            try {
+                savePlanInternal(c, s, name)
+            } finally {
+                _state.update { it.copy(saving = false) }
+            }
+        }
+    }
+
+    private suspend fun savePlanInternal(
+        c: RouteCandidate,
+        s: PlanUiState,
+        name: String?,
+    ) {
             val routeId = UUID.randomUUID().toString()
             val legs = ArrayList<PlannedLegEntity>(2)
             // 去程（polylineJson 存抽稀后折线，PRD 7.1；记录轨迹「原始点入库」规则不适用于计划线）
@@ -305,10 +345,12 @@ class PlanViewModel(
                 plannedRouteId = routeId,
                 legType = "OUTBOUND",
                 distanceM = c.path.distanceM.toDouble(),
-                ascentM = c.metrics?.ascentM ?: 0.0,
-                descentM = c.metrics?.descentM ?: 0.0,
-                estimatedMin = (c.path.durationS / 60).toInt(),
-                difficulty = (c.difficulty ?: Difficulty.MODERATE).name,
+                // H-06：高程/难度不可用时落 null，绝不用 0 / MODERATE 冒充
+                ascentM = c.metrics?.ascentM,
+                descentM = c.metrics?.descentM,
+                // L-16：耗时向上取整，119s → 2 min（此前 119s 显示 1 min、<60s 显示 0）
+                estimatedMin = ceil(c.path.durationS / 60.0).toInt(),
+                difficulty = c.difficulty?.name,
                 polylineJson = PolylineJson.encode(
                     PolylineSimplifier.simplify(
                         c.path.points.map { LatLngValue(it.latitude, it.longitude) },
@@ -324,10 +366,10 @@ class PlanViewModel(
                     plannedRouteId = routeId,
                     legType = "RETURN",
                     distanceM = rp.distanceM.toDouble(),
-                    ascentM = s.returnMetrics?.ascentM ?: 0.0,
-                    descentM = s.returnMetrics?.descentM ?: 0.0,
-                    estimatedMin = (rp.durationS / 60).toInt(),
-                    difficulty = (s.returnDifficulty ?: Difficulty.MODERATE).name,
+                    ascentM = s.returnMetrics?.ascentM,
+                    descentM = s.returnMetrics?.descentM,
+                    estimatedMin = ceil(rp.durationS / 60.0).toInt(),
+                    difficulty = s.returnDifficulty?.name,
                     polylineJson = PolylineJson.encode(
                         PolylineSimplifier.simplify(
                             rp.points.map { LatLngValue(it.latitude, it.longitude) },
@@ -343,12 +385,11 @@ class PlanViewModel(
                 source = "AUTO",
                 createdAt = System.currentTimeMillis(),
                 totalDistanceM = legs.sumOf { it.distanceM },
-                totalAscentM = legs.sumOf { it.ascentM },
-                totalDescentM = legs.sumOf { it.descentM },
+                totalAscentM = sumOrNull(legs.map { it.ascentM }),
+                totalDescentM = sumOrNull(legs.map { it.descentM }),
             )
             routeDao.saveWithLegs(route, legs)
             _state.update { it.copy(chosenRouteId = routeId) }
-        }
     }
 
     /** F-PLAN-16：重新规划 */
@@ -448,10 +489,10 @@ class PlanViewModel(
                 plannedRouteId = routeId,
                 legType = "OUTBOUND",
                 distanceM = dist,
-                ascentM = m?.ascentM ?: 0.0,
-                descentM = m?.descentM ?: 0.0,
-                estimatedMin = ((m?.estimatedDurationSec ?: 0L) / 60).toInt(),
-                difficulty = (s.manualDifficulty ?: Difficulty.MODERATE).name,
+                ascentM = m?.ascentM,
+                descentM = m?.descentM,
+                estimatedMin = ceil((m?.estimatedDurationSec ?: 0L) / 60.0).toInt(),
+                difficulty = s.manualDifficulty?.name,
                 polylineJson = PolylineJson.encode(simplified),
             )
             val route = PlannedRouteEntity(
@@ -469,8 +510,20 @@ class PlanViewModel(
         }
     }
 
+    /** H-06：任一子项未知 → 汇总未知（不得写 0） */
+    private fun sumOrNull(values: List<Double?>): Double? =
+        if (values.any { it == null }) null else values.sumOf { it ?: 0.0 }
+
+    /** M-04：重置/切模式时必须取消全部在飞协程，否则重置后会被陈旧结果写回 */
+    private fun cancelAll() {
+        planJob?.cancel(); planJob = null
+        manualJob?.cancel(); manualJob = null
+        searchJob?.cancel(); searchJob = null
+        returnJob?.cancel(); returnJob = null
+    }
+
     private fun manualRouteName(s: PlanUiState): String =
-        s.manualWaypoints.lastOrNull()?.name
+        s.manualWaypoints.lastOrNull { !it.name.isNullOrBlank() }?.name
             ?: appContext.getString(com.gohiking.core.resources.R.string.plan_manual_default, LocalDateTime.now().format(DATE_TIME_FORMAT))
 
     /** 相邻途经点连线重建（F-PLAN-23/24）：直线直连；吸附逐段步行规划、失败回退直线 */
@@ -515,7 +568,11 @@ class PlanViewModel(
     private fun evaluateManual(segs: List<ManualSegment>) {
         manualJob = viewModelScope.launch {
             val flat = segs.flatMap { it.points }
-            if (flat.size < 2) return@launch
+            if (flat.size < 2) {
+                // L-15：不清空会把上一轮的 metrics/difficulty 留在界面上
+                _state.update { it.copy(manualMetrics = null, manualDifficulty = null) }
+                return@launch
+            }
             val distance = RouteEvaluator.polylineDistance(flat.map { LatLngValue(it.latitude, it.longitude) })
             _state.update {
                 it.copy(
@@ -606,7 +663,10 @@ class PlanViewModel(
             // 距离去重（DEV §4.8：差 <5% 视为重复；山区「同一条返回三遍」实测高发）
             val kept = ArrayList<PlannedPath>()
             for (p in paths) {
-                val dup = kept.any { abs(it.distanceM - p.distanceM) / it.distanceM < DIST_DUP_RATIO }
+                // L-01：distanceM 为 0 时会得到 NaN/Inf，比较恒 false，去重静默失效
+                val dup = kept.any {
+                    it.distanceM > 0f && abs(it.distanceM - p.distanceM) / it.distanceM < DIST_DUP_RATIO
+                }
                 if (!dup) kept.add(p)
             }
             val shown = kept.take(MAX_CANDIDATES).map { RouteCandidate(path = it) }
@@ -615,13 +675,19 @@ class PlanViewModel(
             }
             // 后台补齐爬升/难度（评估含高程网络查询，不阻塞首屏）
             for (i in shown.indices) {
-                val pts = shown[i].path.points.map { LatLngValue(it.latitude, it.longitude) }
-                val metrics = RouteEvaluator.evaluate(pts, queryElevation)
-                val difficulty = if (metrics.elevationAvailable) {
-                    RouteEvaluator.difficultyOf(metrics.distanceM, metrics.ascentM ?: 0.0)
-                } else {
-                    null
-                }
+                // M-06：单条评估失败不能中断整个循环，否则剩余候选永远停在「—」
+                val pair = runCatching {
+                    val pts = shown[i].path.points.map { LatLngValue(it.latitude, it.longitude) }
+                    val metrics = RouteEvaluator.evaluate(pts, queryElevation)
+                    val difficulty = if (metrics.elevationAvailable) {
+                        RouteEvaluator.difficultyOf(metrics.distanceM, metrics.ascentM ?: 0.0)
+                    } else {
+                        null
+                    }
+                    metrics to difficulty
+                }.getOrNull() ?: continue
+                val metrics = pair.first
+                val difficulty = pair.second
                 _state.update { st ->
                     val updated = st.candidates.mapIndexed { j, c ->
                         if (j == i) c.copy(metrics = metrics, difficulty = difficulty) else c
@@ -635,7 +701,9 @@ class PlanViewModel(
     private fun routeName(s: PlanUiState): String {
         val a = s.start?.name
         val b = s.end?.name
-        if (a != null && b != null) return "$a → $b"
+        if (a != null && b != null) {
+            return appContext.getString(com.gohiking.core.resources.R.string.plan_route_named, a, b)
+        }
         return appContext.getString(com.gohiking.core.resources.R.string.plan_route_default, LocalDateTime.now().format(DATE_TIME_FORMAT))
     }
 
@@ -669,6 +737,9 @@ class PlanViewModel(
         const val LOCATE_INTERVAL_MS = 1_000L
         const val LOCATE_TIMEOUT_MS = 10_000L
         const val MAX_SUGGESTIONS = 6
+
+        /** H-11：POI 联想防抖（此前完全没做，每敲一个字符发一条请求） */
+        const val SEARCH_DEBOUNCE_MS = 300L
 
         /** DEV §4.8 去重阈值（距离差 <5% 视为重复） */
         const val DIST_DUP_RATIO = 0.05

@@ -24,6 +24,12 @@ interface StepSource {
     /** 暂停期间不计步：暂停时冻结计数（级①更新基准），默认空实现 */
     fun pause() {}
     fun resume() {}
+
+    /**
+     * 释放底层资源（注销传感器监听）。H-04：此前三处 registerListener 均无配对 unregister，
+     * 记录停止后加速度计仍按 SENSOR_DELAY_GAME 采样，持续耗电。
+     */
+    fun close() {}
 }
 
 object StepWire {
@@ -43,7 +49,7 @@ object UnavailableStepSource : StepSource {
 
 /** 级①：TYPE_STEP_COUNTER（开机以来累计值 → 记录开始取基准；暂停时更新基准） */
 class SensorCounterStepSource(
-    sensorManager: SensorManager,
+    private val sensorManager: SensorManager,
 ) : StepSource {
 
     private val flow = MutableStateFlow(0)
@@ -93,10 +99,15 @@ class SensorCounterStepSource(
     override fun resume() {
         paused = false
     }
+
+    override fun close() {
+        paused = true
+        sensorManager.unregisterListener(listener)
+    }
 }
 
 /** 级②：TYPE_STEP_DETECTOR（每事件 +1） */
-class SensorDetectorStepSource(sensorManager: SensorManager) : StepSource {
+class SensorDetectorStepSource(private val sensorManager: SensorManager) : StepSource {
 
     private val flow = MutableStateFlow(0)
     override val steps: Flow<Int> = flow
@@ -127,10 +138,18 @@ class SensorDetectorStepSource(sensorManager: SensorManager) : StepSource {
     override fun resume() {
         paused = false
     }
+
+    override fun close() {
+        paused = true
+        sensorManager.unregisterListener(listener)
+    }
 }
 
 /** 级③：加速度计自研算法（50Hz → AccelStepDetector） */
-class AccelAlgorithmStepSource(sensorManager: SensorManager, clock: () -> Long = System::currentTimeMillis) : StepSource {
+class AccelAlgorithmStepSource(
+    private val sensorManager: SensorManager,
+    clock: () -> Long = System::currentTimeMillis,
+) : StepSource {
 
     private val flow = MutableStateFlow(0)
     override val steps: Flow<Int> = flow
@@ -163,6 +182,11 @@ class AccelAlgorithmStepSource(sensorManager: SensorManager, clock: () -> Long =
 
     override fun resume() {
         paused = false
+    }
+
+    override fun close() {
+        paused = true
+        sensorManager.unregisterListener(listener)
     }
 }
 

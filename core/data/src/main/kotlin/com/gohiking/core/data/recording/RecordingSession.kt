@@ -16,6 +16,7 @@ import com.gohiking.core.data.alert.AlertSettingsProvider
 import com.gohiking.core.data.alert.AlertVoice
 import com.gohiking.core.data.alert.MarkerDraft
 import com.gohiking.core.data.stats.CalorieCalculator
+import com.gohiking.core.datastore.SettingsRepository
 import com.gohiking.core.location.LocationProvider
 import com.gohiking.core.location.altitude.AltitudeFuser
 import com.gohiking.core.location.altitude.ThresholdAccumulator
@@ -38,6 +39,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -62,6 +64,7 @@ class RecordingSession @Inject constructor(
     @ApplicationContext private val context: Context,
     @ApplicationScope private val scope: CoroutineScope,
     private val alertSettingsProvider: AlertSettingsProvider,
+    private val settingsRepository: SettingsRepository,
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.Idle)
     val state: StateFlow<SessionState> = _state.asStateFlow()
@@ -282,9 +285,11 @@ class RecordingSession @Inject constructor(
             movingSecBySegment.values.sum()
         }
         val distance = distanceM
-        // 卡路里与最高速度：保存时算一次落库（DEV §4.12「汇总统计要落库」）；体重默认 65kg（M3 接设置）
+        // 卡路里与最高速度：保存时算一次落库（DEV §4.12「汇总统计要落库」）。
+        // H-02：体重此前写死 65kg，F-SET-06 的输入项完全不生效 —— 改为读设置。
         val allPoints = withContext(Dispatchers.IO) { db.trackPointDao().allOf(s.tripId) }
-        val kcal = CalorieCalculator.estimate(allPoints, bodyWeightKg = 65)
+        val bodyWeightKg = settingsRepository.settings.first().bodyWeightKg
+        val kcal = CalorieCalculator.estimate(allPoints, bodyWeightKg = bodyWeightKg)
         val maxSpd = maxSpeedMps
         // F-HIS-33/34：分母用运动时长（不含暂停）；distance < 50m → null（导出写 null）
         val avgSpeedMps = if (distance >= 50 && movingDurationSec > 0) distance / movingDurationSec else null
@@ -336,6 +341,7 @@ class RecordingSession @Inject constructor(
         tickJob = null
         stepsCollectJob?.cancel()
         stepsCollectJob = null
+        releaseStepSource()
         unregisterPressureListener()
         tripId = null
         _state.value = SessionState.Finished(draft)
@@ -365,6 +371,7 @@ class RecordingSession @Inject constructor(
             db.trackPointDao().deleteOf(draft.trip.id)
             db.recordingStateDao().clear()
         }
+        releaseStepSource()
         _state.value = SessionState.Idle
     }
 
@@ -460,6 +467,23 @@ class RecordingSession @Inject constructor(
         val listener = pressureListener ?: return
         context.getSystemService(SensorManager::class.java)?.unregisterListener(listener)
         pressureListener = null
+    }
+
+    /** H-04：注销计步传感器监听，停止记录 / 恢复前都必须调用，避免后台持续采样耗电 */
+    private fun releaseStepSource() {
+        stepSource?.close()
+        stepSource = null
+        currentSteps = -1
+    }
+
+    /** C-02（F-REC-09 前半）：丢弃快照里已分批落库的轨迹点 */
+    suspend fun discardRecoverable() {
+        val snap = db.recordingStateDao().get() ?: return
+        db.withTransaction {
+            db.trackPointDao().deleteOf(snap.tripId)
+            db.recordingStateDao().clear()
+        }
+        Timber.i("丢弃可恢复快照 tripId=%s", snap.tripId)
     }
 
     private fun startLocationCollection() {

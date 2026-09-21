@@ -6,6 +6,7 @@ import com.amap.api.location.AMapLocationClient
 import com.amap.api.location.AMapLocationClientOption
 import com.amap.api.location.AMapLocationListener
 import com.gohiking.core.location.LocationFix
+import com.gohiking.core.location.PrivacyConsent
 import com.gohiking.core.location.LocationProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -80,7 +81,7 @@ class AmapLocationSource @Inject constructor(
                 isNeedAddress = false
             }
         }
-        val c = client ?: AMapLocationClient(context.applicationContext).also { client = it }
+        val c = client ?: newClient()
         c.setLocationOption(option)
         c.setLocationListener(listener)
         c.startLocation()
@@ -89,6 +90,17 @@ class AmapLocationSource @Inject constructor(
 
     override fun stop() {
         client?.stopLocation()
+    }
+
+    /**
+     * C-03：定位 SDK 的合规接口必须在 AMapLocationClient 实例化**之前**调用；
+     * 且只能在用户同意之后（loc 6.4.5 强制，否则 SDK 直接拒绝定位）。
+     */
+    private fun newClient(): AMapLocationClient {
+        PrivacyConsent.assertAgreed("location SDK")
+        AMapLocationClient.updatePrivacyShow(context.applicationContext, true, true)
+        AMapLocationClient.updatePrivacyAgree(context.applicationContext, true)
+        return AMapLocationClient(context.applicationContext).also { client = it }
     }
 
     fun release() {

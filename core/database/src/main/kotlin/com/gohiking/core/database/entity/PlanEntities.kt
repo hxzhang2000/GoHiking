@@ -17,8 +17,9 @@ data class PlannedRouteEntity(
     val source: String,
     val createdAt: Long,
     val totalDistanceM: Double,
-    val totalAscentM: Double,
-    val totalDescentM: Double,
+    // H-06：高程不可用时为 null（PRD「绝不编造」，UI 显示「—」），不得写 0
+    val totalAscentM: Double?,
+    val totalDescentM: Double?,
 )
 
 /** 计划线路的往返两段（PRD 7.1）。[legType]：OUTBOUND / RETURN；[difficulty]：EASY/MODERATE/HARD/CHALLENGING */
@@ -39,10 +40,11 @@ data class PlannedLegEntity(
     val plannedRouteId: String,
     val legType: String,
     val distanceM: Double,
-    val ascentM: Double,
-    val descentM: Double,
+    // H-06：高程/难度不可用时为 null
+    val ascentM: Double?,
+    val descentM: Double?,
     val estimatedMin: Int?,
-    val difficulty: String,
+    val difficulty: String?,
     val polylineJson: String, // 抽稀后的坐标点数组 JSON
 )
 

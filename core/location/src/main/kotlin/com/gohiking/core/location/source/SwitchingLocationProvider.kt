@@ -69,8 +69,10 @@ class SwitchingLocationProvider(
                 val silent = last == 0L || System.currentTimeMillis() - last > WATCHDOG_TIMEOUT_MS
                 if (silent) {
                     if (backup != null && !usingBackup) {
-                        Timber.w("高德定位 30 秒无回调，切换 Fused 备源")
-                        primary.stop()
+                        // H-03：此前这里会 primary.stop()，主源停止后不再回调，
+                        // 第 55-59 行「主源恢复，切回」分支永远不可达 —— 降级变成不可逆。
+                        // 改为保留主源、只屏蔽其转发，恢复时自然能切回（DEV §6.2）。
+                        Timber.w("高德定位 30 秒无回调，切换 Fused 备源（主源保留待恢复）")
                         backup.start(intervalMs)
                         usingBackup = true
                         collectBackup()

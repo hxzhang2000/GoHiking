@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GoHiking 代码深度审查报告</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --card:#ffffff; --border:#e3e6ea; --text:#1f2329;
+    --text-dim:#5b6472; --text-faint:#8b95a3;
+    --crit:#d93026; --high:#e8710a; --med:#c9a227; --low:#4a7dc9; --ok:#2b8a4b;
+    --crit-bg:#fdecea; --high-bg:#fdf1e3; --med-bg:#fdf8e6; --low-bg:#eaf1fb; --ok-bg:#e9f5ec;
+    --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+       line-height:1.65;padding:32px 20px 80px}
+  .wrap{max-width:1080px;margin:0 auto}
+  header{border-bottom:2px solid var(--border);padding-bottom:20px;margin-bottom:28px}
+  h1{font-size:26px;font-weight:700;letter-spacing:-.3px}
+  .sub{color:var(--text-dim);font-size:13.5px;margin-top:8px}
+  .sub code{background:#eef0f3;padding:1px 6px;border-radius:4px;font-family:var(--mono);font-size:12.5px}
+
+  .dash{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:24px}
+  .stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+  .stat .n{font-size:26px;font-weight:700;line-height:1.2}
+  .stat .l{font-size:12.5px;color:var(--text-dim);margin-top:2px}
+  .n.crit{color:var(--crit)} .n.high{color:var(--high)} .n.med{color:var(--med)}
+  .n.low{color:var(--low)} .n.ok{color:var(--ok)}
+
+  .bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:22px;align-items:center}
+  .bar .lbl{font-size:13px;color:var(--text-dim);margin-right:4px}
+  button.f{background:var(--card);border:1px solid var(--border);color:var(--text-dim);
+    border-radius:999px;padding:6px 15px;font-size:13px;cursor:pointer;transition:.15s;font-family:inherit}
+  button.f:hover{border-color:#b8bfc9;color:var(--text)}
+  button.f.on{background:var(--text);border-color:var(--text);color:#fff}
+
+  .sec{margin-bottom:34px}
+  .sec > h2{font-size:18px;margin-bottom:14px;display:flex;align-items:center;gap:9px}
+  .sec > h2 .cnt{font-size:12.5px;color:var(--text-faint);font-weight:400}
+
+  .f-card{background:var(--card);border:1px solid var(--border);border-left:4px solid var(--border);
+    border-radius:8px;padding:15px 18px;margin-bottom:11px}
+  .f-card.C{border-left-color:var(--crit)} .f-card.H{border-left-color:var(--high)}
+  .f-card.M{border-left-color:var(--med)}  .f-card.L{border-left-color:var(--low)}
+  .f-head{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:7px}
+  .fid{font-family:var(--mono);font-size:12px;color:var(--text-faint);padding-top:3px;flex-shrink:0}
+  .ftitle{font-weight:600;font-size:15px;flex:1;min-width:220px}
+  .badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:4px;letter-spacing:.4px;flex-shrink:0}
+  .badge.C{background:var(--crit-bg);color:var(--crit)}
+  .badge.H{background:var(--high-bg);color:var(--high)}
+  .badge.M{background:var(--med-bg);color:var(--med)}
+  .badge.L{background:var(--low-bg);color:var(--low)}
+  .badge.OK{background:var(--ok-bg);color:var(--ok)}
+  .loc{font-family:var(--mono);font-size:12px;color:#4a5260;background:#f1f3f6;
+       border:1px solid #e6e9ee;border-radius:4px;padding:4px 9px;margin-bottom:9px;display:block;
+       word-break:break-all;line-height:1.5}
+  .loc b{color:var(--crit);font-weight:600}
+  .f-body{font-size:13.8px;color:#2c3441}
+  .f-body p{margin-bottom:7px}
+  .f-body ul{margin:0 0 7px 18px} .f-body li{margin-bottom:3px}
+  .kv{margin-top:9px;font-size:13.3px;border-top:1px dashed var(--border);padding-top:9px}
+  .kv div{margin-bottom:4px}
+  .kv .k{font-weight:600;color:var(--text-dim);display:inline-block;min-width:64px}
+  code.i{font-family:var(--mono);font-size:12.4px;background:#f1f3f6;padding:1px 5px;border-radius:3px;color:#334}
+  .verified{display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:4px;
+            background:var(--ok-bg);color:var(--ok);font-weight:600}
+  .pending{display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:4px;
+            background:var(--med-bg);color:var(--med);font-weight:600}
+
+  table{width:100%;border-collapse:collapse;background:var(--card);
+        border:1px solid var(--border);border-radius:8px;overflow:hidden;font-size:13.2px}
+  th{background:#f1f3f6;text-align:left;padding:9px 13px;font-weight:600;color:var(--text-dim);
+     border-bottom:1px solid var(--border);font-size:12.5px}
+  td{padding:8px 13px;border-bottom:1px solid #eef0f3;vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td.num{font-family:var(--mono);text-align:right;white-space:nowrap}
+
+  .callout{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px 20px;
+           font-size:13.6px;line-height:1.7}
+  .callout.warn{border-left:4px solid var(--med);background:var(--med-bg)}
+  .callout.ok{border-left:4px solid var(--ok)}
+  .callout h3{font-size:14.5px;margin-bottom:8px}
+
+  .lg{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 20px 14px 34px;
+      font-size:13.4px;columns:2;column-gap:34px}
+  .lg li{margin-bottom:5px;break-inside:avoid}
+  @media(max-width:760px){.lg{columns:1}}
+
+  footer{margin-top:36px;padding-top:18px;border-top:1px solid var(--border);
+         color:var(--text-faint);font-size:12.5px}
+  .hide{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>GoHiking 代码深度审查报告</h1>
+  <div class="sub">
+    审查时间 2026-09-20 &nbsp;·&nbsp; 仓库 <code>D:\hxzhang\MyGithubSoftware\GoHiking</code><br>
+    范围：18 个 Gradle 模块，约 105 个 Kotlin 文件 / 14,700 行 + Manifest + 全部 <code>res/</code><br>
+    方法：8 路并行子系统扫描 → 对每条 High 及以上结论执行<b>独立存疑复核</b>（grep 调用点 + 数值实算），推翻不成立者。
+  </div>
+</header>
+
+<div class="dash">
+  <div class="stat"><div class="n crit">4</div><div class="l">CRITICAL</div></div>
+  <div class="stat"><div class="n high">14</div><div class="l">HIGH</div></div>
+  <div class="stat"><div class="n med">18</div><div class="l">MEDIUM</div></div>
+  <div class="stat"><div class="n low">29</div><div class="l">LOW</div></div>
+  <div class="stat"><div class="n ok">1</div><div class="l">推翻的误报</div></div>
+</div>
+
+<div class="bar">
+  <span class="lbl">筛选：</span>
+  <button class="f on" data-k="all">全部</button>
+  <button class="f" data-k="C">CRITICAL</button>
+  <button class="f" data-k="H">HIGH</button>
+  <button class="f" data-k="M">MEDIUM</button>
+  <button class="f" data-k="L">LOW</button>
+</div>
+
+<!-- ============ 误报纠正 ============ -->
+<div class="sec">
+  <h2>复核中推翻的结论 <span class="cnt">（重要：原始扫描误判）</span></h2>
+  <div class="callout warn">
+    <h3>「CoordinateConverter 存在 Critical 级坐标系错误，纬度偏差达 442 米」—— 不成立</h3>
+    <p style="margin-bottom:10px">原始报告声称 <code class="i">transformLat</code> 「用错变量 y/x、系数量级错误，中国大陆城市纬度偏差最多 442 m」。逐一核对标准算法后，该判定<b>方向错误且数值夸大约 33 倍</b>：</p>
+    <ul style="margin:0 0 10px 18px">
+      <li><b>变量没错</b>：<code class="i">transformLat</code> 本就应以 <code class="i">y</code>（纬度偏移）驱动，代码中 <code class="i">y</code> 的使用是<b>正确</b>的。</li>
+      <li><b>只有一个系数错</b>：第 53 行应为 <code class="i">40.0 * sin(y/3.0*PI)</code>，实际写成 <code class="i">20.0</code>。其余 3 行、以及 <code class="i">transformLng</code> 全部 4 行均与标准完全一致。</li>
+      <li><b>实测偏差</b>：对 14 个城市取样实算，与标准实现的最大偏差为 <b>13.36 m</b>（武汉黄鹤楼），理论上限 13.42 m，且<b>仅作用于纬度方向</b>。往返迭代自洽（误差 &lt; 0.02 mm）。</li>
+    </ul>
+    <table style="margin-top:10px">
+      <tr><th>城市</th><th style="text-align:right">纬度偏差 (m)</th><th>城市</th><th style="text-align:right">纬度偏差 (m)</th></tr>
+      <tr><td>北京天安门</td><td class="num">12.15</td><td>重庆解放碑</td><td class="num">7.40</td></tr>
+      <tr><td>上海外滩</td><td class="num">9.55</td><td>哈尔滨站</td><td class="num">12.86</td></tr>
+      <tr><td>广州塔</td><td class="num">1.49</td><td>乌鲁木齐</td><td class="num">2.42</td></tr>
+      <tr><td>深圳市中心</td><td class="num">6.12</td><td>拉萨布达拉宫</td><td class="num">8.50</td></tr>
+      <tr><td>成都天府广场</td><td class="num">13.19</td><td>三亚</td><td class="num">12.95</td></tr>
+      <tr><td>西安钟楼</td><td class="num">9.34</td><td>漠河</td><td class="num">0.39</td></tr>
+      <tr><td>杭州西湖</td><td class="num">12.91</td><td><b>武汉黄鹤楼（最大）</b></td><td class="num"><b>13.36</b></td></tr>
+    </table>
+    <p style="margin-top:12px">降级为 <b>H-10（标准符合性缺陷）</b>：偏差小于照片匹配半径 500 m 与所有产品阈值，不会造成功能失效；但因 13 m 已肉眼可辨，GPX 轨迹叠加在高德底图上会有系统性偏移，<b>必须修</b>。复核脚本保留于 <code class="i">tmp-logs/verify_crs.py</code>。</p>
+  </div>
+</div>
+
+<!-- ============ CRITICAL ============ -->
+<div class="sec">
+  <h2>CRITICAL <span class="cnt">4 项 — 数据丢失 / 功能不可用 / 合规红线</span></h2>
+
+  <div class="f-card C" data-sev="C">
+    <div class="f-head"><span class="fid">C-01</span><span class="ftitle">保存失败被静默吞掉 → 整段行程丢失 + 界面死锁</span><span class="badge C">CRITICAL</span></div>
+    <code class="loc"><b>feature/recording/.../RecordingScreen.kt:370-374</b> × core/data/.../RecordingSession.kt:347-360 × app/.../MainActivity.kt:317</code>
+    <div class="f-body">
+      <p><code class="i">RecordingSession.save()</code> 返回 <code class="i">Boolean</code>，DB 事务失败时返回 <code class="i">false</code> 且<b>不</b>把状态置回 <code class="i">Idle</code>。调用方丢弃返回值并无条件 <code class="i">pendingDraft = null</code>。</p>
+      <p>后果链：<code class="i">state</code> 仍为 <code class="i">Finished</code> → MainActivity:317 的 <code class="i">sessionState !is Idle</code> 继续渲染 RecordingScreen → 但 <code class="i">active == null</code>，统计区与按钮全空、弹窗也没了 → <b>空白死界面</b>。同时轨迹点已分批落库却无对应 trip 记录，成为孤儿数据；叠加 C-04（无返回键处理），用户除杀进程外无法退出。</p>
+      <div class="kv"><div><span class="k">修复</span><code class="i">val ok = session.save(draft); if (ok) pendingDraft = null else 保留弹窗 + 显示失败串</code>，并给 <code class="i">save()</code> 失败分支补 <code class="i">_state.value = SessionState.Idle</code> 之外的显式错误态。</div><div><span class="k">复核</span><span class="verified">已核验：三处代码互相印证</span></div></div>
+    </div>
+  </div>
+
+  <div class="f-card C" data-sev="C">
+    <div class="f-head"><span class="fid">C-02</span><span class="ftitle">崩溃恢复链路完全未接线（F-REC-09 空实现）</span><span class="badge C">CRITICAL</span></div>
+    <code class="loc"><b>core/data/.../recording/RecordingSession.kt:372</b> <code class="i">hasRecoverableSession()</code> / <b>:375</b> <code class="i">restoreFromSnapshot()</code></code>
+    <div class="f-body">
+      <p>全仓库 grep：这两个方法<b>只有定义，零调用点</b>（测试亦无覆盖）。<code class="i">persistSessionState()</code> 每 10 秒仍在写快照，但没有任何地方读。</p>
+      <p>后果：进程被杀 / 崩溃后，<code class="i">recording_state</code> 表残留一行，App 重启后既<b>不提示</b>也<b>不恢复</b>，用户已记录的数小时轨迹静默蒸发——而 PRD 6.7 明确写了崩溃恢复要求。</p>
+      <div class="kv"><div><span class="k">修复</span>MainActivity 启动后 IO 判 <code class="i">hasRecoverableSession()</code>，命中则弹「发现未结束记录，是否继续？」，确认走 <code class="i">restoreFromSnapshot()</code>，拒绝走 <code class="i">discard()</code>。</div><div><span class="k">复核</span><span class="verified">已核验：grep 全仓库无调用点</span></div></div>
+    </div>
+  </div>
+
+  <div class="f-card C" data-sev="C">
+    <div class="f-head"><span class="fid">C-03</span><span class="ftitle">高德<b>定位</b> SDK 隐私合规接口从未调用 → 红线违规 + 真机大概率无定位</span><span class="badge C">CRITICAL</span></div>
+    <code class="loc"><b>core/location/.../source/AmapLocationSource.kt:83</b> <code class="i">AMapLocationClient(context.applicationContext)</code></code>
+    <div class="f-body">
+      <p>全仓库共 5 处 <code class="i">MapsInitializer.updatePrivacyShow/Agree</code>（地图 SDK），但<b>定位 SDK</b> 的 <code class="i">AMapLocationClient.updatePrivacyShow(ctx,true,true)</code> / <code class="i">updatePrivacyAgree(ctx,true)</code> <b>零调用</b>——grep 证实。依赖的三合一包 <code class="i">loc6.4.5</code> 强制要求在 client 实例化前调用。</p>
+      <ul>
+        <li><b>合规</b>：<code class="i">GhApplication.kt:10-12</code> 注释明确写了「必须等用户同意后」，但只守住了地图、没守住定位。</li>
+        <li><b>功能</b>：合规未通过时 SDK 拒绝定位，<code class="i">AmapLocationSource</code> 走 <code class="i">UNAVAILABLE_ERROR_CODES</code> 分支（:59-66），记录功能采集不到点。</li>
+      </ul>
+      <div class="kv"><div><span class="k">修复</span>在同意回调处（或 <code class="i">AmapLocationSource.start()</code> 首次创建 client 前）补两个静态调用，并保证只在 <code class="i">agreed == true</code> 之后执行。</div><div><span class="k">复核</span><span class="verified">已核验：grep 确认零调用</span><span class="pending" style="margin-left:6px">静态签名待反编译确认</span></div></div>
+    </div>
+  </div>
+
+  <div class="f-card C" data-sev="C">
+    <div class="f-head"><span class="fid">C-04</span><span class="ftitle">全仓库无返回键处理 → 任意子页面按返回直接退出 App</span><span class="badge C">CRITICAL</span></div>
+    <code class="loc"><b>app/.../MainActivity.kt:317-401</b> <code class="i">Root()</code> 用 if/else 切换 7 个子页面</code>
+    <div class="f-body">
+      <p>grep <code class="i">BackHandler</code> / <code class="i">NavHost</code> / <code class="i">NavController</code> / <code class="i">OnBackPressedDispatcher</code>：<b>全仓库零命中</b>。7 个子页面（记录 / 详情 / 计划列表 / 计划 / 照片地图 / 设置 / 历史）都提供了 <code class="i">onBack</code> 回调，但<b>没有任何一个接在系统返回键上</b>。</p>
+      <p>后果：在历史页、设置页、详情页按返回键 = <code class="i">finish()</code> 整个 MainActivity。这是最基本的用户预期违背，也放大了 C-01 的死锁伤害。</p>
+      <div class="kv"><div><span class="k">修复</span>最外层包一层 <code class="i">BackHandler</code>，按当前子页面分派到对应 <code class="i">onBack</code>；长期应迁移到 Navigation Compose。</div><div><span class="k">复核</span><span class="verified">已核验：grep 全仓库零命中</span></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ HIGH ============ -->
+<div class="sec">
+  <h2>HIGH <span class="cnt">14 项 — 功能失效 / 编造数据 / 资源泄漏</span></h2>
+
+  <div class="f-card H" data-sev="H">
+    <div class="f-head"><span class="fid">H-01</span><span class="ftitle">导入 ASK 策略会静默跳过全部记录；冲突策略设置是死的</span><span class="badge H">HIGH</span></div>
+    <code class="loc"><b>core/data/.../io/ImportEngine.kt:94, 129-132</b> × <b>app/.../MainActivity.kt:422</b></code>
+    <div class="f-body">
+      <p><code class="i">execute(files, policy, decisions, …)</code> 的 <code class="i">decisions</code> 由逐文件名给出，注释写明「缺失按 SKIP」；而 MainActivity:422 调用 <code class="i">executeImport(files, importPolicy)</code>——<b>从不传 decisions</b>。于是只要策略落到 ASK，第 129 行把所有 trip 判为 SKIPPED。</p>
+      <p>另：<code class="i">AppSettings.ioImportConflictPolicy</code> 除备份序列化与设置页 UI 外<b>无读取点</b>，<code class="i">importPolicy</code> 恒为初始值 SKIP。整条 F-IO-42 冲突处理链路没有真正连通。</p>
+      <div class="kv"><div><span class="k">修复</span>导入预览后由 UI 收集逐条决策传入；<code class="i">ioImportConflictPolicy</code> 从 settings 读取作为默认policy。</div><div><span class="k">复核</span><span class="verified">已核验</span></div></div>
+    </div>
+  </div>
+
+  <div class="f-card H" data-sev="H">
+    <div class="f-head"><span class="fid">H-02</span><span class="ftitle">单位设置三项全是死设置；体重写死 65 kg</span><span class="badge H">HIGH</span></div>
+    <code class="loc"><b>core/datastore/.../AppSettings.kt:25-27</b> unitDistance / unitAltitude / unitPaceDisplay × <b>core/data/.../RecordingSession.kt:287</b></code>
+    <div class="f-body">
+      <p><code class="i">unitDistance</code> / <code class="i">unitAltitude</code> / <code class="i">unitPaceDisplay</code> 全仓库仅出现在备份序列化与设置页 UI selector，<b>无任何真实消费方</b>；展示层走 <code class="i">Formatters</code>，恒定输出公制。用户在「单位」分组改设置，界面毫无变化。</p>
+      <p><code class="i">CalorieCalculator.estimate(allPoints, bodyWeightKg = 65)</code> 写死默认体重（注释自称「M3 接设置」，而 M3 设置页已落地），F-SET-06 的体重输入不产生任何效果。</p>
+      <div class="kv"><div><span class="k">修复</span><code class="i">Formatters</code> 接收单位配置并换算；卡路里从 <code class="i">SettingsRepository.settings</code> 读 <code class="i">bodyWeightKg</code>。</div><div><span class="k">复核</span><span class="verified">已核验：grep 确认无消费点</span></div></div>
+    </div>
+  </div>
+
+  <div class="f-card H" data-sev="H">
+    <div class="f-head"><span class="fid">H-03</span><span class="ftitle">主定位源被 stop 后「恢复切回」成为死代码，降级不可逆</span><span class="badge H">HIGH</span></div>
+    <code class="loc"><b>core/location/.../source/SwitchingLocationProvider.kt:73</b> <code class="i">primary.stop()</code> vs <b>:55-59</b> 恢复分支</code>
+    <div class="f-body">
+      <p>看门狗判定主源 30 s 无回调时执行 <code class="i">primary.stop()</code>（AMapLocationClient 停止后不再回调）。此后 <code class="i">primary.fixes</code> 永不发射，第 55-59 行「主源恢复，切回高德定位」分支<b>永远不可达</b>。DEV §6.2 要求的「恢复后切回」实际是一次性单向降级：只要短暂进隧道/无信号，本次记录余下时间都锁死在 Fused 备源上。</p>
+      <div class="kv"><div><span class="k">修复</span>降级时保留主源，仅停止转发（设 <code class="i">usingBackup</code> 屏蔽 emit）；或定期 <code class="i">primary.start()</code> 重试。</div><div><span class="k">复核</span><span class="verified">已核验：读全文确认控制流</span></div></div>
+    </div>
+  </div>
+
+  <div class="f-card H" data-sev="H">
+    <div class="f-head"><span class="fid">H-04</span><span class="ftitle">计步传感器注册后从未注销 → 后台持续耗电</span><span class="badge H">HIGH</span></div>
+    <code class="loc"><b>core/location/.../step/StepSources.kt:80, 119, 156</b>（3 处 registerListener，0 处 unregister）</code>
+    <div class="f-body">
+      <p>三个 StepSource（COUNTER / DETECTOR / 加速度计自研）均 <code class="i">sensorManager.registerListener(...)</code>，但 grep 全仓库：该文件<b>没有任何 unregister</b>（对比 <code class="i">RecordingSession</code> 的气压监听器有正确配对 <code class="i">unregisterPressureListener</code>）。记录停止 / 进程存活期间加速度计按 <code class="i">SENSOR_DELAY_GAME</code> 持续采样。</p>
+      <div class="kv"><div><span class="k">修复</span>给 StepSource 增加 <code class="i">close()</code>，在 <code class="i">RecordingSession.stop()/discard()/save()</code> 全部路径调用。</div><div><span class="k">复核</span><span class="verified">已核验：grep 确认无 unregister</span></div></div>
+    </div>
+  </div>
+
+  <div class="f-card H" data-sev="H">
+    <div class="f-head"><span class="fid">H-05</span><span class="ftitle">在权限回调里启动前台服务 → Android 12+ 可能抛 ForegroundServiceStartNotAllowedException</span><span class="badge H">HIGH</span></div>
+    <code class="loc"><b>app/.../MainActivity.kt:577</b> <code class="i">RecordingService.start(context)</code> 位于 permissionLauncher 回调内</code>
+    <div class="f-body">
+      <p>权限弹窗期间 Activity 已 <code class="i">onPause</code>，ActivityResult 在 <code class="i">ON_START</code> 阶段派发，此时进程状态未必已回到 TOP；targetSdk 35 下后台启动 FGS 受限 → 崩溃。<b>时序相关、非必现</b>，但正是 Android 12+ 最典型的 FGS 崩溃形态，且出现在「首次开始记录」这条主路径上。</p>
+      <div class="kv"><div><span class="k">修复</span>回调内只置标记，由 <code class="i">ON_RESUME</code> 后的 effect 触发服务启动；或捕获该异常降级。</div><div><span class="k">复核</span><span class="pending">需真机复现（可能降级为 MEDIUM）</span></div></div>
+    </div>
+  </div>
+
+  <div class="f-card H" data-sev="H">
+    <div class="f-head"><span class="fid">H-06</span><span class="ftitle">高程不可用时向 DB 写入伪造的 0 爬升与 MODERATE 难度（违反「绝不编造」）</span><span class="badge H">HIGH</span></div>
+    <code class="loc"><b>feature/plan/.../PlanViewModel.kt:308-311, 327, 346</b></code>
+    <div class="f-body">
+      <p><code class="i">RouteEvaluator.evaluate</code> 在高程不可用时刻意返回 <code class="i">ascentM = null</code>，但 ViewModel 用 <code class="i">c.metrics?.ascentM ?: 0.0</code> 落成绝对值 0，<code class="i">c.difficulty ?: Difficulty.MODERATE</code> 同理。列表页再显示为「Ascent ≈0 m (estimated)」——用户会理解为「这条线没有爬升」。</p>
+      <p>PRD 明确「高程不可用时显示『—』，绝不编造」。这里不仅编造，还写进了数据库无法回溯。</p>
+      <div class="kv"><div><span class="k">修复</span><code class="i">PlannedLegEntity.ascentM/descentM</code> 改 <code class="i">Double?</code> 落 null，列表页 null 显示 <code class="i">common_stat_unknown</code>。</div><div><span class="k">复核</span><span class="verified">已核验</span></div></div>
+    </div>
+  </div>
+
+  <div class="f-card H" data-sev="H">
+    <div class="f-head"><span class="fid">H-07</span><span class="ftitle">ACCESS_BACKGROUND_LOCATION 只声明不申请（功能名存实亡 + 上架审查风险）</span><span class="badge H">HIGH</span></div>
+    <code class="loc"><b>app/src/main/AndroidManifest.xml:13</b> × 权限请求点仅 <b>MainActivity.kt:689-694</b>（FINE/COARSE/POST_NOTIFICATIONS）</code>
+    <div class="f-body">
+      <p>后台定位无法与前台同批授予（Android 11+ 必须单独引导至系统设置页），而代码从未请求。后果：① <code class="i">recordBackgroundEnabled</code> 与 PRD 6.7「后台记录」名存实亡；② 声明高危权限却不申请，触发 Play 数据安全/权限声明审查不一致。</p>
+      <div class="kv"><div><span class="k">修复</span>要么实现「引导至设置页授予后台定位」的独立流程，要么删掉该声明并同步改设置页文案。</div><div><span class="k">复核</span><span class="verified">已核验</span></div></div>
+    </div>
+  </div>
+
+  <div class="f-card H" data-sev="H">
+    <div class="f-head"><span class="fid">H-08</span><span class="ftitle">SettingsViewModel 跨 recreate 持有旧 Activity → 第二次语言切换静默失效</span><span class="badge H">HIGH</span></div>
+    <code class="loc"><b>feature/settings/.../SettingsViewModel.kt:68, 72</b> × <b>SettingsScreen.kt:55-59</b> × <b>MainActivity.kt:367-371</b></code>
+    <div class="f-body">
+      <p><code class="i">onLanguageChanged</code> 是 MainActivity 传入的 lambda，闭包捕获了 Activity 实例。<code class="i">recreate()</code> 属配置变更式销毁，ViewModel 被保留并复用，其回调仍指向<b>已销毁的旧 Activity</b>——第二次切语言的 <code class="i">Toast</code>/<code class="i">recreate()</code> 作用在死对象上；同时构成 Activity 泄漏。</p>
+      <div class="kv"><div><span class="k">修复</span>VM 只写 DataStore 并暴露一次性事件，UI 侧 <code class="i">LaunchedEffect</code> 消费。</div><div><span class="k">复核</span><span class="pending">推断成立，需真机连切两次验证</span></div></div>
+    </div>
+  </div>
+
+  <div class="f-card H" data-sev="H">
+    <div class="f-head"><span class="fid">H-09</span><span class="ftitle">英文界面弹出中文错误文案（硬编码 CJK 出现在用户可见路径）</span><span class="badge H">HIGH</span></div>
+    <code class="loc"><b>app/.../MainActivity.kt:219, 246, 263, 265, 283, 285</b> × <b>ImportEngine.kt:100, 102, 120, 124, 130, 134, 146</b></code>
+    <div class="f-body">
+      <p>MainActivity 的 <code class="i">error("无法写入所选文件")</code> 等 message 被 <code class="i">ioRun</code> 捕获后在 <code class="i">:455 Text(msg)</code> 直接上屏；ImportEngine 的 <code class="i">"计划线路已存在（id 相同）"</code> 等经 <code class="i">IoDialogs</code> 的预览/报告弹窗直接渲染。</p>
+      <p><code class="i">lint.warningsAsErrors=true</code> <b>抓不到</b>——它们走的是变量而非字面量。同理，<code class="i">checkStringKeys</code> 门禁当前也通过（EN/ZH 各 243 键完全对齐），<b>真正的 i18n 缺陷在 Kotlin 侧，门禁看不见</b>。</p>
+      <div class="kv"><div><span class="k">修复</span>改为抛带 code 的异常并在 UI 侧 <code class="i">stringResource</code> 映射；给 <code class="i">checkStringKeys</code> 补一条「Kotlin 中禁止 CJK 字面量」扫描规则。</div><div><span class="k">复核</span><span class="verified">已核验</span></div></div>
+    </div>
+  </div>
+
+  <div class="f-card H" data-sev="H">
+    <div class="f-head"><span class="fid">H-10</span><span class="ftitle">CoordinateConverter.transformLat 单行系数写错（详见上方「推翻的误报」）</span><span class="badge H">HIGH</span></div>
+    <code class="loc"><b>core/location/.../crs/CoordinateConverter.kt:53</b> <code class="i">20.0 * sin(y / 3.0 * PI)</code> → 应为 <code class="i">40.0</code></code>
+    <div class="f-body">
+      <p>唯一不符合标准算法的一行。实测纬度方向最大偏差 <b>13.36 m</b>，往返自洽，低于所有产品阈值；但 GPX 轨迹叠加到高德 GCJ-02 底图上会有肉眼可辨的系统性偏移。</p>
+      <div class="kv"><div><span class="k">修复</span>改系数为 40.0，并补一条「与已知标准样本比对」的单元测试（覆盖北京/成都/武汉等已知偏差点）。</div><div><span class="k">复核</span><span class="verified">已实算：脚本 tmp-logs/verify_crs.py</span></div></div>
+    </div>
+  </div>
+
+  <div class="f-card H" data-sev="H">
+    <div class="f-head"><span class="fid">H-11</span><span class="ftitle">POI 搜索零防抖、不可取消 → 请求风暴 + 结果乱序覆盖</span><span class="badge H">HIGH</span></div>
+    <code class="loc"><b>feature/plan/.../PlanScreen.kt:396-399</b> × <b>PlanViewModel.kt:153-161</b></code>
+    <div class="f-body">
+      <p>VM 第 153 行注释写「防抖在 UI 层做」，但 UI 层<b>没做</b>；每次 <code class="i">onValueChange</code> 都裸 <code class="i">viewModelScope.launch</code>，旧请求不取消。慢的旧响应会覆盖快的新响应，用户输入越快结果越错。</p>
+      <div class="kv"><div><span class="k">修复</span>VM 内存 <code class="i">searchJob?.cancel()</code> 再 launch，或 UI 层 <code class="i">debounce(300)</code>。</div><div><span class="k">复核</span><span class="verified">已核验</span></div></div>
+    </div>
+  </div>
+
+  <div class="f-card H" data-sev="H">
+    <div class="f-head"><span class="fid">H-12</span><span class="ftitle">全屏看图 zoom 状态跨页共享且不重置</span><span class="badge H">HIGH</span></div>
+    <code class="loc"><b>feature/media/.../PhotoMapScreen.kt:499</b> <code class="i">var scale</code> 声明在 HorizontalPager 之外</code>
+    <div class="f-body">
+      <p><code class="i">scale</code> 是整个 Dialog 单份状态，翻页不重置，也没有 <code class="i">LaunchedEffect(pagerState.currentPage) { scale = 1f }</code>。第 1 张双指放大后滑到第 2 张，第 2 张直接以 2.5x 渲染。同时 <code class="i">transformable</code> 与 pager 横向拖拽共用指针流，未传 <code class="i">canPan</code>，手势归属不明。</p>
+      <div class="kv"><div><span class="k">修复</span>按页保存 scale（<code class="i">mutableStateMapOf&lt;Int, Float&gt;</code>），并给 transformable 传 <code class="i">canPan = { scale > 1f }</code>。</div><div><span class="k">复核</span><span class="verified">已核验</span></div></div>
+    </div>
+  </div>
+
+  <div class="f-card H" data-sev="H">
+    <div class="f-head"><span class="fid">H-13</span><span class="ftitle">详情页照片条加载竞态 → 概率性永久不显示且无重试</span><span class="badge H">HIGH</span></div>
+    <code class="loc"><b>feature/history/.../TripDetailViewModel.kt:116</b> × <b>TripDetailScreen.kt:203</b></code>
+    <div class="f-body">
+      <p><code class="i">loadPhotos()</code> 读 <code class="i">_state.value.trip</code>，但 trip 由<b>另一个协程</b> <code class="i">observeById().collect{}</code>（:61-65）写入，两者无同步。IO 协程先跑完时 trip 为 null → 直接 <code class="i">return</code> → <code class="i">photos</code> 永远停在 null，F-HIS-28 照片条整段隐藏，<b>再也不会亮</b>。</p>
+      <div class="kv"><div><span class="k">修复</span><code class="i">val trip = repo.byId(tripId) ?: return</code> 或在同一协程内 <code class="i">observeById(tripId).first()</code>。</div><div><span class="k">复核</span><span class="verified">已核验</span></div></div>
+    </div>
+  </div>
+
+  <div class="f-card H" data-sev="H">
+    <div class="f-head"><span class="fid">H-14</span><span class="ftitle">「每爬升分段」阈值用错累加器口径，且表格非惰性渲染</span><span class="badge H">HIGH</span></div>
+    <code class="loc"><b>TripRepository.kt:86</b>（传 3.0/10.0）× <b>StatsModels.kt:16</b>（注释写默认 100m）× <b>Charts.kt:205-216</b></code>
+    <div class="f-body">
+      <p>项目决策 5 明确「<b>统计累加器</b>（3m/10m）与<b>打点累加器</b>（100m）是两个独立实例」。但 <code class="i">gainSplits()</code> 把 3.0/10.0 同时当成「分段桶大小」传给 <code class="i">byAltitudeGain</code>，与 <code class="i">StatsModels</code> 注释的 100m 口径冲突：一次 500 m 爬升会产出上百行。</p>
+      <p>而 <code class="i">SplitsTable</code> 又用普通 <code class="i">Column + forEach</code> 全量同步组合，挂在详情页 LazyColumn 单个 item 里 → 详情页直接卡死。</p>
+      <div class="kv"><div><span class="k">修复</span>桶大小按 PRD 明确口径（建议 100m 且与 Memory 决策 5 对齐），表格改 <code class="i">LazyColumn(userScrollEnabled = false)</code> 并加 key。</div><div><span class="k">复核</span><span class="verified">已核验：口径冲突属实</span></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MEDIUM ============ -->
+<div class="sec">
+  <h2>MEDIUM <span class="cnt">18 项 — 状态/生命周期/一致性</span></h2>
+
+  <div class="f-card M" data-sev="M">
+    <div class="f-head"><span class="fid">M-01</span><span class="ftitle">MapView 未转发 onSaveInstanceState（5 处）</span><span class="badge M">MEDIUM</span></div>
+    <code class="loc">RecordingScreen.kt:135-148 · PlanScreen.kt:169-182 · TripDetailScreen.kt:448-461 · PhotoMapScreen.kt:161-174 · MainActivity.kt:553-566</code>
+    <div class="f-body"><p>均只转发 resume/pause/destroy。且 <code class="i">onDestroy()</code> 在 <code class="i">onDispose</code> 里无条件调用，而从详情页 onBack 返回时 Activity 并不 pause → 出现「未 pause 即 destroy」序列，AMap 原生 GL/纹理回收时序不可控，切语言触发 <code class="i">recreate()</code> 时地图状态必丢。</p><div class="kv"><div><span class="k">修复</span><code class="i">onDispose</code> 内先 <code class="i">onPause()</code> 再 <code class="i">onDestroy()</code>；宿主保存 Bundle 并转发。</div></div></div>
+  </div>
+
+  <div class="f-card M" data-sev="M">
+    <div class="f-head"><span class="fid">M-02</span><span class="ftitle">隐私同意状态不落盘，进程被杀后由 Bundle 恢复为「已同意」</span><span class="badge M">MEDIUM</span></div>
+    <code class="loc"><b>MainActivity.kt:162</b> <code class="i">agreed</code> 仅 rememberSaveable；<code class="i">AppSettings.privacyAgreed</code> 全仓库从未被调用</code>
+    <div class="f-body"><p>冷启动同意状态丢失需重弹；反之进程重建后 Bundle 恢复 <code class="i">agreed=true</code>，跳过弹窗直接调用隐私 API。代码 <code class="i">:520-522</code> 注释自称已知，但这是真实合规缺口。</p><div class="kv"><div><span class="k">修复</span>同意时写 <code class="i">setPrivacyAgreed(true)</code>，启动时以 DataStore 为准而非 savedInstanceState。</div></div></div>
+  </div>
+
+  <div class="f-card M" data-sev="M">
+    <div class="f-head"><span class="fid">M-03</span><span class="ftitle">两个 LaunchedEffect 争抢同一个 AMap，计划蓝线会静默消失</span><span class="badge M">MEDIUM</span></div>
+    <code class="loc"><b>RecordingScreen.kt:155</b>（<code class="i">aMap.clear()</code>）× <b>:184-203</b>（计划线 effect，键为 plannedRouteId）</code>
+    <div class="f-body"><p>轨迹 effect 键是 <code class="i">active?.tripId</code>。一旦它重跑（崩溃恢复换新 tripId、重进页面）而 plannedRouteId 未变，<code class="i">clear()</code> 抹掉蓝线，<code class="i">planPolylines</code> 仍留失效引用，计划 effect 不会重画。</p><div class="kv"><div><span class="k">修复</span>清图后同步 <code class="i">planPolylines.clear()</code>，并把 plannedRouteId 也作为轨迹 effect 的键。</div></div></div>
+  </div>
+
+  <div class="f-card M" data-sev="M">
+    <div class="f-head"><span class="fid">M-04</span><span class="ftitle">reset / exitManualMode 取消不干净 → 重置后被陈旧协程写回</span><span class="badge M">MEDIUM</span></div>
+    <code class="loc"><b>PlanViewModel.kt:206-209, 221-224</b>；未纳管 Job：:160 :183 :270 :299 :436</code>
+    <div class="f-body"><p>只取消 <code class="i">planJob</code>/<code class="i">manualJob</code>，其余裸 launch 在重置后仍会 <code class="i">_state.update</code> 写入全新 state。</p><div class="kv"><div><span class="k">修复</span>全部存 Job 统一 cancel，或加 generation 令牌。</div></div></div>
+  </div>
+
+  <div class="f-card M" data-sev="M">
+    <div class="f-head"><span class="fid">M-05</span><span class="ftitle">保存按钮无并发保护 → 可重复触发产生两条相同线路</span><span class="badge M">MEDIUM</span></div>
+    <code class="loc"><b>PlanViewModel.kt:298, 350</b>（写完 DAO 才置位）× <b>PlanScreen.kt:873</b></code>
+    <div class="f-body"><p>前置校验在 launch 之前同步执行，DAO 写入期间 <code class="i">chosenRouteId</code> 仍为 null，按钮此时仍可点。</p><div class="kv"><div><span class="k">修复</span>加 <code class="i">saving: Boolean</code> 状态，UI 上 <code class="i">enabled = !state.saving</code>。</div></div></div>
+  </div>
+
+  <div class="f-card M" data-sev="M">
+    <div class="f-head"><span class="fid">M-06</span><span class="ftitle">replanReturn / 候选补爬升 无 try-finally → 失败后 UI 永久转圈</span><span class="badge M">MEDIUM</span></div>
+    <code class="loc"><b>PlanViewModel.kt:265-292</b>（<code class="i">returnPlanning</code> 永不复位）× <b>:617-631</b>（循环中抛异常中断全部候选）</code>
+    <div class="f-body"><p><code class="i">returnPlanning = true</code> 一旦异常不复位，PlanScreen:615-621 的按钮被转圈图标永久替换，用户无法再操作返程；候选补爬升的 for 循环缺单点 <code class="i">runCatching</code>。</p><div class="kv"><div><span class="k">修复</span><code class="i">try { … } finally { _state.update { it.copy(returnPlanning = false) } }</code>；循环体单独兜底。</div></div></div>
+  </div>
+
+  <div class="f-card M" data-sev="M">
+    <div class="f-head"><span class="fid">M-07</span><span class="ftitle">配速图柱序号与公里号错位</span><span class="badge M">MEDIUM</span></div>
+    <code class="loc"><b>feature/history/.../Charts.kt:86</b>（<code class="i">mapNotNull</code> 丢弃 null 段）× <b>:104</b>（bottomAxis 无 valueFormatter，显示 0-based 下标）</code>
+    <div class="f-body"><p><code class="i">paceSecPerKm == null</code>（段距离 &lt; 50m）的公里整段被丢弃，后续柱子整体左移；轴上又是 Vico 原始下标，与 KmSplitsTable 的 <code class="i">index + 1</code>（1-based）也对不上。</p><div class="kv"><div><span class="k">修复</span>保留槽位 + 给 bottomAxis 加 <code class="i">valueFormatter { _, v, _ -> "${v.toInt() + 1}" }</code>。</div></div></div>
+  </div>
+
+  <div class="f-card M" data-sev="M">
+    <div class="f-head"><span class="fid">M-08</span><span class="ftitle">照片地图 marker 重建：主线程同步 + 无并发上限解码</span><span class="badge M">MEDIUM</span></div>
+    <code class="loc"><b>PhotoMapScreen.kt:373-395</b>（Main 上 <code class="i">map.clear()</code> + 逐个 addMarker；每簇一个 IO 解码协程，无 Semaphore）</code>
+    <div class="f-body"><p>簇数上千时直接掉帧；数千张照片会同时并发解码。</p><div class="kv"><div><span class="k">修复</span>预计算移到 Default，只 Main 落 marker；解码加 <code class="i">Semaphore(4)</code> 并在重建前 cancel 上轮 Job。</div></div></div>
+  </div>
+
+  <div class="f-card M" data-sev="M">
+    <div class="f-head"><span class="fid">M-09</span><span class="ftitle">Edge-to-edge 未处理 WindowInsets → 底部按钮与导航栏重叠</span><span class="badge M">MEDIUM</span></div>
+    <code class="loc"><b>MainActivity.kt:129</b> enableEdgeToEdge；但 <b>:604</b>（padding 16dp）、<b>:592</b>（padding top 48dp）、<b>SettingsScreen.kt:64</b></code>
+    <div class="f-body"><p>手势导航下底部按钮被导航栏压住，顶部标题可能顶到状态栏。</p><div class="kv"><div><span class="k">修复</span>改 <code class="i">safeDrawingPadding()</code> 或 <code class="i">WindowInsets.navigationBars.asPaddingValues()</code>。</div></div></div>
+  </div>
+
+  <div class="f-card M" data-sev="M">
+    <div class="f-head"><span class="fid">M-10</span><span class="ftitle">错误对话框直接展示异常 message / 技术类名</span><span class="badge M">MEDIUM</span></div>
+    <code class="loc"><b>MainActivity.kt:455</b> <code class="i">Text(msg)</code>，<code class="i">msg = t.message ?: t::class.java.simpleName</code>（:198）</code>
+    <div class="f-body"><p>会把 <code class="i">SecurityException</code> 等英文技术文本或裸类名给用户看；<code class="i">error_generic</code>（strings.xml:182）已定义却<b>全仓库未引用</b>（另 5 个未引用键：common_action_retry、common_tab_map/plan/me、…）。</p><div class="kv"><div><span class="k">修复</span>改用 <code class="i">error_generic</code> + 可选技术详情折叠区。</div></div></div>
+  </div>
+
+  <div class="f-card M" data-sev="M">
+    <div class="f-head"><span class="fid">M-11</span><span class="ftitle">i18n：装饰符号与占位符硬编码（Kotlin 侧）</span><span class="badge M">MEDIUM</span></div>
+    <code class="loc">Charts.kt:156,176,178 · PhotoMapScreen.kt:475,595（<code class="i">"—"</code>）· HistoryListViewModel.kt:50（<code class="i">"0 m" "0:00:00"</code> 首帧直出）· PlanScreen.kt:149（<code class="i">"?"</code>）:383:390:507:516:637:799 · MarkerBitmapFactory.kt:54（<code class="i">"999+"</code>）· HistoryListScreen.kt:210</code>
+    <div class="f-body"><p>占位符 <code class="i">"—"</code> 与资源里的 <code class="i">common_stat_unknown</code>（值为 <code class="i">"--"</code>）<b>同一语义两种字形</b>；<code class="i">" · "</code>、<code class="i">"↑"</code>、<code class="i">"+"</code> 等装饰符号不可本地化；历史汇总卡片首帧会把英文 <code class="i">"0 m"</code> 直接渲染给用户。</p><div class="kv"><div><span class="k">修复</span>统一走 <code class="i">stringResource</code>；初始值改为 <code class="i">Formatters</code> 产出。</div></div></div>
+  </div>
+
+  <div class="f-card M" data-sev="M">
+    <div class="f-head"><span class="fid">M-12</span><span class="ftitle">线路名字符串拼接生成，未走资源占位符</span><span class="badge M">MEDIUM</span></div>
+    <code class="loc"><b>PlanViewModel.kt:638</b> <code class="i">return "$a → $b"</code></code>
+    <div class="f-body"><p>名字会存进 DB 并展示。箭头与词序（起点在前）被硬编码，无法本地化，且一旦入库就不可再翻译。</p><div class="kv"><div><span class="k">修复</span>存 struct 或 reason code，展示时 <code class="i">getString(plan_route_named, a, b)</code>。</div></div></div>
+  </div>
+
+  <div class="f-card M" data-sev="M">
+    <div class="f-head"><span class="fid">M-13</span><span class="ftitle">ACTIVITY_RECOGNITION 冗余高危声明从不申请</span><span class="badge M">MEDIUM</span></div>
+    <code class="loc"><b>AndroidManifest.xml:22</b>；计步实际用 <code class="i">Sensor.TYPE_STEP_COUNTER/DETECTOR</code>（StepSources.kt:79-80, 98-106）→ 不需要该权限</code>
+    <div class="f-body"><p>冗余高危权限会在 Play 数据安全表单与权限审查中产生不一致。</p><div class="kv"><div><span class="k">修复</span>删除该声明。</div></div></div>
+  </div>
+
+  <div class="f-card M" data-sev="M">
+    <div class="f-head"><span class="fid">M-14</span><span class="ftitle">DataStore <code class="i">.catch</code> 吞掉 CancellationException</span><span class="badge M">MEDIUM</span></div>
+    <code class="loc"><b>core/datastore/.../DataStoreSettingsRepository.kt:66</b> <code class="i">.catch { emit(emptyPreferences()) }</code></code>
+    <div class="f-body"><p>未做 <code class="i">if (it is CancellationException) throw it</code>，协程取消被降级为空偏好。</p><div class="kv"><div><span class="k">修复</span>显式重抛 CancellationException。</div></div></div>
+  </div>
+
+  <div class="f-card M" data-sev="M">
+    <div class="f-head"><span class="fid">M-15</span><span class="ftitle">restoreDefault 清空全部键却语言/隐私连带影响未处理</span><span class="badge M">MEDIUM</span></div>
+    <code class="loc"><b>DataStoreSettingsRepository.kt:190-192</b> <code class="i">store.edit { it.clear() }</code> × <b>SettingsViewModel.kt:274-276</b></code>
+    <div class="f-body"><p>会把 <code class="i">app_language</code> 与 <code class="i">privacy_agreed</code> 一并清掉，但 UI 侧既不 recreate 也不通知，语言残留到下次冷启动才变。</p><div class="kv"><div><span class="k">修复</span>reset 后触发与语言切换相同的重建流程。</div></div></div>
+  </div>
+
+  <div class="f-card M" data-sev="M">
+    <div class="f-head"><span class="fid">M-16</span><span class="ftitle">死设置清单（UI 可写、DataStore 可存、无任何消费方）</span><span class="badge M">MEDIUM</span></div>
+    <code class="loc"><b>core/datastore/.../AppSettings.kt</b>：mapType:29 · mapTrackWidth:30 · mapShowMediaCluster:31 · recordLocationMode:20 · recordAutoPause:21 · recordKeepScreenOn:22 · recordBackgroundEnabled:23 · alertVibrateEnabled:18(+VIBRATE 权限，全仓库无 Vibrator) · ioExtraFormats:34(GPX 导出路径未接线) · ioBackupIncludeMedia:35(<code class="i">writeBackup</code> 根本没 media 参数)</code>
+    <div class="f-body"><p>设置页给了用户约 15 个无效开关。其中 GPX 导出尤其值得注意：<code class="i">GpxExporter</code> 已实现但从未被调用，导出链路实际断在该处。</p><div class="kv"><div><span class="k">修复</span>逐个接线，或在该版本从设置页移除并登记到 DEV-DESIGN §9.3 待办。</div><div><span class="k">复核</span><span class="verified">已核验：逐个 grep 无读取点</span></div></div></div>
+  </div>
+
+  <div class="f-card M" data-sev="M">
+    <div class="f-head"><span class="fid">M-17</span><span class="ftitle">拖动途经点时全量重建 Bitmap，且从不回收</span><span class="badge M">MEDIUM</span></div>
+    <code class="loc"><b>PlanScreen.kt:198</b>（LaunchedEffect 内对每个点 <code class="i">numberedMarkerBitmap(i+1)</code>）× <b>:919-935</b></code>
+    <div class="f-body"><p>拖动一个点 → 全部 50 张 64px Bitmap 重建，拖动过程持续分配。</p><div class="kv"><div><span class="k">修复</span>按序号缓存（<code class="i">remember { mutableMapOf&lt;Int, Bitmap&gt;() }</code> 或 object 级 LruCache）。</div></div></div>
+  </div>
+
+  <div class="f-card M" data-sev="M">
+    <div class="f-head"><span class="fid">M-18</span><span class="ftitle">TTS 音频焦点泄漏 + BottomSheet 程序化移除丢动画</span><span class="badge M">MEDIUM</span></div>
+    <code class="loc"><b>feature/recording/.../TtsSpeaker.kt:55-65</b>（未重写 <code class="i">onStop</code>，<code class="i">QUEUE_FLUSH</code> 被顶掉时不 abandon）× <b>PhotoMapScreen.kt:187</b>（直接 <code class="i">selected = null</code>，非 <code class="i">sheetState.hide()</code>）</code>
+    <div class="f-body"><p>TTS 侧：背景音乐会一直被 duck；另 <code class="i">languageSet</code>（:25, :53）只写不读，属死状态。Sheet 侧：退出动画丢失且 <code class="i">sheetState</code> 残留旧展开态。</p><div class="kv"><div><span class="k">修复</span>override <code class="i">onStop</code> 同样 abandon；<code class="i">scope.launch { sheetState.hide(); selected = null }</code>。</div></div></div>
+  </div>
+</div>
+
+<!-- ============ LOW ============ -->
+<div class="sec">
+  <h2>LOW <span class="cnt">29 项 — 无障碍 / 性能 / 代码整洁</span></h2>
+  <div class="f-card L" data-sev="L">
+    <div class="f-head"><span class="fid">L-01 ~ L-29</span><span class="ftitle">汇总清单</span><span class="badge L">LOW</span></div>
+    <div class="f-body">
+    <ul class="lg" style="padding-left:18px;margin-top:2px">
+      <li><b>除零 → NaN 静默失效</b> PlanViewModel.kt:609 <code class="i">/ it.distanceM</code> 未判 0</li>
+      <li><b>耗时向下取整</b> PlanViewModel.kt:310/329/453，119s → 1min，&lt;60s → 0</li>
+      <li><b>注释与实现不符</b> PlanScreen.kt:765 取最后一个途经点 name（手动点选恒 null）</li>
+      <li><b>关联计划被删后按钮显示「Linked: 」</b> RecordingScreen.kt:262</li>
+      <li><b>停止确认弹窗不可返回关闭</b> RecordingScreen.kt:356 <code class="i">onDismissRequest = { }</code></li>
+      <li><b>holdingStop 无 try/finally</b> RecordingScreen.kt:321-336，中断后文案卡住</li>
+      <li><b>标注拖动监听永远走不到的分支</b> PlanScreen.kt:203-210（markerTargets 已 clear）</li>
+      <li><b>密度换算未进 LaunchedEffect 键</b> RecordingScreen.kt:126/183</li>
+      <li><b>Lazy 列表 item 无 key</b> PlanScreen:423,583 · PlanListScreen:82 · HistoryListScreen:174 · SettingsScreen:99</li>
+      <li><b>FilterChip / OutlinedButton 触摸目标 &lt; 48dp</b> PlanScreen 多处、SettingsScreen:239-248</li>
+      <li><b>大字体下按钮文字被截断</b> RecordingScreen.kt:285-309（weight + maxLines=1）</li>
+      <li><b>停止按钮硬编码高度</b> RecordingScreen.kt:318 <code class="i">.height(52.dp)</code></li>
+      <li><b>对话框目标状态未 rememberSaveable</b> PlanListScreen:56 · PlanScreen:113,116</li>
+      <li><b>重命名空输入无任何反馈</b> PlanListViewModel.kt:36</li>
+      <li><b>evaluateManual 提前返回残留旧 metrics</b> PlanViewModel.kt:518</li>
+      <li><b>mapCenterOf 在地图就绪前返回 null</b> PlanScreen.kt:822-823 → POI 检索丢失位置偏置</li>
+      <li><b>日期格式化未指定 Locale</b> PhotoMapScreen.kt:596（同模块另两处用了 Locale.ROOT，此处是唯一漏网）</li>
+      <li><b>PhotoMapViewModel.kt:53 located() 未兜底</b> runCatching 只包了 rescan，异常即进程崩溃</li>
+      <li><b>Vico runTransaction 跑在 Main</b> Charts.kt:54,92（数据量已限 600 点，影响很小）</li>
+      <li><b>O(n²) 取下标</b> PhotoMapScreen.kt:422，应用 <code class="i">itemsIndexed</code></li>
+      <li><b>冗余 <code class="i">!!</code></b> PhotoMapScreen.kt:319 <code class="i">state.photos!!.isEmpty()</code></li>
+      <li><b>权限判定口径不一致</b> PhotoMapScreen.kt:130 vs :142（只读 VIDEO 时二次进入重新弹卡）</li>
+      <li><b>LaunchedEffect 键缺回调</b> TripDetailScreen.kt:127（应配 rememberUpdatedState）</li>
+      <li><b>Bitmap 二次分配未回收</b> MarkerBitmapFactory.kt:71-88</li>
+      <li><b>切回「跟随系统」语言不 recreate</b> MainActivity.kt:370 <code class="i">if (lang != SYSTEM)</code></li>
+      <li><b>IoDialogs 冗余分支</b> :47 <code class="i">if (total == 0)</code> 位于 <code class="i">if (total > 0)</code> 内</li>
+      <li><b>:feature:home 是空模块</b> 只有 build.gradle.kts，却在 settings/app 被引用</li>
+      <li><b>locationGranted 只写不读</b> MainActivity.kt:507-512</li>
+      <li><b>allowBackup=false 与 fullBackupContent 并存</b> Manifest:36-38（冗余但无害）</li>
+    </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 已核验无缺陷 ============ -->
+<div class="sec">
+  <h2>复核判定「没问题」的疑点 <span class="cnt">避免误报</span></h2>
+  <div class="callout ok">
+    <ul style="margin:0 0 0 18px">
+      <li><b>GCJ-02 / WGS-84 混用</b>：history / media 两模块<b>无混用</b>。TrackPointEntity 存 GCJ-02，媒体侧一律取 <code class="i">latGcj02/lngGcj02</code>，符合 F-MEDIA-43 红线。</li>
+      <li><b>i18n 键集合</b>：<code class="i">values/strings.xml</code> 与 <code class="i">values-zh-rCN/strings.xml</code> 各 <b>243 键完全对齐</b>，占位符 0 处不符，<code class="i">checkStringKeys</code> 门禁当前通过。</li>
+      <li><b>Manifest 合规项</b>：<code class="i">android:exported</code> 已显式声明（两处）；<code class="i">foregroundServiceType="location"</code> + <code class="i">FOREGROUND_SERVICE_LOCATION</code> + <code class="i">ServiceInfo</code> 三件套齐备；<code class="i">startForeground</code> 在 <code class="i">onCreate</code> 内立即调用，满足 5 秒红线；无明文流量。</li>
+      <li><b>地图侧隐私顺序</b>：5 处 <code class="i">MapsInitializer.updatePrivacy*</code> 全部位于 <code class="i">MapView</code> 构造的上一行，且在 <code class="i">if (!agreed) return</code> 之后才可能组合——顺序正确。问题只在<b>定位</b>侧（见 C-03）。</li>
+      <li><b>数字/日期格式化</b>：record / plan / settings / app 全部合规，无 <code class="i">SimpleDateFormat</code> / <code class="i">DecimalFormat</code> / <code class="i">NumberFormat</code>，无力 Locale 泄漏。</li>
+      <li><b><code class="i">!!</code> 使用</b>：plan / recording 模块零 <code class="i">!!</code>；唯一的 photo screener 处已被前条件保护。</li>
+      <li><b>暂停键重复触发</b>：<code class="i">RecordingSession.pause()/resume()</code> 内部已有守卫，不会重复。</li>
+      <li><b>高德 <code class="i">LatLng</code></b>：确实重写了 equals/hashCode，LaunchedEffect 键稳定，不会每次重组重画。</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============ 建议 ============ -->
+<div class="sec">
+  <h2>处置建议</h2>
+  <div class="callout">
+    <p style="margin-bottom:10px"><b>按此顺序修，前两批应在打任何 tag 之前完成：</b></p>
+    <p><b>第一批（阻断发布，4 项 CRITICAL）</b> — C-01 保存失败兜底、C-02 接上崩溃恢复、C-03 补定位 SDK 隐私接口、C-04 加返回键分发。这四条都是「用户能肉眼看见」的功能缺口，且 C-01/C-02 属静默数据丢失。</p>
+    <p style="margin-top:8px"><b>第二批（HIGH 中含用户体验欺骗的）</b> — H-06 停止编造爬升/难度（直接违反 PRD「绝不编造」）、H-01 导入静默跳过、H-02 单位/体重设置全死、H-09 英文界面弹中文、H-10 一行系数修正 + 补标准样本单测。</p>
+    <p style="margin-top:8px"><b>第三批（资源与稳定性）</b> — H-04 计步注销、H-03 降级可恢复、H-11 防抖、H-12/13 媒体 UI 竞态、H-14 分段阈值口径。</p>
+    <p style="margin-top:8px"><b>流程建议</b> — 给 <code class="i">checkStringKeys</code> 补「Kotlin 禁止 CJK 字面量」扫描（H-09/M-11 全靠它才能自动拦住）；把 M-16 的死设置登记到 DEV-DESIGN §9.3 待办逐个接线或下线。</p>
+  </div>
+</div>
+
+<footer>
+  审查范围：core/{common,model,database,datastore,designsystem,resources,location,map,elevation,data} · feature/{home,recording,history,plan,media,io,settings} · app<br>
+  复核方法：8 路并行子系统扫描 → 对每条 High 及以上结论执行独立存疑复核（grep 调用点 + Python 数值实算）→ 推翻不成立者并保留证据脚本。<br>
+  位置核对可能有一行误差；标注「需真机验证」的条目为静态推理结论。<br>
+  本报告为只读静态审阅，未修改任何源码。
+</footer>
+
+</div>
+
+<script>
+document.querySelectorAll('button.f').forEach(function(b){
+  b.addEventListener('click', function(){
+    document.querySelectorAll('button.f').forEach(function(x){x.classList.remove('on')});
+    b.classList.add('on');
+    var k = b.dataset.k;
+    document.querySelectorAll('.f-card').forEach(function(c){
+      c.classList.toggle('hide', k !== 'all' && c.dataset.sev !== k);
+    });
+  });
+});
+</script>
+</body>
+</html>

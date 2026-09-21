@@ -19,7 +19,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,8 +53,11 @@ fun PlanListScreen(
         },
     )
     val items by viewModel.items.collectAsStateWithLifecycle()
-    var renameTarget by remember { mutableStateOf<PlanListItem?>(null) }
-    var deleteTarget by remember { mutableStateOf<PlanListItem?>(null) }
+    // L-13：只保存 id（PlanListItem 不是 Bundle 可保存类型），重建后按 id 复原弹窗
+    var renameId by rememberSaveable { mutableStateOf<String?>(null) }
+    var deleteId by rememberSaveable { mutableStateOf<String?>(null) }
+    val renameTarget = renameId?.let { id -> items.firstOrNull { it.id == id } }
+    val deleteTarget = deleteId?.let { id -> items.firstOrNull { it.id == id } }
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         Row(
@@ -79,27 +82,27 @@ fun PlanListScreen(
             )
         } else {
             LazyColumn(modifier = Modifier.padding(top = 8.dp)) {
-                items(items.size) { i ->
-                    val item = items[i]
+                // M：无 key 时列表变化无法差分，行内状态会错位
+                items(items = items, key = { it.id }) { item ->
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { renameTarget = item } // F-PLAN-42 重命名入口
+                            .clickable { renameId = item.id } // F-PLAN-42 重命名入口
                             .padding(vertical = 10.dp),
                     ) {
                         Text(item.name, style = MaterialTheme.typography.titleSmall)
+                        // M-11：分隔符与「—」走资源串；H-06：爬升为 null 时显示未知而非 0
+                        val ascentText = item.totalAscentM?.let { Formatters.metersText(it) }
+                            ?: stringResource(CoreR.string.common_stat_unknown)
                         Text(
-                            text = Formatters.distanceText(item.totalDistanceM) +
-                                " · " +
-                                // F-PLAN-46：计划爬升是估算值
-                                stringResource(
-                                    CoreR.string.plan_estimated_ascent,
-                                    item.totalAscentM.toInt(),
-                                ) +
-                                " · " + formatEpoch(item.createdAt, DATE_FMT),
+                            text = listOf(
+                                Formatters.distanceText(item.totalDistanceM),
+                                stringResource(CoreR.string.plan_estimated_ascent, ascentText),
+                                formatEpoch(item.createdAt, DATE_FMT),
+                            ).joinToString(stringResource(CoreR.string.plan_stat_sep)),
                             style = MaterialTheme.typography.bodySmall,
                         )
-                        TextButton(onClick = { deleteTarget = item }) {
+                        TextButton(onClick = { deleteId = item.id }) {
                             Text(stringResource(CoreR.string.plan_list_delete))
                         }
                         onExportRoute?.let { export ->
@@ -108,7 +111,7 @@ fun PlanListScreen(
                             }
                         }
                     }
-                    if (i < items.size - 1) HorizontalDivider()
+                    HorizontalDivider()
                 }
             }
         }
@@ -118,7 +121,7 @@ fun PlanListScreen(
     renameTarget?.let { target ->
         var nameInput by remember(target.id) { mutableStateOf(target.name) }
         AlertDialog(
-            onDismissRequest = { renameTarget = null },
+            onDismissRequest = { renameId = null },
             title = { Text(stringResource(CoreR.string.plan_list_rename)) },
             text = {
                 OutlinedTextField(
@@ -128,13 +131,17 @@ fun PlanListScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    viewModel.rename(target.id, nameInput)
-                    renameTarget = null
-                }) { Text(stringResource(CoreR.string.common_action_confirm)) }
+                // L-14：空输入此前「点了确定却没反应」，改为禁用按钮
+                TextButton(
+                    onClick = {
+                        viewModel.rename(target.id, nameInput)
+                        renameId = null
+                    },
+                    enabled = nameInput.isNotBlank(),
+                ) { Text(stringResource(CoreR.string.common_action_confirm)) }
             },
             dismissButton = {
-                TextButton(onClick = { renameTarget = null }) {
+                TextButton(onClick = { renameId = null }) {
                     Text(stringResource(CoreR.string.common_action_cancel))
                 }
             },
@@ -144,17 +151,17 @@ fun PlanListScreen(
     // F-PLAN-42：删除确认
     deleteTarget?.let { target ->
         AlertDialog(
-            onDismissRequest = { deleteTarget = null },
+            onDismissRequest = { deleteId = null },
             title = { Text(stringResource(CoreR.string.plan_list_delete)) },
             text = { Text(target.name) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.delete(target.id)
-                    deleteTarget = null
+                    deleteId = null
                 }) { Text(stringResource(CoreR.string.common_action_confirm)) }
             },
             dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) {
+                TextButton(onClick = { deleteId = null }) {
                     Text(stringResource(CoreR.string.common_action_cancel))
                 }
             },

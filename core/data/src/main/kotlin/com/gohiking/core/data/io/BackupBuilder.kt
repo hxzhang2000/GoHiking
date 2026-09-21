@@ -107,17 +107,33 @@ object IoParser {
             val schema = (obj["schema"] as? kotlinx.serialization.json.JsonPrimitive)?.content
             val version = (obj["schemaVersion"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "1.0"
             val major = version.substringBefore('.').toIntOrNull()
-                ?: return ParsedFile.Invalid(name, "schemaVersion 格式非法: $version")
+                ?: return ParsedFile.Invalid(
+                    name,
+                    ImportReasonCode.SCHEMA_VERSION_INVALID,
+                    arg = version,
+                )
             if (major > TripEnvelope.SUPPORTED_MAJOR) {
-                return ParsedFile.Invalid(name, "文件由更新版本的 GoHiking 导出（schema $version），请升级 App")
+                return ParsedFile.Invalid(
+                    name,
+                    ImportReasonCode.SCHEMA_TOO_NEW,
+                    arg = version,
+                )
             }
             when (schema) {
                 TripEnvelope.SCHEMA -> ParsedFile.TripFile(name, IoCodecs.json.decodeFromString(TripEnvelope.serializer(), text))
                 PlannedRouteEnvelope.SCHEMA -> ParsedFile.RouteFile(name, IoCodecs.json.decodeFromString(PlannedRouteEnvelope.serializer(), text))
-                else -> ParsedFile.Invalid(name, "无法识别的 schema: ${schema ?: "缺失"}，已忽略")
+                else -> ParsedFile.Invalid(
+                    name,
+                    ImportReasonCode.SCHEMA_UNKNOWN,
+                    arg = schema ?: "",
+                )
             }
         } catch (t: Throwable) {
-            ParsedFile.Invalid(name, "解析失败：${t.message ?: t::class.java.simpleName}")
+            ParsedFile.Invalid(
+                name,
+                ImportReasonCode.PARSE_FAILED,
+                arg = t.message ?: t::class.java.simpleName,
+            )
         }
     }
 }
@@ -135,7 +151,7 @@ object BackupReader {
         val invalid: List<ParsedFile.Invalid>,
         val settingsJson: String?,
         val mediaFileNames: List<String>,
-        val warnings: List<String>,
+        val warnings: List<ImportWarning>,
     )
 
     /** 读取并解析备份包：ZIP Slip/Bomb 防护 + manifest 校验和核验 + counts 比对（F-IO-25/60/61/62） */
@@ -156,7 +172,7 @@ object BackupReader {
         val invalid = mutableListOf<ParsedFile.Invalid>()
         for ((name, bytes) in raw.entries) {
             if (name in mismatched) {
-                invalid.add(ParsedFile.Invalid(name, "SHA-256 校验和不匹配，已跳过该文件"))
+                invalid.add(ParsedFile.Invalid(name, ImportReasonCode.CHECKSUM_MISMATCH))
                 continue
             }
             when (val parsed = IoParser.parse(name, bytes)) {
@@ -168,7 +184,17 @@ object BackupReader {
         val warnings = raw.warnings.toMutableList()
         manifest?.let { m ->
             if (m.counts.trips != trips.size || m.counts.plannedRoutes != routes.size) {
-                warnings.add("manifest 声明 trips=${m.counts.trips}/plannedRoutes=${m.counts.plannedRoutes} 与实际 ${trips.size}/${routes.size} 不一致（导出可能中断）")
+                warnings.add(
+                    ImportWarning(
+                        code = ImportWarningCode.MANIFEST_COUNT_MISMATCH,
+                        args = listOf(
+                            m.counts.trips.toString(),
+                            m.counts.plannedRoutes.toString(),
+                            trips.size.toString(),
+                            routes.size.toString(),
+                        ),
+                    )
+                )
             }
         }
         return Contents(
@@ -188,14 +214,14 @@ object BackupReader {
         val settingsJson: String?,
         val mediaNames: List<String>,
         val invalid: List<ParsedFile.Invalid>,
-        val warnings: List<String>,
+        val warnings: List<ImportWarning>,
     )
 
     private fun collectEntries(input: InputStream): RawEntries {
         var manifest: BackupManifest? = null
         val entries = mutableMapOf<String, ByteArray>()
         val invalid = mutableListOf<ParsedFile.Invalid>()
-        val warnings = mutableListOf<String>()
+        val warnings = mutableListOf<ImportWarning>()
         val mediaNames = mutableListOf<String>()
         var settingsJson: String? = null
         var totalBytes = 0L
@@ -208,13 +234,20 @@ object BackupReader {
                 val entry = zip.nextEntry ?: break
                 entryCount++
                 if (entryCount > MAX_ENTRIES) {
-                    warnings.add("条目数超过上限 $MAX_ENTRIES（疑似 Zip Bomb），已中止读取（F-IO-61）")
+                    warnings.add(
+                        ImportWarning(
+                            code = ImportWarningCode.ENTRY_LIMIT,
+                            args = listOf(MAX_ENTRIES.toString()),
+                        )
+                    )
                     break
                 }
                 val name = entry.name
                 val pathError = validatePath(name)
                 if (pathError != null) {
-                    invalid.add(ParsedFile.Invalid(name, "拒绝危险路径条目：$pathError（F-IO-60）"))
+                    invalid.add(
+                        ParsedFile.Invalid(name, ImportReasonCode.UNSAFE_ENTRY, arg = pathError)
+                    )
                     zip.closeEntry()
                     continue
                 }
@@ -236,7 +269,7 @@ object BackupReader {
                     buf.write(chunk, 0, n)
                 }
                 if (overflow) {
-                    warnings.add("解压后总大小超过上限 2 GB（疑似 Zip Bomb），已中止读取（F-IO-61）")
+                    warnings.add(ImportWarning(code = ImportWarningCode.SIZE_LIMIT))
                     break
                 }
                 val bytes = buf.toByteArray()
@@ -244,7 +277,12 @@ object BackupReader {
                     name == "manifest.json" -> try {
                         manifest = IoCodecs.json.decodeFromString(BackupManifest.serializer(), bytes.toString(Charsets.UTF_8))
                     } catch (t: Throwable) {
-                        warnings.add("manifest.json 解析失败（${t.message}），按目录结构推断导入")
+                        warnings.add(
+                            ImportWarning(
+                                code = ImportWarningCode.MANIFEST_PARSE_FAILED,
+                                args = listOf(t.message ?: t::class.java.simpleName),
+                            )
+                        )
                     }
                     name == "settings.json" -> settingsJson = bytes.toString(Charsets.UTF_8)
                     name.startsWith("media/") -> mediaNames.add(name.removePrefix("media/"))
@@ -262,13 +300,22 @@ object BackupReader {
     private fun sha256(bytes: ByteArray): String =
         MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
-    /** F-IO-60：拒绝绝对路径、盘符、反斜杠与 `..` 穿越 */
+    /** F-IO-60：拒绝绝对路径、盘符、反斜杠与 `..` 穿越。返回原因 token（非用户可见文案） */
     internal fun validatePath(name: String): String? = when {
-        name.isBlank() -> "空条目名"
-        name.startsWith('/') -> "绝对路径"
-        name.startsWith("\\\\") -> "UNC 路径"
-        name.contains(':') -> "盘符/冒号路径"
-        name.split('/', '\\').any { it == ".." } -> "包含 .. 路径穿越"
+        name.isBlank() -> PathErrorToken.EMPTY
+        name.startsWith('/') -> PathErrorToken.ABSOLUTE
+        name.startsWith("\\\\") -> PathErrorToken.UNC
+        name.contains(':') -> PathErrorToken.DRIVE
+        name.split('/', '\\').any { it == ".." } -> PathErrorToken.TRAVERSAL
         else -> null
+    }
+
+    /** 路径安全的原因 token（H-09：文案由 UI 层按 R.string.imp_path_* 本地化） */
+    object PathErrorToken {
+        const val EMPTY = "EMPTY"
+        const val ABSOLUTE = "ABSOLUTE"
+        const val UNC = "UNC"
+        const val DRIVE = "DRIVE"
+        const val TRAVERSAL = "TRAVERSAL"
     }
 }

@@ -89,6 +89,8 @@ fun RecordingScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var pendingDraft by remember { mutableStateOf<TripDraft?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    var saveFailed by remember { mutableStateOf(false) }
     var showMarkerDialog by remember { mutableStateOf(false) }
     var markerNote by remember { mutableStateOf("") }
     var holdingStop by remember { mutableStateOf(false) }
@@ -97,6 +99,9 @@ fun RecordingScreen(
     val ttsSpeaker = remember { TtsSpeaker(context) }
 
     val active = state as? SessionState.Active
+    // C-01：draft 优先用显式 pendingDraft，缺失时回落到会话的 Finished 状态，
+    // 这样旋转/Activity 重建后确认弹窗仍在，不会出现「state=Finished 但界面空白」的死界面。
+    val draftToConfirm = pendingDraft ?: (state as? SessionState.Finished)?.draft
 
     // F-REC-18：记录过程屏幕常亮
     DisposableEffect(Unit) {
@@ -315,24 +320,30 @@ fun RecordingScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
+                        // L-06：height(52.dp) 在字体放大/横屏时无伸缩余量，改最小高度
+                        .heightIn(min = 52.dp)
                         .clip(RoundedCornerShape(20.dp))
                         .background(errorColor)
                         .pointerInput(Unit) {
                             awaitEachGesture {
                                 awaitFirstDown(requireUnconsumed = false)
-                                holdingStop = true
                                 val start = System.currentTimeMillis()
                                 var fired = false
-                                while (true) {
-                                    val event = awaitPointerEvent()
-                                    if (!event.changes.any { it.pressed }) break
-                                    if (!fired && System.currentTimeMillis() - start >= STOP_HOLD_MS) {
-                                        fired = true
-                                        scope.launch { pendingDraft = session.stop() }
+                                // L-06：手势协程被取消（组合离开/手势打断）时必须复位，
+                                // 否则按钮文案永久卡在「松手停止」
+                                try {
+                                    holdingStop = true
+                                    while (true) {
+                                        val event = awaitPointerEvent()
+                                        if (!event.changes.any { it.pressed }) break
+                                        if (!fired && System.currentTimeMillis() - start >= STOP_HOLD_MS) {
+                                            fired = true
+                                            scope.launch { pendingDraft = session.stop() }
+                                        }
                                     }
+                                } finally {
+                                    holdingStop = false
                                 }
-                                holdingStop = false
                             }
                         },
                     contentAlignment = Alignment.Center,
@@ -350,7 +361,7 @@ fun RecordingScreen(
     }
 
     // F-REC-07：停止后保存确认，展示总距离 / 总时长 / 爬升 / 步数
-    pendingDraft?.let { draft ->
+    draftToConfirm?.let { draft ->
         val trip = draft.trip
         AlertDialog(
             onDismissRequest = { },
@@ -365,14 +376,37 @@ fun RecordingScreen(
                             (if (trip.steps >= 0) trip.steps.toString() else stringResource(CoreR.string.common_stat_unknown)),
                     )
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        session.save(draft)
-                        pendingDraft = null
+                    // C-01：保存失败时必须让用户看见，否则只会看到按钮悄悄失效
+                    if (saveFailed) {
+                        Text(
+                            text = stringResource(CoreR.string.rec_save_failed),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
                     }
-                }) { Text(stringResource(CoreR.string.common_action_save)) }
+                }
+            },
+
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            saving = true
+                            // C-01：save() 失败时不许关弹窗，否则 state 停在 Finished 而 draft 已丢 → 死界面
+                            val ok = session.save(draft)
+                            saving = false
+                            saveFailed = !ok
+                            if (ok) pendingDraft = null
+                        }
+                    },
+                    enabled = !saving,
+                ) {
+                    Text(
+                        stringResource(
+                            if (saveFailed) CoreR.string.common_action_retry else CoreR.string.common_action_save,
+                        ),
+                    )
+                }
             },
             dismissButton = {
                 TextButton(onClick = {

@@ -6,6 +6,7 @@ import com.gohiking.core.database.entity.TripEntity
 import com.gohiking.core.location.crs.CoordinateConverter
 import java.util.UUID
 import kotlinx.serialization.json.JsonPrimitive
+import timber.log.Timber
 
 /**
  * 导入执行引擎（PRD 7.5 / F-IO-26~31/34/40~44）。
@@ -27,10 +28,15 @@ class ImportEngine(private val sink: ImportSink) {
         val crsValues: Set<String>, // 文件声明的坐标系（GCJ-02 之外的都要转 + 告知，F-IO-26）
         val earliestStartMs: Long?,
         val latestStartMs: Long?,
-        val invalidReasons: List<String>,
+        val invalidReasons: List<ImportItemMessage>,
     )
 
-    data class ItemResult(val name: String, val status: Status, val reason: String? = null) {
+    data class ItemResult(
+        val name: String,
+        val status: Status,
+        val reason: ImportReasonCode? = null,
+        val arg: String? = null,
+    ) {
         enum class Status { IMPORTED, SKIPPED, FAILED }
     }
 
@@ -39,7 +45,7 @@ class ImportEngine(private val sink: ImportSink) {
         val skipped: Int,
         val failed: Int,
         val items: List<ItemResult>,
-        val warnings: List<String>, // suspected dup / crs 转换 / counts 不一致等
+        val warnings: List<ImportWarning>, // suspected dup / crs 转换 / counts 不一致等
     )
 
     suspend fun preview(files: List<ParsedFile>): ImportPreview {
@@ -67,7 +73,7 @@ class ImportEngine(private val sink: ImportSink) {
             crsValues = crsValues,
             earliestStartMs = startTimes.minOrNull(),
             latestStartMs = startTimes.maxOrNull(),
-            invalidReasons = invalid.map { "${it.name}: ${it.reason}" },
+            invalidReasons = invalid.map { ImportItemMessage(it.name, it.code, it.arg) },
         )
     }
 
@@ -83,7 +89,7 @@ class ImportEngine(private val sink: ImportSink) {
         onProgress: suspend (Int, Int) -> Unit = { _, _ -> },
     ): ImportReport {
         val items = mutableListOf<ItemResult>()
-        val warnings = mutableListOf<String>()
+        val warnings = mutableListOf<ImportWarning>()
         val total = files.size
         var done = 0
 
@@ -97,16 +103,21 @@ class ImportEngine(private val sink: ImportSink) {
                 val exists = bundle.route.id.let { sink.existingRouteIds(listOf(it)).isNotEmpty() }
                 when {
                     exists && effective == ConflictPolicy.SKIP ->
-                        items.add(ItemResult(f.name, ItemResult.Status.SKIPPED, "计划线路已存在（id 相同）"))
+                        items.add(
+                            ItemResult(f.name, ItemResult.Status.SKIPPED, ImportReasonCode.ROUTE_EXISTS)
+                        )
                     exists && effective == ConflictPolicy.ASK ->
-                        items.add(ItemResult(f.name, ItemResult.Status.SKIPPED, "计划线路冲突，等待用户选择"))
+                        items.add(
+                            ItemResult(f.name, ItemResult.Status.SKIPPED, ImportReasonCode.ROUTE_CONFLICT_WAIT)
+                        )
                     else -> {
                         sink.putPlannedRoute(bundle, overwrite = exists && effective == ConflictPolicy.OVERWRITE)
                         items.add(ItemResult(f.name, ItemResult.Status.IMPORTED))
                     }
                 }
             } catch (t: Throwable) {
-                items.add(ItemResult(f.name, ItemResult.Status.FAILED, t.message ?: t::class.java.simpleName))
+                Timberw(t)
+                items.add(ItemResult(f.name, ItemResult.Status.FAILED, ImportReasonCode.IMPORT_FAILED))
             }
         }
 
@@ -117,21 +128,31 @@ class ImportEngine(private val sink: ImportSink) {
             try {
                 val trip = f.envelope.trip
                 val crs = trip.crs
-                if (crs == null) warnings.add("${f.name}: 缺少 crs 字段，按 WGS-84 处理（PRD 7.5）")
+                if (crs == null) {
+                    warnings.add(
+                        ImportWarning(code = ImportWarningCode.CRS_MISSING, fileName = f.name)
+                    )
+                }
                 val startMs = IoCodecs.fromIso(trip.startTime, 0L)
                 val existing = sink.existingTripIds(listOf(trip.id))
                 val suspected = if (startMs > 0 && sink.suspectedDuplicateTripIds(trip.name, startMs).isNotEmpty()) {
-                    warnings.add("${f.name}: 与现有记录同名同时开始（id 不同），疑似重复，已单独标记（F-IO-41）")
+                    warnings.add(
+                        ImportWarning(code = ImportWarningCode.SUSPECTED_DUPLICATE, fileName = f.name)
+                    )
                     true
                 } else {
                     false
                 }
                 if (effective == ConflictPolicy.ASK) {
-                    items.add(ItemResult(f.name, ItemResult.Status.SKIPPED, "冲突，等待用户选择"))
+                    items.add(
+                        ItemResult(f.name, ItemResult.Status.SKIPPED, ImportReasonCode.CONFLICT_WAIT)
+                    )
                     continue
                 }
                 if (existing.isNotEmpty() && effective == ConflictPolicy.SKIP) {
-                    items.add(ItemResult(f.name, ItemResult.Status.SKIPPED, "记录已存在（id 相同）"))
+                    items.add(
+                        ItemResult(f.name, ItemResult.Status.SKIPPED, ImportReasonCode.TRIP_EXISTS)
+                    )
                     continue
                 }
                 val bundle = toTripBundle(f.envelope)
@@ -143,14 +164,20 @@ class ImportEngine(private val sink: ImportSink) {
                 }
                 val overwrite = existing.isNotEmpty() && effective == ConflictPolicy.OVERWRITE
                 sink.putTrip(finalBundle, overwrite = overwrite)
-                if (suspected) items.add(ItemResult(f.name, ItemResult.Status.IMPORTED, "疑似重复"))
-                else items.add(ItemResult(f.name, ItemResult.Status.IMPORTED))
+                items.add(
+                    ItemResult(
+                        f.name,
+                        ItemResult.Status.IMPORTED,
+                        reason = if (suspected) ImportReasonCode.DUPLICATE_SUSPECTED else null,
+                    )
+                )
             } catch (t: Throwable) {
-                items.add(ItemResult(f.name, ItemResult.Status.FAILED, t.message ?: t::class.java.simpleName))
+                Timberw(t)
+                items.add(ItemResult(f.name, ItemResult.Status.FAILED, ImportReasonCode.IMPORT_FAILED))
             }
         }
         for (f in files.filterIsInstance<ParsedFile.Invalid>()) {
-            items.add(ItemResult(f.name, ItemResult.Status.FAILED, f.reason))
+            items.add(ItemResult(f.name, ItemResult.Status.FAILED, f.code, f.arg))
         }
         onProgress(total, total)
         return ImportReport(
@@ -312,8 +339,8 @@ class ImportEngine(private val sink: ImportSink) {
             source = r.source ?: "MANUAL",
             createdAt = r.createdAt ?: System.currentTimeMillis(),
             totalDistanceM = r.totalDistanceM ?: r.legs.sumOf { it.distanceM ?: 0.0 },
-            totalAscentM = r.totalAscentM ?: r.legs.sumOf { it.ascentM ?: 0.0 },
-            totalDescentM = r.totalDescentM ?: r.legs.sumOf { it.descentM ?: 0.0 },
+            totalAscentM = r.totalAscentM ?: sumOrNull(r.legs.map { it.ascentM }),
+            totalDescentM = r.totalDescentM ?: sumOrNull(r.legs.map { it.descentM }),
         )
         val legEntities = r.legs.map { leg ->
             com.gohiking.core.database.entity.PlannedLegEntity(
@@ -321,10 +348,10 @@ class ImportEngine(private val sink: ImportSink) {
                 plannedRouteId = routeId,
                 legType = leg.legType,
                 distanceM = leg.distanceM ?: 0.0,
-                ascentM = leg.ascentM ?: 0.0,
-                descentM = leg.descentM ?: 0.0,
+                ascentM = leg.ascentM,
+                descentM = leg.descentM,
                 estimatedMin = leg.estimatedMin,
-                difficulty = leg.difficulty ?: "MODERATE",
+                difficulty = leg.difficulty,
                 polylineJson = IoCodecs.encodePolyline(leg.polyline.map { it[0] to it[1] }),
             )
         }
@@ -343,6 +370,15 @@ class ImportEngine(private val sink: ImportSink) {
             }
         }
         return PlannedRouteBundle(route, legEntities, waypointEntities)
+    }
+
+    /** 任一子项未知 → 汇总未知（H-06：不得用 0 冒充「已知为 0」） */
+    private fun sumOrNull(values: List<Double?>): Double? =
+        if (values.any { it == null }) null else values.sumOf { it ?: 0.0 }
+
+    /** 单条失败不中断整批（F-IO-28）；技术堆栈只进日志，不给用户看（M-10） */
+    private fun Timberw(t: Throwable) {
+        Timber.w(t, "单条导入失败")
     }
 
     companion object {

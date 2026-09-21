@@ -141,14 +141,14 @@ class IoRepository @Inject constructor(
     suspend fun parseImportSources(sources: List<Pair<String, ByteArray>>): ImportSources =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val files = mutableListOf<ParsedFile>()
-            val warnings = mutableListOf<String>()
+            val warnings = mutableListOf<ImportWarning>()
             for ((name, bytes) in sources) {
                 if (name.endsWith(".zip", ignoreCase = true)) {
                     val contents = BackupReader.read(java.io.ByteArrayInputStream(bytes))
                     files += contents.trips
                     files += contents.routes
                     files += contents.invalid
-                    warnings += contents.warnings.map { w -> "$name: $w" }
+                    warnings += contents.warnings.map { w -> w.copy(fileName = w.fileName ?: name) }
                 } else {
                     files += IoParser.parse(name, bytes)
                 }
@@ -156,7 +156,7 @@ class IoRepository @Inject constructor(
             ImportSources(files, warnings)
         }
 
-    data class ImportSources(val files: List<ParsedFile>, val warnings: List<String>)
+    data class ImportSources(val files: List<ParsedFile>, val warnings: List<ImportWarning>)
 
     /** 导入预览（F-IO-24） */
     suspend fun preview(files: List<ParsedFile>): ImportEngine.ImportPreview =
