@@ -3,7 +3,7 @@
 一款面向徒步登山爱好者的 Android 记录应用：离线可用、数据私有、专为山区场景设计。
 从选点规划、沿途记录到回顾分析，覆盖登山出行的完整闭环。
 
-> 当前版本 **0.5.1**（开发期）· 变更记录见 [CHANGELOG.md](CHANGELOG.md) · English: [README_EN.md](README_EN.md)
+> 当前版本 **0.5.2**（开发期）· 变更记录见 [CHANGELOG.md](CHANGELOG.md) · English: [README_EN.md](README_EN.md)
 
 ## 功能特性
 
