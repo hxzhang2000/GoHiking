@@ -1,5 +1,6 @@
 package com.gohiking.core.data.io
 
+import com.gohiking.core.common.format.Formatters
 import com.gohiking.core.database.entity.MarkerEntity
 import com.gohiking.core.database.entity.TrackPointEntity
 import com.gohiking.core.database.entity.TripEntity
@@ -29,6 +30,11 @@ class ImportEngine(private val sink: ImportSink) {
         val earliestStartMs: Long?,
         val latestStartMs: Long?,
         val invalidReasons: List<ImportItemMessage>,
+        // F-IO-64：导入体积与「超限需确认」标记。默认值让「不关心体积」的调用点（单测）保持可用。
+        val totalBytes: Long = 0,
+        val estimatedSec: Long = 0,
+        val oversize: Boolean = false, // totalBytes > OVERSIZE_CONFIRM_BYTES
+        val fileCount: Int = 0,
     )
 
     data class ItemResult(
@@ -48,7 +54,13 @@ class ImportEngine(private val sink: ImportSink) {
         val warnings: List<ImportWarning>, // suspected dup / crs 转换 / counts 不一致等
     )
 
-    suspend fun preview(files: List<ParsedFile>): ImportPreview {
+    /**
+     * 导入预览（F-IO-24）。
+     *
+     * [totalBytes] 由 UI 侧（SAF 读出的原始字节）传入——ZIP 解压后的体积与磁盘上的
+     * 压缩包体积不是一回事，这里以**实际读入的字节数**为准判定 F-IO-64 的超限。
+     */
+    suspend fun preview(files: List<ParsedFile>, totalBytes: Long = 0L): ImportPreview {
         val tripFiles = files.filterIsInstance<ParsedFile.TripFile>()
         val routeFiles = files.filterIsInstance<ParsedFile.RouteFile>()
         val invalid = files.filterIsInstance<ParsedFile.Invalid>()
@@ -74,6 +86,10 @@ class ImportEngine(private val sink: ImportSink) {
             earliestStartMs = startTimes.minOrNull(),
             latestStartMs = startTimes.maxOrNull(),
             invalidReasons = invalid.map { ImportItemMessage(it.name, it.code, it.arg) },
+            totalBytes = totalBytes,
+            estimatedSec = Formatters.estimatedSec(totalBytes, IMPORT_BYTES_PER_SEC),
+            oversize = totalBytes > OVERSIZE_CONFIRM_BYTES,
+            fileCount = files.size,
         )
     }
 
@@ -383,6 +399,18 @@ class ImportEngine(private val sink: ImportSink) {
 
     companion object {
         private const val WGS84 = "WGS-84"
+
+        /**
+         * F-IO-64：超过此体积的导入必须先提示确认（PRD 7.5 / DEV §5.2 P-17）。
+         * 判定用**实际读入的字节数**，不是 ZIP 解压后的条目体积。
+         */
+        const val OVERSIZE_CONFIRM_BYTES: Long = 500L * 1024 * 1024
+
+        /**
+         * 预估耗时的吞吐假设（粗估，非实测）：解压 + JSON 解析 + Room 落库合计约 20 MB/s。
+         * 只用于给用户一个量级提示，不做任何超时或限流判断。
+         */
+        const val IMPORT_BYTES_PER_SEC: Long = 20L * 1024 * 1024
     }
 }
 

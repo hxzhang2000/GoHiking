@@ -62,7 +62,8 @@ class BackupSecurityTest {
         val contents = BackupReader.read(ByteArrayInputStream(out.toByteArray()))
         assertEquals(0, contents.trips.size)
         assertEquals(1, contents.invalid.size)
-        assertTrue(contents.invalid[0].reason.contains("SHA-256"))
+        // H-09：core 层只产出原因码，文案由 UI 层本地化
+        assertEquals(ImportReasonCode.CHECKSUM_MISMATCH, contents.invalid[0].code)
     }
 
     @Test
@@ -76,7 +77,7 @@ class BackupSecurityTest {
             }
         }
         val contents = BackupReader.read(ByteArrayInputStream(out.toByteArray()))
-        val rejected = contents.invalid.filter { it.reason.contains("F-IO-60") }
+        val rejected = contents.invalid.filter { it.code == ImportReasonCode.UNSAFE_ENTRY } // F-IO-60
         assertEquals(3, rejected.size) // 绝对路径、.. 穿越、反斜杠穿越全部拒绝
     }
 

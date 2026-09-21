@@ -15,7 +15,8 @@ data class PlanListItem(
     val id: String,
     val name: String,
     val totalDistanceM: Double,
-    val totalAscentM: Double,
+    // H-06：高程不可用（null）时不得用 0 冒充，列表展示「—」
+    val totalAscentM: Double?,
     val createdAt: Long,
     val legCount: Int,
 )

@@ -18,7 +18,9 @@ import com.gohiking.core.data.alert.MarkerDraft
 import com.gohiking.core.data.stats.CalorieCalculator
 import com.gohiking.core.datastore.SettingsRepository
 import com.gohiking.core.location.LocationProvider
-import com.gohiking.core.location.altitude.AltitudeFuser
+import com.gohiking.core.location.altitude.AltitudeFusion
+import com.gohiking.core.location.altitude.AltitudeFuserFactory
+import com.gohiking.core.location.altitude.RealAltitudeFuserFactory
 import com.gohiking.core.location.altitude.ThresholdAccumulator
 import com.gohiking.core.location.geo.GeoMath
 import com.gohiking.core.location.sampler.TrackSampler
@@ -65,6 +67,8 @@ class RecordingSession @Inject constructor(
     @ApplicationScope private val scope: CoroutineScope,
     private val alertSettingsProvider: AlertSettingsProvider,
     private val settingsRepository: SettingsRepository,
+    // H-3/D10：海拔融合器有逐场状态 → 注入**工厂**，每场 start()/恢复时新建，绝不跨场继承
+    private val altitudeFuserFactory: AltitudeFuserFactory = RealAltitudeFuserFactory,
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.Idle)
     val state: StateFlow<SessionState> = _state.asStateFlow()
@@ -115,7 +119,7 @@ class RecordingSession @Inject constructor(
     private var sampler = TrackSampler()
     private var statAccumulator = ThresholdAccumulator(10.0) // 无气压计阈值 10m；有气压计 3m（§4.3.1）
     private var hasBarometer = false
-    private var altitudeFuser: AltitudeFuser? = null
+    private var altitudeFuser: AltitudeFusion? = null
     private var stepSource: StepSource? = null
     private var currentSteps = -1
     private var pressureListener: android.hardware.SensorEventListener? = null
@@ -173,7 +177,7 @@ class RecordingSession @Inject constructor(
         lastStatePersistAtMs = lastFlushAtMs
         sampler = TrackSampler()
         statAccumulator = ThresholdAccumulator(if (hasBarometer) 3.0 else 10.0)
-        altitudeFuser = AltitudeFuser(hasBarometer, nowMs = System::currentTimeMillis)
+        altitudeFuser = altitudeFuserFactory.create(hasBarometer)
         currentSteps = -1
         stepSource = StepSourceFactory.create(context, hasPermission = true).also { src ->
             stepsCollectJob?.cancel()
@@ -414,7 +418,7 @@ class RecordingSession @Inject constructor(
             lastDescentM = snap.lastDescentMarkM,
             elevationAnchor = snap.markAnchorM,
         )
-        altitudeFuser = AltitudeFuser(snap.hasBarometer, nowMs = System::currentTimeMillis)
+        altitudeFuser = altitudeFuserFactory.create(snap.hasBarometer)
             .also { it.restoreRef(snap.altitudeRefM, snap.pressureRefHpa) }
         currentSteps = -1
         stepSource = StepSourceFactory.create(context, hasPermission = true).also { src ->

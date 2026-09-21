@@ -255,6 +255,9 @@
     <string name="io_import_invalid">%1$d file(s) will be skipped:</string>
     <string name="io_import_crs_notice">Coordinates will be converted to GCJ-02 (the in-app standard).</string>
     <string name="io_import_confirm">Import</string>
+    <!-- F-IO-64：导入体积 > 500MB 时的超限告知与确认按钮 -->
+    <string name="io_import_oversize">Large import: %1$s (%2$d file(s)). Estimated time ≈ %3$s. This may take a while and cannot be undone automatically.</string>
+    <string name="io_import_confirm_oversize">Import anyway</string>
     <string name="io_report_title">Import report</string>
     <string name="io_report_summary">Imported %1$d, skipped %2$d, failed %3$d.</string>
     <string name="io_report_ok">Imported</string>

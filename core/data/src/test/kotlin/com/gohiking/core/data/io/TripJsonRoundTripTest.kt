@@ -159,7 +159,7 @@ class TripJsonRoundTripTest {
         val text = export("GCJ-02").replace("\"schemaVersion\":\"1.0\"", "\"schemaVersion\":\"2.0\"")
         val parsed = IoParser.parse("t.json", text.toByteArray())
         assertTrue(parsed is ParsedFile.Invalid)
-        assertTrue((parsed as ParsedFile.Invalid).reason.contains("升级"))
+        assertEquals(ImportReasonCode.SCHEMA_TOO_NEW, (parsed as ParsedFile.Invalid).code)
     }
 
     @Test

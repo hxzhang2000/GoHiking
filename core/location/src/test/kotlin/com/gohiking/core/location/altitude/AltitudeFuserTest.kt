@@ -12,7 +12,8 @@ import org.junit.Test
 class AltitudeFuserTest {
 
     private var t = 0L
-    private fun fuser(hasBarometer: Boolean) = AltitudeFuser(hasBarometer, nowMs = { t })
+    // 声明为接口类型：2 参的 onGpsFix 走接口默认值（override 方法不允许带默认值）
+    private fun fuser(hasBarometer: Boolean): AltitudeFusion = AltitudeFuser(hasBarometer, nowMs = { t })
 
     // —— 标定窗口 ——
 

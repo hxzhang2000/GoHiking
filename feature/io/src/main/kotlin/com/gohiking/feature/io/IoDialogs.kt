@@ -20,11 +20,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.gohiking.core.common.format.Formatters
 import com.gohiking.core.data.io.ConflictPolicy
 import com.gohiking.core.data.io.ImportEngine
 import com.gohiking.core.data.io.ImportItemMessage
 import com.gohiking.core.data.io.ImportReasonCode
 import com.gohiking.core.data.io.ImportWarning
+import com.gohiking.core.data.io.BackupReader.PathErrorToken
 import com.gohiking.core.data.io.ImportWarningCode
 import com.gohiking.core.resources.R as CoreR
 
@@ -104,6 +106,19 @@ fun ImportPreviewDialog(
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.tertiary,
+                    )
+                }
+                // F-IO-64：> 500MB 的导入必须先告知体积与预估耗时，再由用户确认（预览页本身即确认环节）
+                if (preview.oversize) {
+                    Text(
+                        stringResource(
+                            CoreR.string.io_import_oversize,
+                            Formatters.bytesText(preview.totalBytes),
+                            preview.fileCount,
+                            Formatters.durationText(preview.estimatedSec),
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
                     )
                 }
                 if (preview.crsValues.any { it != "GCJ-02" }) {
@@ -186,7 +201,15 @@ fun ImportPreviewDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onConfirm) { Text(stringResource(CoreR.string.io_import_confirm)) }
+            TextButton(onClick = onConfirm) {
+                Text(
+                    // F-IO-64：超限时按钮文案改成明确的「仍要导入」，避免用户以为只是普通确认
+                    stringResource(
+                        if (preview.oversize) CoreR.string.io_import_confirm_oversize
+                        else CoreR.string.io_import_confirm,
+                    ),
+                )
+            }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(CoreR.string.common_action_cancel)) }
@@ -294,13 +317,10 @@ internal fun warningText(w: ImportWarning): String {
 /** 路径安全 token → 本地化原因（H-09） */
 @Composable
 private fun pathTokenText(token: String?): String = when (token) {
-    com.gohiking.core.data.io.BackupBuilder.PathErrorToken.ABSOLUTE ->
-        stringResource(CoreR.string.imp_path_absolute)
-    com.gohiking.core.data.io.BackupBuilder.PathErrorToken.UNC ->
-        stringResource(CoreR.string.imp_path_unc)
-    com.gohiking.core.data.io.BackupBuilder.PathErrorToken.DRIVE ->
-        stringResource(CoreR.string.imp_path_drive)
-    com.gohiking.core.data.io.BackupBuilder.PathErrorToken.TRAVERSAL ->
-        stringResource(CoreR.string.imp_path_traversal)
+    // ⚠ PathErrorToken 在 BackupReader 上（ZIP 读侧校验），不在 BackupBuilder 上
+    PathErrorToken.ABSOLUTE -> stringResource(CoreR.string.imp_path_absolute)
+    PathErrorToken.UNC -> stringResource(CoreR.string.imp_path_unc)
+    PathErrorToken.DRIVE -> stringResource(CoreR.string.imp_path_drive)
+    PathErrorToken.TRAVERSAL -> stringResource(CoreR.string.imp_path_traversal)
     else -> stringResource(CoreR.string.imp_path_empty)
 }

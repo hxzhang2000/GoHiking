@@ -153,15 +153,25 @@ class IoRepository @Inject constructor(
                     files += IoParser.parse(name, bytes)
                 }
             }
-            ImportSources(files, warnings)
+            ImportSources(files, warnings, sources.sumOf { it.second.size.toLong() })
         }
 
-    data class ImportSources(val files: List<ParsedFile>, val warnings: List<ImportWarning>)
+    /**
+     * @param totalBytes 实际读入的字节数（`sources` 各 ByteArray 之和），F-IO-64 超限判定用
+     */
+    data class ImportSources(
+        val files: List<ParsedFile>,
+        val warnings: List<ImportWarning>,
+        val totalBytes: Long = 0L,
+    )
 
-    /** 导入预览（F-IO-24） */
-    suspend fun preview(files: List<ParsedFile>): ImportEngine.ImportPreview =
+    /** 导入预览（F-IO-24 + F-IO-64 体积提示） */
+    suspend fun preview(
+        files: List<ParsedFile>,
+        totalBytes: Long = 0L,
+    ): ImportEngine.ImportPreview =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            ImportEngine(RoomImportSink(db)).preview(files)
+            ImportEngine(RoomImportSink(db)).preview(files, totalBytes)
         }
 
     /** 执行导入（F-IO-27~31）：策略与逐条决策由 UI 传入 */

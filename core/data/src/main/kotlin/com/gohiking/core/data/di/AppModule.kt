@@ -8,6 +8,8 @@ import com.gohiking.core.datastore.SettingsRepository
 import com.gohiking.core.location.LocationProvider
 import com.gohiking.core.location.source.AmapLocationSource
 import com.gohiking.core.location.source.FusedLocationSource
+import com.gohiking.core.location.altitude.AltitudeFuserFactory
+import com.gohiking.core.location.altitude.RealAltitudeFuserFactory
 import com.gohiking.core.location.source.SwitchingLocationProvider
 import dagger.Module
 import dagger.Provides
@@ -51,6 +53,15 @@ object AppModule {
             backup = if (FusedLocationSource.isAvailable(context)) FusedLocationSource(context) else null,
             scope = scope,
         )
+
+    /**
+     * 海拔融合器**工厂**（文档审阅 H-3 / D10）：`AltitudeFuser` 有逐场状态，
+     * `RecordingSession` 必须每场新建而不是持有实例；接口化同时让单测可注入
+     * `FakeAltitudeFuserFactory`。
+     */
+    @Provides
+    @Singleton
+    fun provideAltitudeFuserFactory(): AltitudeFuserFactory = RealAltitudeFuserFactory
 }
 
 @Module

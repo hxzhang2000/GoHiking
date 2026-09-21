@@ -76,6 +76,33 @@ object Formatters {
     }
 
     /**
+     * 文件体积：`< 1024 MB` 显示整 MB（"512 MB"），否则两位小数 GB（"1.46 GB"）；
+     * 负值按 0 处理。单位符号是协议、不随语言变（同 [distanceText] 的口径），
+     * 语言相关的提示文案由调用方走 stringResource（DEV 决策 8）。
+     *
+     * F-IO-64：导入预览页展示 ZIP 体积用。
+     */
+    fun bytesText(bytes: Long): String {
+        val b = bytes.coerceAtLeast(0L)
+        val mb = b / (1024.0 * 1024.0)
+        return if (mb < 1024.0) {
+            "${mb.toLong()} MB"
+        } else {
+            String.format(Locale.ROOT, "%.2f GB", mb / 1024.0)
+        }
+    }
+
+    /**
+     * 预计耗时（粗估，秒）：按 [bytesPerSec] 的吞吐假设向上取整。
+     * 只返回**秒数**，不拼「分钟 / 秒」文案——单位词随语言，由 UI 用 stringResource 格式化
+     * （DEV 决策 8；调用方可直接用 [durationText] 渲染）。
+     */
+    fun estimatedSec(bytes: Long, bytesPerSec: Long): Long {
+        if (bytes <= 0 || bytesPerSec <= 0) return 0L
+        return (bytes + bytesPerSec - 1) / bytesPerSec // 向上取整
+    }
+
+    /**
      * H-02 配速/速度二选一：unitPaceDisplay = pace 时返回配速，speed 时返回速度；
      * 两者都取不到时返回 null（界面显示「—」）。
      */

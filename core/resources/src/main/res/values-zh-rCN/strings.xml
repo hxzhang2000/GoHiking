@@ -254,6 +254,9 @@
     <string name="io_import_invalid">%1$d 个文件将被跳过：</string>
     <string name="io_import_crs_notice">坐标将转换为 GCJ-02（应用内标准坐标系）。</string>
     <string name="io_import_confirm">开始导入</string>
+    <!-- F-IO-64：导入体积 > 500MB 时的超限告知与确认按钮 -->
+    <string name="io_import_oversize">导入体积较大：%1$s（共 %2$d 个文件），预计耗时约 %3$s。导入过程可能较久且无法自动撤销。</string>
+    <string name="io_import_confirm_oversize">仍要导入</string>
     <string name="io_report_title">导入结果报告</string>
     <string name="io_report_summary">成功 %1$d、跳过 %2$d、失败 %3$d。</string>
     <string name="io_report_ok">已导入</string>

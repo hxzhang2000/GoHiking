@@ -140,11 +140,9 @@ class ElevationRepository @Inject constructor(
         val latKeys = missIdx.map { wgs[it].latitude }.distinct()
         val lngKeys = missIdx.map { wgs[it].longitude }.distinct()
         val rows = cacheDao.query(latKeys, lngKeys)
-        val wanted = missIdx.mapTo(HashSet()) { cacheKey(wgs[it]) }
-        return rows.mapNotNull { row ->
-            val k = cacheKey(row.latKey, row.lngKey)
-            if (k in wanted) k to row.altitudeM else null
-        }.toMap()
+        // D3：DAO 是笛卡尔积语义，配对一律走 ElevationCacheMatcher（唯一实现，可单测）
+        val wanted = missIdx.mapTo(HashSet()) { ElevationCacheMatcher.key(wgs[it]) }
+        return ElevationCacheMatcher.pair(rows, wanted)
     }
 
     private suspend fun persist(key: String, wgs: LatLngValue, v: Double, source: String) {
@@ -166,9 +164,10 @@ class ElevationRepository @Inject constructor(
 
     private fun key5(v: Double): Double = Math.round(v * 1e5) / 1e5
 
-    private fun cacheKey(lat5: Double, lng5: Double): String = "$lat5,$lng5"
+    // 组合键统一走 ElevationCacheMatcher（D3：配对实现的唯一来源，避免两处口径漂移）
+    private fun cacheKey(lat5: Double, lng5: Double): String = ElevationCacheMatcher.key(lat5, lng5)
 
-    private fun cacheKey(p: LatLngValue): String = cacheKey(p.latitude, p.longitude)
+    private fun cacheKey(p: LatLngValue): String = ElevationCacheMatcher.key(p)
 
     companion object {
         const val SOURCE_REMOTE = "REMOTE"

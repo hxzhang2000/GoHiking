@@ -166,6 +166,12 @@ class TripDetailViewModel(
 
         /** 图表点数上限（DEV §3.2：抽稀/降采样交给渲染层，1 万点塞进 Compose 会卡） */
         const val MAX_CHART_POINTS = 600
+
+        /**
+         * H-13：等待 trip 落库的超时。`repo.byId()` 取不到时退化为等 flow 首个非空值，
+         * 超时即放弃照片匹配（不阻塞详情页）。
+         */
+        const val LOAD_TRIP_TIMEOUT_MS = 5_000L
     }
 }
 

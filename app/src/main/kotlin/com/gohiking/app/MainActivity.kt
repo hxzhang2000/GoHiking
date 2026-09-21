@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import android.widget.Toast
 import java.util.Locale
 import androidx.activity.ComponentActivity
@@ -35,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import timber.log.Timber
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -62,6 +62,7 @@ import com.gohiking.core.data.io.BackupBuilder
 import com.gohiking.core.data.io.ConflictPolicy
 import com.gohiking.core.data.io.FileNamer
 import com.gohiking.core.data.io.GeneratorInfo
+import com.gohiking.core.data.io.ImportWarning
 import com.gohiking.core.data.io.IoRepository
 import com.gohiking.core.data.io.ParsedFile
 import com.gohiking.core.data.io.RoomImportSink
@@ -107,8 +108,6 @@ private class UserMessageError(val resId: Int, val args: List<Any?>) : RuntimeEx
 
 /** 抛出一个用户可见错误（文案在 core/resources，%1$s 等占位符由 [args] 填充） */
 private fun userError(resId: Int, vararg args: Any?): Nothing = throw UserMessageError(resId, args.toList())
-
-private const val LOG_TAG = "GoHiking"
 
 /**
  * M1 壳：①隐私同意门（DEV §1.5 红线：高德 SDK 必须在用户同意后才初始化）；
@@ -202,7 +201,8 @@ private fun Root(
     var ioDoneMsg by remember { mutableStateOf<String?>(null) }
     var ioErrorMsg by remember { mutableStateOf<String?>(null) }
     var ioErrorRes by remember { mutableStateOf<Pair<Int, List<Any?>>?>(null) }
-    var pendingImport by remember { mutableStateOf<Pair<List<ParsedFile>, List<String>>?>(null) }
+    // H-09：解析告警已改为「原因码 + 参数」的 ImportWarning，不再是本地化后的字符串
+    var pendingImport by remember { mutableStateOf<Pair<List<ParsedFile>, List<ImportWarning>>?>(null) }
     var importPreview by remember { mutableStateOf<com.gohiking.core.data.io.ImportEngine.ImportPreview?>(null) }
     var importPolicy by remember { mutableStateOf(ConflictPolicy.SKIP) }
     var importDecisions by remember { mutableStateOf<Map<String, ConflictPolicy>>(emptyMap()) }
@@ -222,7 +222,7 @@ private fun Root(
                 ioErrorRes = e.resId to e.args
             } catch (t: Throwable) {
                 // M-10：不把异常类名抛给用户，统一走 error_generic
-                Log.w(LOG_TAG, "IO 失败", t)
+                Timber.w(t, "IO 失败")
                 ioErrorMsg = t::class.java.simpleName
             } finally {
                 ioBusy = false
@@ -353,7 +353,8 @@ private fun Root(
             }.getOrDefault(ConflictPolicy.SKIP)
             importDecisions = emptyMap()
             pendingImport = parsed.files to parsed.warnings
-            importPreview = ioRepository.preview(parsed.files)
+            // F-IO-64：体积随预览一起给出，>500MB 时预览页必须先提示确认
+            importPreview = ioRepository.preview(parsed.files, parsed.totalBytes)
         }
     }
 
@@ -418,7 +419,7 @@ private fun Root(
                     scope.launch {
                         if (session.restoreFromSnapshot()) {
                             runCatching { RecordingService.start(context) }
-                                .onFailure { Log.w(LOG_TAG, "恢复后启动前台服务失败", it) }
+                                .onFailure { Timber.w(it, "恢复后启动前台服务失败") }
                         }
                     }
                 }) { Text(stringResource(CoreR.string.rec_restore_continue)) }
@@ -591,7 +592,15 @@ private fun Root(
         AlertDialog(
             onDismissRequest = { ioErrorRes = null },
             title = { Text(stringResource(CoreR.string.io_error)) },
-            text = { Text(stringResource(errorResPair.first, *errorResPair.second.toTypedArray())) },
+            // vararg 只收非空 Any：List<Any?> 直接 toTypedArray 得到 Array<Any?>，展开会类型不符
+            text = {
+                Text(
+                    stringResource(
+                        errorResPair.first,
+                        *errorResPair.second.map { it ?: "" }.toTypedArray(),
+                    ),
+                )
+            },
             confirmButton = {
                 TextButton(onClick = { ioErrorRes = null }) {
                     Text(stringResource(CoreR.string.common_action_confirm))
@@ -671,7 +680,7 @@ private fun MapVerifyScreen(
         if (!pendingServiceStart) return@LaunchedEffect
         pendingServiceStart = false
         runCatching { RecordingService.start(context) }
-            .onFailure { Log.w(LOG_TAG, "RecordingService.start 失败", it) }
+            .onFailure { Timber.w(it, "RecordingService.start 失败") }
     }
 
     fun log(text: String) {

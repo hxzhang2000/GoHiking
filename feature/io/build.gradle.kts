@@ -31,6 +31,7 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:resources"))
     implementation(project(":core:data")) // IO 模型（ParsedFile/ImportEngine/ConflictPolicy，M3-D2）
+    implementation(project(":core:common")) // Formatters（F-IO-64 导入体积/预估耗时）
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

@@ -111,6 +111,32 @@ class ImportEngineTest {
     }
 
     @Test
+    fun `preview marks oversize import over 500MB and estimates time`() = runTest {
+        val eng = ImportEngine(FakeSink())
+        val files = listOf(tripFile(), tripFile("t2", "另一座山"))
+
+        val small = eng.preview(files, totalBytes = 8L * 1024 * 1024)
+        assertEquals(false, small.oversize) // F-IO-64：阈值以下不打扰用户
+        assertEquals(8L * 1024 * 1024, small.totalBytes)
+        assertEquals(2, small.fileCount)
+
+        val big = eng.preview(files, totalBytes = ImportEngine.OVERSIZE_CONFIRM_BYTES + 1)
+        assertEquals(true, big.oversize)
+        // 20 MB/s 粗估：500MB → 26s（向上取整）
+        assertEquals(26L, big.estimatedSec)
+        assertEquals(ImportEngine.OVERSIZE_CONFIRM_BYTES + 1, big.totalBytes)
+    }
+
+    @Test
+    fun `preview without byte count stays backwards compatible`() = runTest {
+        val eng = ImportEngine(FakeSink())
+        val preview = eng.preview(listOf(tripFile()))
+        assertEquals(0L, preview.totalBytes)
+        assertEquals(false, preview.oversize) // 体积未知 → 不误报超限
+        assertEquals(0L, preview.estimatedSec)
+    }
+
+    @Test
     fun `preview reports conflicts and time range`() = runTest {
         val sink = FakeSink().also { it.seedTrip(FakeSink.makeTrip("t1")) }
         val eng = ImportEngine(sink)

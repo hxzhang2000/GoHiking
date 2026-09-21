@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -375,7 +376,6 @@ fun RecordingScreen(
                         stringResource(CoreR.string.rec_stat_steps) + ": " +
                             (if (trip.steps >= 0) trip.steps.toString() else stringResource(CoreR.string.common_stat_unknown)),
                     )
-                }
                     // C-01：保存失败时必须让用户看见，否则只会看到按钮悄悄失效
                     if (saveFailed) {
                         Text(

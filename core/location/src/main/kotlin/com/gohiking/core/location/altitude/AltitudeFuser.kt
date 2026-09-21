@@ -18,11 +18,45 @@ import kotlin.math.pow
  * 注：气压→海拔用国际标准大气公式（与 SensorManager.getAltitude(PRESSURE_STANDARD_ATMOSPHERE, hPa)
  * 同族结果），纯 Kotlin 实现保证 JVM 单测确定性；可注入 [pressureAltitude] 替换。
  */
+/**
+ * 海拔融合器的**可替身接口**（DEV §2.3 可替身清单 / §8.8 `FakeAltitudeFuser`；文档审阅 D10）。
+ *
+ * 为什么必须抽接口：[AltitudeFuser] 持有**逐场可变状态**（`altRef` / 气压基准 / 中值窗口），
+ * 复制它的行为来写替身会立刻与实现漂移；有了接口，消费方（`RecordingSession`、
+ * 未来的 ViewModel 单测）只依赖契约，替身见 [FakeAltitudeFuser]。
+ */
+interface AltitudeFusion {
+
+    /** 当前数据源；标定完成前为 null（PRD 4.4 降级链可见性） */
+    val source: AltitudeFuser.Source?
+
+    /** 滤波后的当前海拔（米）；不可用时 null（UI 显示「—」，绝不编造） */
+    fun current(): Double?
+
+    /** GPS 修复输入；mslAltM 优先（API 34+ getMslAltitudeMeters，防线⑤） */
+    fun onGpsFix(gpsAltM: Double?, verticalAccuracyM: Double?, mslAltM: Double? = null)
+
+    /** 气压采样输入（hPa） */
+    fun onPressure(hPa: Double)
+
+    /** 手动校准（F-REC-64）：输入已知海拔，偏移作用于全部后续输出 */
+    fun calibrateTo(knownAltitudeM: Double)
+
+    /** 暂停/继续：保留 anchor，仅清漂移窗口 */
+    fun onSessionPause()
+
+    /** 崩溃恢复快照：`altRef to pressureRefHpa` */
+    fun refSnapshot(): Pair<Double?, Double?>
+
+    /** 回灌快照（恢复路径）；回灌后标定视为已完成 */
+    fun restoreRef(altRefM: Double?, pressureRefHpaM: Double?)
+}
+
 class AltitudeFuser(
     private val hasBarometer: Boolean,
     private val nowMs: () -> Long,
     private val pressureAltitude: (hPa: Double) -> Double = DEFAULT_PRESSURE_ALTITUDE,
-) {
+) : AltitudeFusion {
 
     enum class Source { BAROMETER_FUSED, GPS_ONLY, MANUAL_CALIBRATED }
 
@@ -47,11 +81,11 @@ class AltitudeFuser(
     private var pendingAlt: Double? = null
     private var pendingSinceMs = 0L
 
-    var source: Source? = null
+    override var source: Source? = null
         private set
 
     /** 滤波后的当前海拔（米）；标定完成前返回 null */
-    fun current(): Double? {
+    override fun current(): Double? {
         val filtered = if (hasBarometer) {
             val est = baroEstimate() ?: return null
             pushAndMedian(est)
@@ -63,7 +97,8 @@ class AltitudeFuser(
     }
 
     /** GPS 修复输入；mslAltM 优先（API 34+ getMslAltitudeMeters，防线⑤） */
-    fun onGpsFix(gpsAltM: Double?, verticalAccuracyM: Double?, mslAltM: Double? = null) {
+    // ⚠ override 不允许声明默认值（编译错误），2 参调用走 [AltitudeFusion] 接口上的默认值
+    override fun onGpsFix(gpsAltM: Double?, verticalAccuracyM: Double?, mslAltM: Double?) {
         if (gpsAltM == null && mslAltM == null) return
         val t = nowMs()
         val alt = mslAltM ?: gpsAltM ?: return
@@ -127,7 +162,7 @@ class AltitudeFuser(
     }
 
     /** 气压采样输入（hPa）；内部按秒桶聚合取均值（≈1Hz） */
-    fun onPressure(hPa: Double) {
+    override fun onPressure(hPa: Double) {
         if (!hasBarometer) return
         val sec = nowMs() / 1000L
         if (sec != bucketSecond) {
@@ -142,23 +177,23 @@ class AltitudeFuser(
     }
 
     /** 手动校准（F-REC-64）：输入已知海拔，偏移作用于全部后续输出 */
-    fun calibrateTo(knownAltitudeM: Double) {
+    override fun calibrateTo(knownAltitudeM: Double) {
         val c = current() ?: return
         manualOffset += knownAltitudeM - c
         source = Source.MANUAL_CALIBRATED
     }
 
     /** 暂停/继续：保留 medianBuffer 与 altRef（DEV §4.3.1 anchor 保留要求），仅清漂移窗口 */
-    fun onSessionPause() {
+    override fun onSessionPause() {
         driftWindowGpsAlts.clear()
         pendingAlt = null
     }
 
     /** 崩溃恢复快照：altRef 与 pressureRefHpa（recording_state.altitudeRefM/pressureRefHpa） */
-    fun refSnapshot(): Pair<Double?, Double?> = altRef to pressureRefHpa
+    override fun refSnapshot(): Pair<Double?, Double?> = altRef to pressureRefHpa
 
     /** 回灌快照（baro 路径恢复）；回灌后标定视为已完成 */
-    fun restoreRef(altRefM: Double?, pressureRefHpaM: Double?) {
+    override fun restoreRef(altRefM: Double?, pressureRefHpaM: Double?) {
         val ref = altRefM ?: return
         altRef = ref
         pressureRefHpa = pressureRefHpaM
