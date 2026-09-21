@@ -42,6 +42,17 @@ interface PlannedRouteDao {
     @Update
     suspend fun update(route: PlannedRouteEntity)
 
+    /** 计划详情编辑保存（P-07→详情）：同事务替换段 + 更新主表（半截数据无意义） */
+    @Transaction
+    suspend fun replaceLegsAndSave(route: PlannedRouteEntity, legs: List<PlannedLegEntity>) {
+        deleteLegsOf(route.id)
+        update(route)
+        insertLegs(legs)
+    }
+
+    @Query("DELETE FROM planned_leg WHERE plannedRouteId = :routeId")
+    suspend fun deleteLegsOf(routeId: String)
+
     @Query("DELETE FROM planned_route WHERE id = :id")
     suspend fun deleteById(id: String)
 

@@ -155,6 +155,12 @@
     <string name="plan_entry">计划线路</string>
     <string name="plan_back">返回</string>
     <string name="plan_search_hint">搜索起点或终点地名</string>
+    <string name="plan_detail_replan_out">重新规划去程</string>
+    <string name="plan_detail_return_back">原路返回</string>
+    <string name="plan_detail_replan_ret">重新规划返程</string>
+    <string name="plan_detail_add_wp">添加途经点</string>
+    <string name="plan_detail_save">保存修改</string>
+    <string name="plan_detail_unsaved">未保存</string>
     <string name="about_title">关于</string>
     <string name="about_desc">本地优先的徒步记录应用：轨迹记录、海拔融合、提醒播报与照片地图。所有数据仅保存在你的设备上。</string>
     <string name="about_repo">项目仓库</string>

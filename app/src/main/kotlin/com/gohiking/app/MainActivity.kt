@@ -129,6 +129,7 @@ import com.gohiking.feature.history.TripDetailScreen
 import com.gohiking.feature.io.ImportPreviewDialog
 import com.gohiking.feature.io.ImportReportDialog
 import com.gohiking.feature.io.IoProgressDialog
+import com.gohiking.feature.plan.PlanDetailScreen
 import com.gohiking.feature.plan.PlanListScreen
 import com.gohiking.feature.plan.PlanScreen
 import com.gohiking.feature.recording.RecordingScreen
@@ -231,7 +232,8 @@ private fun Root(
     // P-02/07/10/14 底部 Tab 导航（原型 tabbar）
     var currentTab by rememberSaveable { mutableStateOf("map") } // map / plan / history / me
     var showPermGuide by rememberSaveable { mutableStateOf(false) }
-    var showAbout by rememberSaveable { mutableStateOf(false) } // P-15 // P-01 权限引导页 // P-12 照片地图（M4-B2）
+    var showAbout by rememberSaveable { mutableStateOf(false) } // P-15
+    var showPlanDetailId by rememberSaveable { mutableStateOf<String?>(null) } // 需求③：计划详情编辑
     val sessionState by session.state.collectAsStateWithLifecycle()
     val searchClient = remember { AmapSearchClient(context) }
     val routeClient = remember { RouteSearchClient(context) }
@@ -440,6 +442,7 @@ private fun Root(
         when {
             showPermGuide -> showPermGuide = false
             openTripId != null -> openTripId = null
+            showPlanDetailId != null -> showPlanDetailId = null
             showPlan -> showPlan = false
             showPhotoMap -> showPhotoMap = false
             showAbout -> showAbout = false
@@ -522,6 +525,15 @@ private fun Root(
             },
             modifier = modifier,
         )
+    } else if (showPlanDetailId != null) {
+        PlanDetailScreen(
+            routeId = showPlanDetailId!!,
+            routeDao = plannedRouteDao,
+            routeClient = routeClient,
+            elevationRepository = elevationRepository,
+            onBack = { showPlanDetailId = null },
+            modifier = modifier,
+        )
     } else if (showPlan) {
         PlanScreen(
             searchClient = searchClient,
@@ -547,6 +559,7 @@ private fun Root(
                 "plan" -> PlanListScreen(
                     plannedRouteDao = plannedRouteDao,
                     onNewRoute = { showPlan = true }, // P-07「+」→ 选点页 P-03
+                    onOpenPlan = { showPlanDetailId = it }, // 需求③：条目 → 详情编辑
                     onExportRoute = { routeId, routeName ->
                         pendingRouteExport = routeId
                         routeExportDoc.launch(FileNamer.routeFileName(routeName, System.currentTimeMillis()))

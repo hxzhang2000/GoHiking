@@ -156,6 +156,12 @@
     <string name="plan_entry">Plan route</string>
     <string name="plan_back">Back</string>
     <string name="plan_search_hint">Search start or end place</string>
+    <string name="plan_detail_replan_out">Re-plan outbound</string>
+    <string name="plan_detail_return_back">Out &amp; back</string>
+    <string name="plan_detail_replan_ret">Re-plan return</string>
+    <string name="plan_detail_add_wp">Add waypoints</string>
+    <string name="plan_detail_save">Save changes</string>
+    <string name="plan_detail_unsaved">Unsaved</string>
     <string name="about_title">About</string>
     <string name="about_desc">Local-first hiking tracker: track recording, altitude fusion, alerts and photo map. All data stays on your device.</string>
     <string name="about_repo">Project repository</string>

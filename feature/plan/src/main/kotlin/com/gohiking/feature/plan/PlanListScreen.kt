@@ -24,7 +24,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
@@ -76,6 +80,7 @@ fun PlanListScreen(
     plannedRouteDao: com.gohiking.core.database.dao.PlannedRouteDao,
     onBack: (() -> Unit)? = null, // Tab 模式无返回（P-07 appbar）
     onNewRoute: (() -> Unit)? = null, // P-07：appbar「+」/ 新建线路 → 选点页 P-03
+    onOpenPlan: ((String) -> Unit)? = null, // 需求③：点击条目 → 计划详情编辑页
     onExportRoute: ((routeId: String, routeName: String) -> Unit)? = null, // F-PLAN-43（M3-E 接线；文件名由壳层生成）
     extraBottomPadding: Dp = 0.dp, // Tab 模式：底部 tabbar 高度
     modifier: Modifier = Modifier,
@@ -250,11 +255,22 @@ fun PlanListScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { renameId = item.id } // F-PLAN-42 重命名入口
+                                .clickable {
+                                    // 需求③：点击条目 → 计划详情编辑页；无详情入口时退回重命名
+                                    if (onOpenPlan != null) onOpenPlan(item.id) else renameId = item.id
+                                }
                                 .padding(horizontal = 12.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            RouteThumb(modifier = Modifier.size(56.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(GhColors.Surface2),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                RouteThumb(modifier = Modifier.size(48.dp))
+                            }
                             Spacer(Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
@@ -271,6 +287,14 @@ fun PlanListScreen(
                                 )
                                 Spacer(Modifier.height(6.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
+                                    // 需求①：条目视觉增强——kv 行图标化（距离/爬升/时间）
+                                    Icon(
+                                        Icons.Filled.Place,
+                                        contentDescription = null,
+                                        tint = GhColors.TextTertiary,
+                                        modifier = Modifier.size(12.dp),
+                                    )
+                                    Spacer(Modifier.width(2.dp))
                                     Text(
                                         text = Formatters.distanceText(item.totalDistanceM),
                                         fontSize = 11.sp,
@@ -280,8 +304,28 @@ fun PlanListScreen(
                                     // M-11/H-06：爬升未知显示「—」，绝不用 0 冒充
                                     val ascentText = item.totalAscentM?.let { Formatters.metersText(it) }
                                         ?: stringResource(CoreR.string.common_stat_unknown)
+                                    Icon(
+                                        Icons.Filled.TrendingUp,
+                                        contentDescription = null,
+                                        tint = GhColors.TextTertiary,
+                                        modifier = Modifier.size(12.dp),
+                                    )
+                                    Spacer(Modifier.width(2.dp))
                                     Text(
                                         text = stringResource(CoreR.string.plan_estimated_ascent, ascentText),
+                                        fontSize = 11.sp,
+                                        color = GhColors.TextSecondary,
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Icon(
+                                        Icons.Filled.Timer,
+                                        contentDescription = null,
+                                        tint = GhColors.TextTertiary,
+                                        modifier = Modifier.size(12.dp),
+                                    )
+                                    Spacer(Modifier.width(2.dp))
+                                    Text(
+                                        text = formatEpoch(item.createdAt, TIME_FMT),
                                         fontSize = 11.sp,
                                         color = GhColors.TextSecondary,
                                     )
@@ -298,26 +342,53 @@ fun PlanListScreen(
                                 modifier = Modifier.size(20.dp),
                             )
                         }
-                        // 次要操作：导出 / 删除（F-PLAN-42/43；原型无此项，弱化为次要文字按钮）
+                        // 次要操作：改名（需求②独立按钮）/ 导出 / 删除，右对齐
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(start = 80.dp, end = 12.dp, bottom = 10.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                .padding(start = 80.dp, end = 4.dp, bottom = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.End),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { renameId = item.id }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                            ) {
+                                Icon(
+                                    Icons.Filled.Edit,
+                                    contentDescription = stringResource(CoreR.string.hist_detail_action_rename),
+                                    tint = GhColors.TextSecondary,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                                Spacer(Modifier.width(3.dp))
+                                Text(
+                                    text = stringResource(CoreR.string.hist_detail_action_rename),
+                                    fontSize = 12.sp,
+                                    color = GhColors.TextSecondary,
+                                )
+                            }
                             onExportRoute?.let { export ->
                                 Text(
                                     text = stringResource(CoreR.string.plan_export_route),
                                     fontSize = 12.sp,
                                     color = GhColors.TextSecondary,
-                                    modifier = Modifier.clickable { export(item.id, displayName(item.name)) },
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { export(item.id, displayName(item.name)) }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
                                 )
                             }
                             Text(
                                 text = stringResource(CoreR.string.plan_list_delete),
                                 fontSize = 12.sp,
                                 color = GhColors.Danger,
-                                modifier = Modifier.clickable { deleteId = item.id },
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { deleteId = item.id }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
                             )
                         }
                         if (item.id != routes.last().id) {
@@ -453,6 +524,7 @@ private fun difficultyText(diff: String): String = when (diff) {
 
 // DateTimeFormatter 线程安全且不可变，无需 ThreadLocal（K2 起 SimpleDateFormat?.get() 可空告警）
 private val DATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.ROOT)
+private val TIME_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT)
 
 /** epoch millis → 本地时区格式化（DateTimeFormatter 线程安全） */
 private fun formatEpoch(ms: Long, fmt: DateTimeFormatter): String =
