@@ -130,6 +130,7 @@ import com.gohiking.feature.io.ImportPreviewDialog
 import com.gohiking.feature.io.ImportReportDialog
 import com.gohiking.feature.io.IoProgressDialog
 import com.gohiking.feature.plan.PlanDetailScreen
+import com.gohiking.feature.plan.PlanWizardScreen
 import com.gohiking.feature.plan.PlanListScreen
 import com.gohiking.feature.plan.PlanScreen
 import com.gohiking.feature.recording.RecordingScreen
@@ -234,6 +235,7 @@ private fun Root(
     var showPermGuide by rememberSaveable { mutableStateOf(false) }
     var showAbout by rememberSaveable { mutableStateOf(false) } // P-15
     var showPlanDetailId by rememberSaveable { mutableStateOf<String?>(null) } // 需求③：计划详情编辑
+    var showWizard by rememberSaveable { mutableStateOf(false) } // 新建计划向导
     val sessionState by session.state.collectAsStateWithLifecycle()
     val searchClient = remember { AmapSearchClient(context) }
     val routeClient = remember { RouteSearchClient(context) }
@@ -443,6 +445,7 @@ private fun Root(
             showPermGuide -> showPermGuide = false
             openTripId != null -> openTripId = null
             showPlanDetailId != null -> showPlanDetailId = null
+            showWizard -> showWizard = false
             showPlan -> showPlan = false
             showPhotoMap -> showPhotoMap = false
             showAbout -> showAbout = false
@@ -525,6 +528,20 @@ private fun Root(
             },
             modifier = modifier,
         )
+    } else if (showWizard) {
+        PlanWizardScreen(
+            routeDao = plannedRouteDao,
+            routeClient = routeClient,
+            searchClient = searchClient,
+            locationProvider = locationProvider,
+            elevationRepository = elevationRepository,
+            onBack = { showWizard = false },
+            onSaved = {
+                showWizard = false
+                currentTab = "plan"
+            },
+            modifier = modifier,
+        )
     } else if (showPlanDetailId != null) {
         PlanDetailScreen(
             routeId = showPlanDetailId!!,
@@ -558,7 +575,7 @@ private fun Root(
             when (currentTab) {
                 "plan" -> PlanListScreen(
                     plannedRouteDao = plannedRouteDao,
-                    onNewRoute = { showPlan = true }, // P-07「+」→ 选点页 P-03
+                    onNewRoute = { showWizard = true }, // P-07「+」→ 新建计划向导
                     onOpenPlan = { showPlanDetailId = it }, // 需求③：条目 → 详情编辑
                     onExportRoute = { routeId, routeName ->
                         pendingRouteExport = routeId
@@ -600,7 +617,7 @@ private fun Root(
                     plannedRouteDao = plannedRouteDao,
                     session = session,
                     bottomInset = TAB_BAR_HEIGHT,
-                    onOpenPlan = { showPlan = true },
+                    onOpenPlan = { showWizard = true }, // P-02 搜索条 → 向导步骤①
                     onOpenPlanTab = { currentTab = "plan" },
                     onOpenPhotoMap = { showPhotoMap = true },
                     modifier = Modifier.fillMaxSize(),
