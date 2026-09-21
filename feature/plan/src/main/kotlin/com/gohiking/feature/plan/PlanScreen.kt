@@ -741,6 +741,7 @@ private fun PlanContent(
                 }
             } else if (state.candidates.isNotEmpty()) {
                 // ---- P-04：候选线路纵向列表（点击选定，选中卡蓝描边+对勾）----
+                val labels = candidateLabels(state.candidates)
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.heightIn(max = 250.dp),
@@ -748,6 +749,7 @@ private fun PlanContent(
                     items(state.candidates.size) { i ->
                         CandidateCard(
                             candidate = state.candidates[i],
+                            label = labels[i],
                             chosen = state.confirming && i == state.chosenIndex,
                             saved = state.chosenRouteId != null,
                             onSelect = { viewModel.chooseCandidate(i) },
@@ -1063,10 +1065,11 @@ private fun markerOptions(point: PlanPoint, fallbackTitle: String, hue: Float): 
 private fun mapCenterOf(mapView: MapView): LatLng? =
     mapView.map.cameraPosition?.target
 
-/** F-PLAN-12/14：单张候选卡片（P-04 原型：白卡、选中蓝描边+对勾、难度标签、距离/耗时/爬升行） */
+/** F-PLAN-12/14：单张候选卡片（P-04 原型：方案名 + 难度标签 + 距离/耗时/爬升 kv 行 + 选中描边对勾）。 */
 @Composable
 private fun CandidateCard(
     candidate: RouteCandidate,
+    label: String,
     chosen: Boolean,
     saved: Boolean,
     onSelect: () -> Unit,
@@ -1084,7 +1087,7 @@ private fun CandidateCard(
         Column(modifier = Modifier.padding(horizontal = 13.dp, vertical = 11.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = Formatters.distanceText(candidate.path.distanceM.toDouble()),
+                    text = label,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = GhColors.TextPrimary,
@@ -1115,11 +1118,17 @@ private fun CandidateCard(
             Spacer(Modifier.height(4.dp))
             Row {
                 Text(
+                    text = Formatters.distanceText(candidate.path.distanceM.toDouble()),
+                    fontSize = 12.sp,
+                    color = GhColors.TextSecondary,
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
                     text = Formatters.durationText(candidate.path.durationS),
                     fontSize = 12.sp,
                     color = GhColors.TextSecondary,
                 )
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(10.dp))
                 val ascent = candidate.metrics?.ascentM
                 Text(
                     // F-PLAN-46：高程为 DEM/远程估算，必须标注「估算」；不可用显示「—」，绝不编造
@@ -1146,6 +1155,39 @@ private fun CandidateCard(
             }
         }
     }
+}
+
+/**
+ * P-04 方案名（原型「方案 A · 最优 / 方案 B · 最短 / 方案 C · 缓坡」，DEV §4.8）：
+ * 首条（高德默认排序）= 最优；其余按 距离最短 → 最短、爬升最低 → 缓坡（爬升为
+ * 异步补齐字段，补齐后重组自动刷新）；剩余 → 备选。爬升不可用时不打缓坡标签。
+ */
+@Composable
+private fun candidateLabels(candidates: List<RouteCandidate>): List<String> {
+    val best = stringResource(CoreR.string.plan_cand_best)
+    val shortest = stringResource(CoreR.string.plan_cand_shortest)
+    val gentle = stringResource(CoreR.string.plan_cand_gentle)
+    val alt = stringResource(CoreR.string.plan_cand_alt)
+    val labelFmt = stringResource(CoreR.string.plan_cand_label)
+    val tags = remember(candidates, best, shortest, gentle, alt) {
+        val n = candidates.size
+        val labels = Array(n) { best }
+        if (n > 1) {
+            val assigned = BooleanArray(n).also { it[0] = true }
+            (1 until n).minByOrNull { candidates[it].path.distanceM }?.let {
+                labels[it] = shortest
+                assigned[it] = true
+            }
+            val rest = (1 until n).filter { !assigned[it] && candidates[it].metrics?.ascentM != null }
+            rest.minByOrNull { candidates[it].metrics?.ascentM ?: Double.MAX_VALUE }?.let {
+                labels[it] = gentle
+                assigned[it] = true
+            }
+            (1 until n).filter { !assigned[it] }.forEach { labels[it] = alt }
+        }
+        labels.toList()
+    }
+    return tags.mapIndexed { i, tag -> labelFmt.format(('A' + i).toString(), tag) }
 }
 @Composable
 private fun difficultyLabel(d: Difficulty): String = when (d) {

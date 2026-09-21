@@ -1,17 +1,22 @@
 package com.gohiking.feature.settings
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
@@ -25,12 +30,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import com.gohiking.core.designsystem.theme.GhColors
 import com.gohiking.core.resources.R as CoreR
 
 /** 数据组操作入口（M3-D2：SAF 导出/备份/导入由 app 壳层实现，设置页只放按钮） */
@@ -50,8 +62,9 @@ fun SettingsScreen(
     settingsRepository: com.gohiking.core.datastore.SettingsRepository,
     hasBarometer: Boolean,
     onLanguageChanged: (String) -> Unit,
-    onBack: () -> Unit,
+    onOpenAbout: (() -> Unit)? = null, // P-15 关于页入口（原型 g_about）
     ioActions: IoActions? = null,
+    extraBottomPadding: Dp = 0.dp, // Tab 模式：底部 tabbar 高度
     modifier: Modifier = Modifier,
 ) {
     val viewModel: SettingsViewModel = viewModel(
@@ -67,21 +80,15 @@ fun SettingsScreen(
     var selectTarget by remember { mutableStateOf<SettingItemUi.Select?>(null) }
     var showResetConfirm by remember { mutableStateOf(false) }
 
-    // N-11：targetSdk 35 强制 edge-to-edge，状态栏会压住顶部的返回按钮与标题
-    Column(modifier = modifier.fillMaxSize().statusBarsPadding().padding(16.dp)) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
+    // N-11：targetSdk 35 强制 edge-to-edge；Tab 模式下无返回按钮（P-14 原型 appbar）
+    Column(modifier = modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = stringResource(CoreR.string.set_title),
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f),
             )
-            Button(onClick = onBack) {
-                Text(stringResource(CoreR.string.plan_back))
-            }
         }
 
         if (state.barometerHint) {
@@ -93,49 +100,109 @@ fun SettingsScreen(
             )
         }
 
-        LazyColumn(modifier = Modifier.padding(top = 8.dp)) {
+        LazyColumn(
+            modifier = Modifier.padding(top = 8.dp),
+            contentPadding = PaddingValues(bottom = 16.dp + extraBottomPadding),
+        ) {
+            // P-14 原型：分组 = sec-title + 白卡（rowline + hairline）
             state.groups.forEach { group ->
-                item(key = "header_${group.titleRes}") {
+                item(key = "group_${group.titleRes}") {
                     Text(
                         text = stringResource(group.titleRes),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
+                        fontSize = 13.sp,
+                        color = GhColors.TextSecondary,
+                        modifier = Modifier.padding(top = 18.dp, bottom = 6.dp),
                     )
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = GhColors.Surface,
+                    ) {
+                        Column {
+                            group.items.forEachIndexed { i, item ->
+                                when (item) {
+                                    is SettingItemUi.Switch -> SwitchRow(item) { viewModel.toggle(item.key, it) }
+                                    is SettingItemUi.Select -> SelectRow(item) { selectTarget = item }
+                                    is SettingItemUi.Number -> NumberRow(item) { delta ->
+                                        viewModel.numberChanged(
+                                            item.key,
+                                            (item.value + delta).coerceIn(item.min, item.max),
+                                        )
+                                    }
+                                }
+                                if (i < group.items.size - 1) HorizontalDivider(color = GhColors.Line2, thickness = 1.dp)
+                            }
+                        }
+                    }
                 }
-                items(group.items.size) { i ->
-                    val item = group.items[i]
-                    when (item) {
-                        is SettingItemUi.Switch -> SwitchRow(item) { viewModel.toggle(item.key, it) }
-                        is SettingItemUi.Select -> SelectRow(item) { selectTarget = item }
-                        is SettingItemUi.Number -> NumberRow(item) { delta ->
-                            viewModel.numberChanged(
-                                item.key,
-                                (item.value + delta).coerceIn(item.min, item.max),
+            }
+
+            // 数据操作（M3-D2：SAF 导出/备份/导入，行式入口）
+            ioActions?.let { actions ->
+                item(key = "io_actions") {
+                    Text(
+                        text = stringResource(CoreR.string.set_group_data),
+                        fontSize = 13.sp,
+                        color = GhColors.TextSecondary,
+                        modifier = Modifier.padding(top = 18.dp, bottom = 6.dp),
+                    )
+                    Surface(shape = RoundedCornerShape(12.dp), color = GhColors.Surface) {
+                        Column {
+                            SettingsActionRow(stringResource(CoreR.string.io_export_all), actions.onExportAll)
+                            HorizontalDivider(color = GhColors.Line2, thickness = 1.dp)
+                            SettingsActionRow(stringResource(CoreR.string.io_backup), actions.onBackup)
+                            HorizontalDivider(color = GhColors.Line2, thickness = 1.dp)
+                            SettingsActionRow(stringResource(CoreR.string.io_import), actions.onImport)
+                        }
+                    }
+                }
+            }
+
+            // 关于（P-15 入口，原型 g_about）+ 恢复默认
+            item(key = "about_reset") {
+                Text(
+                    text = stringResource(CoreR.string.set_group_about),
+                    fontSize = 13.sp,
+                    color = GhColors.TextSecondary,
+                    modifier = Modifier.padding(top = 18.dp, bottom = 6.dp),
+                )
+                Surface(shape = RoundedCornerShape(12.dp), color = GhColors.Surface) {
+                    Column {
+                        if (onOpenAbout != null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(onClick = onOpenAbout)
+                                    .padding(horizontal = 13.dp, vertical = 12.dp),
+                            ) {
+                                Text(
+                                    text = stringResource(CoreR.string.about_title),
+                                    fontSize = 15.sp,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Icon(
+                                    Icons.Filled.KeyboardArrowRight,
+                                    contentDescription = null,
+                                    tint = GhColors.TextTertiary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showResetConfirm = true }
+                                .padding(horizontal = 13.dp, vertical = 12.dp),
+                        ) {
+                            Text(
+                                text = stringResource(CoreR.string.set_reset_default),
+                                fontSize = 15.sp,
+                                color = GhColors.TextSecondary,
+                                modifier = Modifier.weight(1f),
                             )
                         }
                     }
-                    if (i < group.items.size - 1) HorizontalDivider()
-                }
-            }
-            item(key = "io_actions") {
-                ioActions?.let { actions ->
-                    Column(modifier = Modifier.padding(top = 8.dp)) {
-                        TextButton(onClick = actions.onExportAll) {
-                            Text(stringResource(CoreR.string.io_export_all))
-                        }
-                        TextButton(onClick = actions.onBackup) {
-                            Text(stringResource(CoreR.string.io_backup))
-                        }
-                        TextButton(onClick = actions.onImport) {
-                            Text(stringResource(CoreR.string.io_import))
-                        }
-                    }
-                }
-            }
-            item(key = "reset") {
-                TextButton(onClick = { showResetConfirm = true }) {
-                    Text(stringResource(CoreR.string.set_reset_default))
                 }
             }
         }
@@ -253,5 +320,25 @@ private fun NumberRow(item: SettingItemUi.Number, onDelta: (Int) -> Unit) {
         TextButton(onClick = { onDelta(item.step) }, enabled = item.value < item.max) {
             Text("+")
         }
+    }
+}
+
+/** P-14 数据组行动行（点击行 + 右箭头，原型 .btn 行式入口）。 */
+@Composable
+private fun SettingsActionRow(label: String, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 13.dp, vertical = 12.dp),
+    ) {
+        Text(text = label, fontSize = 15.sp, modifier = Modifier.weight(1f))
+        Icon(
+            Icons.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = GhColors.TextTertiary,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }

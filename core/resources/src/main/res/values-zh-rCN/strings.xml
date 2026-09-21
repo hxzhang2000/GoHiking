@@ -6,6 +6,10 @@
     <!-- 通用动作 common_action_* -->
     <string name="common_action_confirm">确认</string>
     <string name="common_layer">图层</string>
+    <string name="map_layer_normal">标准地图</string>
+    <string name="map_layer_satellite">卫星影像</string>
+    <string name="map_layer_night">夜间模式</string>
+    <string name="map_layer_navi">导航地图</string>
     <string name="common_zoom_in">放大</string>
     <string name="common_locate">定位</string>
     <string name="common_action_cancel">取消</string>
@@ -145,6 +149,22 @@
     <string name="plan_entry">计划线路</string>
     <string name="plan_back">返回</string>
     <string name="plan_search_hint">搜索起点或终点地名</string>
+    <string name="about_title">关于</string>
+    <string name="about_desc">本地优先的徒步记录应用：轨迹记录、海拔融合、提醒播报与照片地图。所有数据仅保存在你的设备上。</string>
+    <string name="about_repo">项目仓库</string>
+    <string name="about_license">开源许可</string>
+    <string name="about_issue">问题反馈</string>
+    <string name="about_hint">本地优先：所有数据仅保存在你的设备上。</string>
+    <string name="hist_splits_empty">暂无分段数据——分段表在行程保存后生成。</string>
+    <string name="hist_markers_empty">暂无标记。记录中可打标记或记录登顶点。</string>
+    <string name="hist_photos_empty">没有匹配到本轨迹的照片（±30 分钟、轨迹 500m 内）。</string>
+    <string name="hist_photos_no_permission">需要照片权限，才能把照片按位置匹配到轨迹。</string>
+    <string name="plan_cand_label">方案 %1$s · %2$s</string>
+    <string name="plan_cand_best">最优</string>
+    <string name="plan_cand_shortest">最短</string>
+    <string name="plan_cand_gentle">缓坡</string>
+    <string name="plan_cand_alt">备选</string>
+    <string name="home_locate_failed">暂时拿不到定位，请在开阔处重试。</string>
     <string name="plan_select_title">选择起终点</string>
     <string name="plan_swap">互换起终点</string>
     <string name="plan_next">下一步</string>
@@ -230,6 +250,7 @@
     <string name="set_group_unit">单位</string>
     <string name="set_group_map">地图</string>
     <string name="set_group_data">数据</string>
+    <string name="set_group_about">关于</string>
     <string name="set_language">语言</string>
     <string name="set_lang_system">跟随系统</string>
     <string name="set_lang_zh">中文</string>

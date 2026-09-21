@@ -7,6 +7,10 @@
     <!-- 通用动作 common_action_* -->
     <string name="common_action_confirm">Confirm</string>
     <string name="common_layer">Layers</string>
+    <string name="map_layer_normal">Standard</string>
+    <string name="map_layer_satellite">Satellite</string>
+    <string name="map_layer_night">Night</string>
+    <string name="map_layer_navi">Navi</string>
     <string name="common_zoom_in">Zoom in</string>
     <string name="common_locate">Locate</string>
     <string name="common_action_cancel">Cancel</string>
@@ -146,6 +150,22 @@
     <string name="plan_entry">Plan route</string>
     <string name="plan_back">Back</string>
     <string name="plan_search_hint">Search start or end place</string>
+    <string name="about_title">About</string>
+    <string name="about_desc">Local-first hiking tracker: track recording, altitude fusion, alerts and photo map. All data stays on your device.</string>
+    <string name="about_repo">Project repository</string>
+    <string name="about_license">License</string>
+    <string name="about_issue">Feedback</string>
+    <string name="about_hint">Local-first: all data stays on your device.</string>
+    <string name="hist_splits_empty">No split data yet — splits are computed after the trip is saved.</string>
+    <string name="hist_markers_empty">No markers yet. Drop markers or summit during recording.</string>
+    <string name="hist_photos_empty">No photos matched to this track (±30 min, within 500 m).</string>
+    <string name="hist_photos_no_permission">Grant photo permission so photos can be matched to the track.</string>
+    <string name="plan_cand_label">Option %1$s · %2$s</string>
+    <string name="plan_cand_best">Best</string>
+    <string name="plan_cand_shortest">Shortest</string>
+    <string name="plan_cand_gentle">Gentle</string>
+    <string name="plan_cand_alt">Alternate</string>
+    <string name="home_locate_failed">Could not get a location fix. Try again outdoors.</string>
     <string name="plan_select_title">Pick start / end</string>
     <string name="plan_swap">Swap start &amp; end</string>
     <string name="plan_next">Next</string>
@@ -231,6 +251,7 @@
     <string name="set_group_unit">Units</string>
     <string name="set_group_map">Map</string>
     <string name="set_group_data">Data</string>
+    <string name="set_group_about">About</string>
     <string name="set_language">Language</string>
     <string name="set_lang_system">System default</string>
     <string name="set_lang_zh">中文</string>

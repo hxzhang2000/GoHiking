@@ -1,6 +1,7 @@
 package com.gohiking.feature.history
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -36,6 +38,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -72,6 +76,7 @@ import com.gohiking.core.database.entity.MarkerEntity
 import com.gohiking.core.database.entity.MediaIndexEntity
 import com.gohiking.core.database.entity.TripEntity
 import com.gohiking.core.data.stats.LegSummary
+import com.gohiking.core.designsystem.theme.GhColors
 import com.gohiking.core.resources.R as CoreR
 import java.time.Instant
 import java.time.ZoneId
@@ -206,125 +211,176 @@ private fun TripDetailContent(
         }
         val trip = state.trip!!
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+        // F-HIS-21 地图区（P-11 原型：固定高度，切 Tab 时保持可见，标记点击定位 F-HIS-27）
+        TripMap(
+            segments = state.segments,
+            markers = state.markers,
+            focus = focusMarker,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(170.dp)
+                .padding(horizontal = 12.dp),
+        )
+
+        // P-11 tabs：概览 / 图表 / 分段 / 标记 / 照片（原型 .tabs，seg 风格）
+        var tab by rememberSaveable { mutableStateOf(DetailTab.OVERVIEW) }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(GhColors.Surface2)
+                .padding(3.dp),
         ) {
-            // F-HIS-21 地图区
-            item {
-                TripMap(
-                    segments = state.segments,
-                    markers = state.markers,
-                    focus = focusMarker,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(260.dp)
-                        .padding(horizontal = 12.dp),
+            DetailTab.entries.forEach { t ->
+                DetailTabItem(
+                    label = stringResource(detailTabLabel(t)),
+                    selected = tab == t,
+                    onClick = { tab = t },
+                    modifier = Modifier.weight(1f),
                 )
             }
+        }
 
-            // F-HIS-22 概览区（12 项）
-            item { SectionTitle(stringResource(CoreR.string.hist_detail_section_overview)) }
-            item { OverviewGrid(trip) }
+        // Tab 内容（每页独立滚动）
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            when (tab) {
+                DetailTab.OVERVIEW -> {
+                    // F-HIS-22 概览 12 项 + F-HIS-26 上山/下山（原型 ov 含去程/返程）
+                    item { OverviewGrid(trip) }
+                    item { SectionTitle(stringResource(CoreR.string.hist_detail_section_legs)) }
+                    item {
+                        val legs = state.legs
+                        if (legs == null) {
+                            Text(
+                                text = stringResource(CoreR.string.hist_legs_none),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 12.dp),
+                            )
+                        } else {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.padding(horizontal = 12.dp),
+                            ) {
+                                LegCard(
+                                    title = stringResource(CoreR.string.hist_leg_up),
+                                    leg = legs.uphill,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                LegCard(
+                                    title = stringResource(CoreR.string.hist_leg_down),
+                                    leg = legs.downhill,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
+                    }
+                }
 
-            // F-HIS-23/24 图表（M4-A：海拔曲线 + 每公里配速）
-            item { SectionTitle(stringResource(CoreR.string.hist_detail_section_charts)) }
-            item { AltitudeChartCard(state.altitudeSeries) }
-            item { PaceChartCard(state.kmSplits) }
+                DetailTab.CHARTS -> {
+                    // F-HIS-23/24 图表（M4-A：海拔曲线 + 每公里配速）
+                    item { AltitudeChartCard(state.altitudeSeries) }
+                    item { PaceChartCard(state.kmSplits) }
+                }
 
-            // F-HIS-28 / F-MEDIA-40 照片条（M4-B1：无媒体权限时整段隐藏）
-            state.photos?.takeIf { it.isNotEmpty() }?.let { photos ->
-                item { SectionTitle(stringResource(CoreR.string.hist_media_section)) }
-                item { MediaStrip(photos) }
-            }
+                DetailTab.SPLITS -> {
+                    // F-HIS-25 分段表
+                    if (state.kmSplits.isEmpty() && state.gainSplits.isEmpty()) {
+                        item {
+                            Text(
+                                text = stringResource(CoreR.string.hist_splits_empty),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(12.dp),
+                            )
+                        }
+                    }
+                    if (state.kmSplits.isNotEmpty()) item { KmSplitsTable(state.kmSplits) }
+                    if (state.gainSplits.isNotEmpty()) item { GainSplitsTable(state.gainSplits) }
+                }
 
-            // F-HIS-25 分段表
-            if (state.kmSplits.isNotEmpty() || state.gainSplits.isNotEmpty()) {
-                item { SectionTitle(stringResource(CoreR.string.hist_detail_section_splits)) }
-                if (state.kmSplits.isNotEmpty()) item { KmSplitsTable(state.kmSplits) }
-                if (state.gainSplits.isNotEmpty()) item { GainSplitsTable(state.gainSplits) }
-            }
+                DetailTab.MARKERS -> {
+                    // F-HIS-27 标记列表（点击 → 地图定位）
+                    if (state.markers.isEmpty()) {
+                        item {
+                            Text(
+                                text = stringResource(CoreR.string.hist_markers_empty),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(12.dp),
+                            )
+                        }
+                    }
+                    items(state.markers, key = { it.id }) { marker ->
+                        MarkerRow(marker = marker, onClick = { focusMarker = marker })
+                    }
+                }
 
-            // F-HIS-26 上山 / 下山
-            item { SectionTitle(stringResource(CoreR.string.hist_detail_section_legs)) }
-            item {
-                val legs = state.legs
-                if (legs == null) {
-                    Text(
-                        text = stringResource(CoreR.string.hist_legs_none),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                    )
-                } else {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                    ) {
-                        LegCard(
-                            title = stringResource(CoreR.string.hist_leg_up),
-                            leg = legs.uphill,
-                            modifier = Modifier.weight(1f),
-                        )
-                        LegCard(
-                            title = stringResource(CoreR.string.hist_leg_down),
-                            leg = legs.downhill,
-                            modifier = Modifier.weight(1f),
-                        )
+                DetailTab.PHOTOS -> {
+                    // F-HIS-28 / F-MEDIA-40 照片（±30min / 轨迹 500m 匹配）
+                    val photos = state.photos
+                    if (photos == null) {
+                        item {
+                            Text(
+                                text = stringResource(CoreR.string.hist_photos_no_permission),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(12.dp),
+                            )
+                        }
+                    } else if (photos.isEmpty()) {
+                        item {
+                            Text(
+                                text = stringResource(CoreR.string.hist_photos_empty),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(12.dp),
+                            )
+                        }
+                    } else {
+                        item { SectionTitle(stringResource(CoreR.string.hist_media_section)) }
+                        item { MediaStrip(photos) }
                     }
                 }
             }
+        }
 
-            // F-HIS-27 标记列表（点击 → 地图定位）
-            item { SectionTitle(stringResource(CoreR.string.hist_detail_section_markers)) }
-            if (state.markers.isEmpty()) {
-                item {
-                    Text(
-                        text = stringResource(CoreR.string.hist_legs_none),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                    )
-                }
+        // F-HIS-30 操作栏（常驻底部，任意 Tab 可用）
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp),
+        ) {
+            OutlinedButton(onClick = { showNote = true }, modifier = Modifier.weight(1f)) {
+                Text(stringResource(CoreR.string.hist_detail_action_note), maxLines = 1)
             }
-            items(state.markers, key = { it.id }) { marker ->
-                MarkerRow(marker = marker, onClick = { focusMarker = marker })
+            OutlinedButton(onClick = { showDelete = true }, modifier = Modifier.weight(1f)) {
+                Text(stringResource(CoreR.string.common_action_delete), maxLines = 1)
             }
-
-            // F-HIS-30 操作栏（导出/分享 M3 接 F-IO，禁用占位）
-            item {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp),
-                ) {
-                    OutlinedButton(onClick = { showNote = true }, modifier = Modifier.weight(1f)) {
-                        Text(stringResource(CoreR.string.hist_detail_action_note), maxLines = 1)
-                    }
-                    OutlinedButton(onClick = { showDelete = true }, modifier = Modifier.weight(1f)) {
-                        Text(stringResource(CoreR.string.common_action_delete), maxLines = 1)
-                    }
-                }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                ) {
-                    // F-IO-01 单条导出（M4 接线）；分享属后续版本
-                    OutlinedButton(
-                        enabled = onExportTrip != null,
-                        onClick = { onExportTrip?.invoke(trip.id, trip.name) },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(stringResource(CoreR.string.hist_detail_action_export), maxLines = 1)
-                    }
-                    OutlinedButton(enabled = false, onClick = {}, modifier = Modifier.weight(1f)) {
-                        Text(stringResource(CoreR.string.hist_detail_action_share), maxLines = 1)
-                    }
-                }
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp)
+                .navigationBarsPadding(),
+        ) {
+            // F-IO-01 单条导出（M4 接线）；分享属后续版本
+            OutlinedButton(
+                enabled = onExportTrip != null,
+                onClick = { onExportTrip?.invoke(trip.id, trip.name) },
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(stringResource(CoreR.string.hist_detail_action_export), maxLines = 1)
+            }
+            OutlinedButton(enabled = false, onClick = {}, modifier = Modifier.weight(1f)) {
+                Text(stringResource(CoreR.string.hist_detail_action_share), maxLines = 1)
             }
         }
     }
@@ -699,3 +755,41 @@ private val MARKER_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern(
 /** epoch millis → 本地时区格式化（DateTimeFormatter 线程安全） */
 private fun formatEpoch(ms: Long, fmt: DateTimeFormatter): String =
     fmt.format(Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()))
+
+/** P-11 详情页 5-Tab（原型 .tabs：概览/图表/分段/标记/照片）。 */
+private enum class DetailTab { OVERVIEW, CHARTS, SPLITS, MARKERS, PHOTOS }
+
+@Composable
+private fun detailTabLabel(tab: DetailTab): Int = when (tab) {
+    DetailTab.OVERVIEW -> CoreR.string.hist_detail_section_overview
+    DetailTab.CHARTS -> CoreR.string.hist_detail_section_charts
+    DetailTab.SPLITS -> CoreR.string.hist_detail_section_splits
+    DetailTab.MARKERS -> CoreR.string.hist_detail_section_markers
+    DetailTab.PHOTOS -> CoreR.string.hist_media_section
+}
+
+/** P-11 Tab 单元（Surface2 底、选中白底浮起，与 P-03/P-05 seg 同款）。 */
+@Composable
+private fun DetailTabItem(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (selected) GhColors.Surface else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            color = if (selected) GhColors.TextPrimary else GhColors.TextSecondary,
+            maxLines = 1,
+        )
+    }
+}

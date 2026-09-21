@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -49,6 +50,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -72,9 +74,10 @@ import java.util.Locale
 @Composable
 fun PlanListScreen(
     plannedRouteDao: com.gohiking.core.database.dao.PlannedRouteDao,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null, // Tab 模式无返回（P-07 appbar）
     onNewRoute: (() -> Unit)? = null, // P-07：appbar「+」/ 新建线路 → 选点页 P-03
     onExportRoute: ((routeId: String, routeName: String) -> Unit)? = null, // F-PLAN-43（M3-E 接线；文件名由壳层生成）
+    extraBottomPadding: Dp = 0.dp, // Tab 模式：底部 tabbar 高度
     modifier: Modifier = Modifier,
 ) {
     // L-06：导入的线路缺 name 时库里存的是中性哨兵值，这里替换成本地化文案
@@ -107,6 +110,7 @@ fun PlanListScreen(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (onBack != null) {
             Box(
                 modifier = Modifier
                     .size(36.dp)
@@ -120,7 +124,7 @@ fun PlanListScreen(
                     tint = GhColors.TextPrimary,
                     modifier = Modifier.size(20.dp),
                 )
-            }
+            }            }
             Spacer(Modifier.width(8.dp))
             Text(
                 text = stringResource(CoreR.string.plan_list_title),
@@ -238,7 +242,10 @@ fun PlanListScreen(
                     .fillMaxWidth()
                     .padding(12.dp),
             ) {
-                LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(bottom = 16.dp + extraBottomPadding),
+                ) {
                     items(items = routes, key = { it.id }) { item ->
                         Row(
                             modifier = Modifier

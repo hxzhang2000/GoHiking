@@ -38,15 +38,20 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Landscape
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Button
 import androidx.compose.material3.Surface
@@ -73,6 +78,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -121,12 +127,14 @@ import com.gohiking.feature.plan.PlanListScreen
 import com.gohiking.feature.plan.PlanScreen
 import com.gohiking.feature.recording.RecordingScreen
 import com.gohiking.feature.settings.IoActions
+import com.gohiking.feature.settings.AboutScreen
 import com.gohiking.feature.settings.SettingsScreen
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 
 /**
@@ -211,13 +219,13 @@ private fun Root(
 ) {
     val context = LocalContext.current
     var agreed by remember { mutableStateOf<Boolean?>(null) } // null = 尚未从 DataStore 读取
-    var showHistory by rememberSaveable { mutableStateOf(false) }
     var openTripId by rememberSaveable { mutableStateOf<String?>(null) }
     var showPlan by rememberSaveable { mutableStateOf(false) }
-    var showPlanList by rememberSaveable { mutableStateOf(false) }
-    var showSettings by rememberSaveable { mutableStateOf(false) }
     var showPhotoMap by rememberSaveable { mutableStateOf(false) }
-    var showPermGuide by rememberSaveable { mutableStateOf(false) } // P-01 权限引导页 // P-12 照片地图（M4-B2）
+    // P-02/07/10/14 底部 Tab 导航（原型 tabbar）
+    var currentTab by rememberSaveable { mutableStateOf("map") } // map / plan / history / me
+    var showPermGuide by rememberSaveable { mutableStateOf(false) }
+    var showAbout by rememberSaveable { mutableStateOf(false) } // P-15 // P-01 权限引导页 // P-12 照片地图（M4-B2）
     val sessionState by session.state.collectAsStateWithLifecycle()
     val searchClient = remember { AmapSearchClient(context) }
     val routeClient = remember { RouteSearchClient(context) }
@@ -426,11 +434,10 @@ private fun Root(
         when {
             showPermGuide -> showPermGuide = false
             openTripId != null -> openTripId = null
-            showPlanList -> showPlanList = false
             showPlan -> showPlan = false
             showPhotoMap -> showPhotoMap = false
-            showSettings -> showSettings = false
-            showHistory -> showHistory = false
+            showAbout -> showAbout = false
+            currentTab != "map" -> currentTab = "map" // Tab 页返回 → 先回地图 Tab
             else -> {
                 val now = System.currentTimeMillis()
                 if (now - lastBackPressAtMs < EXIT_CONFIRM_WINDOW_MS) {
@@ -509,17 +516,6 @@ private fun Root(
             },
             modifier = modifier,
         )
-    } else if (showPlanList) {
-        PlanListScreen(
-            plannedRouteDao = plannedRouteDao,
-            onBack = { showPlanList = false },
-            onNewRoute = { showPlanList = false; showPlan = true }, // P-07「+」→ 选点页 P-03
-            onExportRoute = { routeId, routeName ->
-                pendingRouteExport = routeId
-                routeExportDoc.launch(FileNamer.routeFileName(routeName, System.currentTimeMillis()))
-            },
-            modifier = modifier,
-        )
     } else if (showPlan) {
         PlanScreen(
             searchClient = searchClient,
@@ -536,45 +532,66 @@ private fun Root(
             onBack = { showPhotoMap = false },
             modifier = modifier,
         )
-    } else if (showSettings) {
-        SettingsScreen(
-            settingsRepository = settingsRepository,
-            hasBarometer = hasBarometer,
-            onLanguageChanged = { lang ->
-                // F-I18N-11：偏好已写入 DataStore，重启后 attachBaseContext 生效
-                Toast.makeText(context, context.getString(CoreR.string.set_language_restart), Toast.LENGTH_SHORT).show()
-                if (lang != AppSettings.LANGUAGE_SYSTEM) (context as? Activity)?.recreate()
-            },
-            ioActions = IoActions(
-                onExportAll = { exportAllTree.launch(null) }, // F-IO-02 批量导出
-                onBackup = {
-                    backupDoc.launch(FileNamer.backupFileName(System.currentTimeMillis())) // F-IO-07
-                },
-                onImport = {
-                    importDocs.launch(arrayOf("application/json", "application/zip", "application/octet-stream"))
-                },
-            ),
-            onBack = { showSettings = false },
-            modifier = modifier,
-        )
-    } else if (showHistory) {
-        HistoryListScreen(
-            tripRepository = tripRepository,
-            onBack = { showHistory = false },
-            onOpenTrip = { openTripId = it },
-            onStartRecording = { showHistory = false }, // P-10 空态「开始记录」→ 回首页
-            modifier = modifier,
-        )
+    } else if (showAbout) {
+        AboutScreen(onBack = { showAbout = false }, modifier = modifier)
     } else {
-        MapVerifyScreen(
-            modifier = modifier,
-            session = session,
-            onOpenHistory = { showHistory = true },
-            onOpenPlan = { showPlan = true },
-            onOpenPlanList = { showPlanList = true },
-            onOpenSettings = { showSettings = true },
-            onOpenPhotoMap = { showPhotoMap = true },
-        )
+        // 主 Tab 页（P-02/07/10/14）：底部 tabbar 常驻（原型 tabbar）
+        Box(modifier.fillMaxSize()) {
+            when (currentTab) {
+                "plan" -> PlanListScreen(
+                    plannedRouteDao = plannedRouteDao,
+                    onNewRoute = { showPlan = true }, // P-07「+」→ 选点页 P-03
+                    onExportRoute = { routeId, routeName ->
+                        pendingRouteExport = routeId
+                        routeExportDoc.launch(FileNamer.routeFileName(routeName, System.currentTimeMillis()))
+                    },
+                    extraBottomPadding = TAB_BAR_HEIGHT,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                "history" -> HistoryListScreen(
+                    tripRepository = tripRepository,
+                    onOpenTrip = { openTripId = it },
+                    onStartRecording = { currentTab = "map" }, // P-10 空态 → 回地图 Tab
+                    extraBottomPadding = TAB_BAR_HEIGHT,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                "me" -> SettingsScreen(
+                    settingsRepository = settingsRepository,
+                    hasBarometer = hasBarometer,
+                    onLanguageChanged = { lang ->
+                        // F-I18N-11：偏好已写入 DataStore，重启后 attachBaseContext 生效
+                        Toast.makeText(context, context.getString(CoreR.string.set_language_restart), Toast.LENGTH_SHORT).show()
+                        if (lang != AppSettings.LANGUAGE_SYSTEM) (context as? Activity)?.recreate()
+                    },
+                    ioActions = IoActions(
+                        onExportAll = { exportAllTree.launch(null) }, // F-IO-02 批量导出
+                        onBackup = {
+                            backupDoc.launch(FileNamer.backupFileName(System.currentTimeMillis())) // F-IO-07
+                        },
+                        onImport = {
+                            importDocs.launch(arrayOf("application/json", "application/zip", "application/octet-stream"))
+                        },
+                    ),
+                    onOpenAbout = { showAbout = true },
+                    extraBottomPadding = TAB_BAR_HEIGHT,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                else -> MapVerifyScreen(
+                    locationProvider = locationProvider,
+                    session = session,
+                    bottomInset = TAB_BAR_HEIGHT,
+                    onOpenPlan = { showPlan = true },
+                    onOpenPlanTab = { currentTab = "plan" },
+                    onOpenPhotoMap = { showPhotoMap = true },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            MainTabBar(
+                current = currentTab,
+                onSelect = { currentTab = it },
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
     }
 
     // ---- P-16/17/18：IO 对话框 ----
@@ -709,19 +726,21 @@ private fun PrivacyGate(onAgree: () -> Unit, onDecline: () -> Unit) {
 private fun MapVerifyScreen(
     session: RecordingSession,
     modifier: Modifier = Modifier,
-    onOpenHistory: () -> Unit = {},
     onOpenPlan: () -> Unit = {},
-    onOpenPlanList: () -> Unit = {},
-    onOpenSettings: () -> Unit = {},
+    onOpenPlanTab: () -> Unit = {}, // P-02 homebar「计划线路」→ 计划 Tab（原型 data-go=p07）
     onOpenPhotoMap: () -> Unit = {}, // P-12 照片地图（M4-B2）
+    locationProvider: LocationProvider, // P-02 定位按钮：复用全局 SwitchingLocationProvider
+    bottomInset: Dp = 0.dp, // Tab 模式：底部 tabbar 高度（homebar/chip 抬升）
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
 
     // P-02：左下角提示 chip 复用为最近一条地图事件（保留 M0 点击冲突回归观测点）
     var lastEvent by remember { mutableStateOf<String?>(null) }
-    var satellite by rememberSaveable { mutableStateOf(false) } // 图层切换（正常/卫星）
-    var centerOnMyLocation by remember { mutableStateOf(false) } // 定位按钮 → 蓝点就绪后居中一次
+    var mapType by remember { mutableStateOf(AMap.MAP_TYPE_NORMAL) } // P-02 图层：普通/卫星/夜间/导航
+    var showLayerMenu by remember { mutableStateOf(false) }
+    var locating by remember { mutableStateOf(false) }
     var lastPoiAtMs by remember { mutableLongStateOf(0L) }
     var lastMapClickAtMs by remember { mutableLongStateOf(0L) }
     var showStartDialog by rememberSaveable { mutableStateOf(false) } // F-REC-02：开始前可选命名
@@ -774,14 +793,6 @@ private fun MapVerifyScreen(
                 log(context.getString(CoreR.string.map_test_log_poi, poi.name ?: context.getString(CoreR.string.plan_poi_unnamed)))
                 if (lastMapClickAtMs > 0 && kotlin.math.abs(lastPoiAtMs - lastMapClickAtMs) < 600) {
                     log(context.getString(CoreR.string.map_test_log_both))
-                }
-            }
-            map.setOnMyLocationChangeListener { location ->
-                if (centerOnMyLocation && location != null) {
-                    centerOnMyLocation = false
-                    map.moveCamera(
-                        CameraUpdateFactory.newLatLngZoom(LatLng(location.latitude, location.longitude), 15f),
-                    )
                 }
             }
         }
@@ -867,9 +878,44 @@ private fun MapVerifyScreen(
                 .padding(top = 62.dp, end = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            MapButton(icon = Icons.Filled.Layers, contentDescriptionRes = CoreR.string.common_layer) {
-                satellite = !satellite
-                mapView.map.mapType = if (satellite) AMap.MAP_TYPE_SATELLITE else AMap.MAP_TYPE_NORMAL
+            Box {
+                MapButton(icon = Icons.Filled.Layers, contentDescriptionRes = CoreR.string.common_layer) {
+                    showLayerMenu = true
+                }
+                DropdownMenu(expanded = showLayerMenu, onDismissRequest = { showLayerMenu = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(CoreR.string.map_layer_normal)) },
+                        onClick = {
+                            mapType = AMap.MAP_TYPE_NORMAL
+                            mapView.map.mapType = AMap.MAP_TYPE_NORMAL
+                            showLayerMenu = false
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(CoreR.string.map_layer_satellite)) },
+                        onClick = {
+                            mapType = AMap.MAP_TYPE_SATELLITE
+                            mapView.map.mapType = AMap.MAP_TYPE_SATELLITE
+                            showLayerMenu = false
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(CoreR.string.map_layer_night)) },
+                        onClick = {
+                            mapType = AMap.MAP_TYPE_NIGHT
+                            mapView.map.mapType = AMap.MAP_TYPE_NIGHT
+                            showLayerMenu = false
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(CoreR.string.map_layer_navi)) },
+                        onClick = {
+                            mapType = AMap.MAP_TYPE_NAVI
+                            mapView.map.mapType = AMap.MAP_TYPE_NAVI
+                            showLayerMenu = false
+                        },
+                    )
+                }
             }
             MapButton(icon = Icons.Filled.Add, contentDescriptionRes = CoreR.string.common_zoom_in) {
                 mapView.map.moveCamera(CameraUpdateFactory.zoomIn())
@@ -877,10 +923,29 @@ private fun MapVerifyScreen(
             MapButton(icon = Icons.Filled.MyLocation, contentDescriptionRes = CoreR.string.common_locate) {
                 if (!locationGranted()) {
                     showPermissionHint = true
-                } else {
-                    centerOnMyLocation = true
-                    runCatching { mapView.map.isMyLocationEnabled = true }
-                        .onFailure { Timber.w(it, "isMyLocationEnabled 失败") }
+                } else if (!locating) {
+                    // P-02：复用全局 SwitchingLocationProvider 拿首个 fix 居中（8s 超时）
+                    locating = true
+                    Toast.makeText(context, context.getString(CoreR.string.home_locating), Toast.LENGTH_SHORT).show()
+                    scope.launch {
+                        var fix: com.gohiking.core.location.LocationFix? = null
+                        try {
+                            locationProvider.start(1000)
+                            fix = withTimeoutOrNull(8_000) { locationProvider.fixes.first() }
+                        } catch (e: Exception) {
+                            Timber.w(e, "首页定位失败")
+                        } finally {
+                            runCatching { locationProvider.stop() }
+                        }
+                        locating = false
+                        if (fix != null) {
+                            mapView.map.moveCamera(
+                                CameraUpdateFactory.newLatLngZoom(LatLng(fix.lat, fix.lng), 15f),
+                            )
+                        } else {
+                            Toast.makeText(context, context.getString(CoreR.string.home_locate_failed), Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             }
         }
@@ -890,7 +955,7 @@ private fun MapVerifyScreen(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .navigationBarsPadding()
-                .padding(start = 12.dp, bottom = 72.dp)
+                .padding(start = 12.dp, bottom = 72.dp + bottomInset)
                 .clip(RoundedCornerShape(6.dp))
                 .background(Color.White.copy(alpha = 0.86f))
                 .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -909,7 +974,7 @@ private fun MapVerifyScreen(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 12.dp),
+                .padding(start = 12.dp, end = 12.dp, bottom = 12.dp + bottomInset),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             GhPillButton(
@@ -918,7 +983,7 @@ private fun MapVerifyScreen(
                 container = GhColors.Surface,
                 content = GhColors.TextPrimary,
                 border = BorderStroke(1.dp, GhColors.Line),
-                onClick = onOpenPlanList, // 原型 data-go="p07"：计划线路列表
+                onClick = onOpenPlanTab, // 原型 data-go="p07"：计划线路列表（Tab 模式切 Tab）
                 modifier = Modifier.weight(1f),
             )
             GhPillButton(
@@ -1286,6 +1351,61 @@ private fun PermissionGuideScreen(onDone: () -> Unit) {
                 onClick = onDone,
                 modifier = Modifier.weight(1f),
             )
+        }
+    }
+}
+
+/** Tab 高度（内容 56dp + 视觉余量），主 Tab 页按此值抬高底部内容。 */
+private val TAB_BAR_HEIGHT = 64.dp
+
+/**
+ * P-02/07/10/14 底部 Tab 导航（原型 tabbar：地图/计划/记录/我的）。
+ * 仅主 Tab 页显示；子页面（选点/详情/照片地图/关于）不显示。
+ */
+@Composable
+private fun MainTabBar(
+    current: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val tabs = listOf(
+        Triple("map", Icons.Filled.LocationOn, CoreR.string.common_tab_map),
+        Triple("plan", Icons.Filled.Route, CoreR.string.common_tab_plan),
+        Triple("history", Icons.Filled.History, CoreR.string.common_tab_history),
+        Triple("me", Icons.Filled.Person, CoreR.string.common_tab_me),
+    )
+    Surface(color = GhColors.Surface, modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .height(56.dp),
+        ) {
+            tabs.forEach { (key, icon, labelRes) ->
+                val selected = current == key
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxSize()
+                        .clickable { onSelect(key) },
+                ) {
+                    Icon(
+                        icon,
+                        contentDescription = stringResource(labelRes),
+                        tint = if (selected) GhColors.Primary else GhColors.TextTertiary,
+                        modifier = Modifier.size(22.dp),
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(labelRes),
+                        fontSize = 10.sp,
+                        color = if (selected) GhColors.Primary else GhColors.TextTertiary,
+                        maxLines = 1,
+                    )
+                }
+            }
         }
     }
 }

@@ -50,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -66,9 +67,10 @@ import com.gohiking.core.resources.R as CoreR
 @Composable
 fun HistoryListScreen(
     tripRepository: TripRepository,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null, // Tab 模式无返回（P-10 appbar）
     onOpenTrip: (String) -> Unit = {}, // M1 详情页接入；默认空实现保持兼容
-    onStartRecording: (() -> Unit)? = null, // P-10 空态「开始记录」→ 回首页
+    onStartRecording: (() -> Unit)? = null,
+    extraBottomPadding: Dp = 0.dp, // Tab 模式：底部 tabbar 高度（空态「开始记录」回地图 Tab）
     modifier: Modifier = Modifier,
 ) {
     val viewModel: HistoryListViewModel = viewModel(
@@ -81,6 +83,7 @@ fun HistoryListScreen(
         onBack = onBack,
         onOpenTrip = onOpenTrip,
         onStartRecording = onStartRecording,
+        extraBottomPadding = extraBottomPadding,
         modifier = modifier,
     )
 }
@@ -88,9 +91,10 @@ fun HistoryListScreen(
 @Composable
 private fun HistoryListContent(
     viewModel: HistoryListViewModel,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null, // Tab 模式无返回（P-10 appbar）
     onOpenTrip: (String) -> Unit,
     onStartRecording: (() -> Unit)? = null,
+    extraBottomPadding: Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -109,12 +113,14 @@ private fun HistoryListContent(
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp, vertical = 8.dp),
         ) {
+            if (onBack != null) {
             IconButton(onClick = onBack) {
                 // L-15：contentDescription = null 会让 TalkBack 只念「按钮」，无法操作
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = stringResource(CoreR.string.common_action_back),
                 )
+            }
             }
             Text(
                 text = stringResource(CoreR.string.common_tab_history),
@@ -247,7 +253,7 @@ private fun HistoryListContent(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                horizontal = 12.dp, vertical = 4.dp,
+                horizontal = 12.dp, vertical = 4.dp + extraBottomPadding,
             ),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
