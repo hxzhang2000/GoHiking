@@ -18,7 +18,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      # CI 环境没有本机 Gradle 文件，覆盖为网络 URL（本地是 file:/// 引用，见 gradle-wrapper.properties）
+      # N-15：wrapper 里曾经提交的是开发者本机 file:/// 路径，CI 靠这个 sed 兜底。
+      # 现已改回官方地址，本步骤变冗余；保留只是为了防止有人再把本机路径提交上来。
       - name: Use network Gradle distribution
         run: |
           sed -i 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.9-bin.zip|' gradle/wrapper/gradle-wrapper.properties
@@ -74,8 +75,26 @@ jobs:
           echo "=== keystore.properties (passwords redacted) ==="
           sed 's/\(storePassword\|keyPassword\)=.*/\1=<redacted>/' keystore.properties
 
+      # N-14：local.properties 被 .gitignore 排除，checkout 后不存在。此前 CI 从未注入
+      # 高德 Key，产出的 release APK 里 com.amap.api.v2.apikey 为空串 → 下载者安装后地图
+      # 全白屏、定位鉴权失败。这里在构建前生成 local.properties。
+      - name: Inject AMap key
+        env:
+          AMAP_KEY_RELEASE: ${{ secrets.AMAP_KEY_RELEASE }}
+        run: |
+          if [ -n "$AMAP_KEY_RELEASE" ]; then
+            echo "AMAP_KEY_RELEASE=$AMAP_KEY_RELEASE" > local.properties
+            echo "AMAP_KEY_DEBUG=$AMAP_KEY_RELEASE" >> local.properties
+          else
+            echo "::warning::AMAP_KEY_RELEASE secret 未配置，本次构建的 release APK 将无高德 Key（地图白屏）"
+            echo "AMAP_KEY_RELEASE=" > local.properties
+          fi
+
       - name: Build release APK
         # checkStringKeys 合并自旧 ci.yml（F-I18N-09 中英键对齐门禁；ci.yml 已删除，本文件是唯一 CI）
+        # amapKeyOptional=true 仅在「没配 secret 也要验证编译」时放行 N-14 的构建期断言
+        env:
+          ORG_GRADLE_PROJECT_amapKeyOptional: ${{ secrets.AMAP_KEY_RELEASE == '' }}
         run: ./gradlew assembleRelease :core:resources:checkStringKeys --stacktrace
 
       - name: Rename APK
@@ -100,32 +119,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ github.ref_name }}"
-          # 获取上一个 release 的版本号
-          LATEST_TAG=$(gh release view --json tagName --jq '.tagName' 2>/dev/null || echo "")
-          if [ "$LATEST_TAG" = "$TAG" ]; then
-            # 最新 release 就是当前 tag，取前一个
-            PREV_TAG=$(gh release list --limit 2 --json tagName --jq '.[1].tagName' 2>/dev/null || echo "")
-          else
-            PREV_TAG="$LATEST_TAG"
-          fi
-          # 清理无效值
-          if [ "$PREV_TAG" = "null" ] || [ -z "$PREV_TAG" ]; then PREV_TAG=""; fi
-          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$TAG" ]; then
-            echo "Previous release: $PREV_TAG, current: $TAG"
-            # 从 CHANGELOG 开头提取到上一个版本之前
-            awk -v prev="$PREV_TAG" '
-              /^## \[/ { found=1 }
-              found && $0 ~ "^## \\[" prev "\\]" { exit }
-              found { print }
-            ' CHANGELOG.md > release_notes.md
-          else
-            echo "No previous release found, extracting current version only"
-            # 没有上一个 release，只提取当前版本
-            awk -v tag="$TAG" '
-              $0 ~ "^## \\[" tag "\\]" { found=1; next }
-              found && /^## \[/ { exit }
-              found { print }
-            ' CHANGELOG.md > release_notes.md
+          # L-24：原分支 A 用 `/^## \[/ { found=1 }` 匹配「第一个小节」，而 CHANGELOG 的
+          # 第一个小节是 [Unreleased] —— 实测会把未发布内容一起写进 Release 说明
+          # （25 行输出，首行即 `## [Unreleased]`）。分支 B 才是正确的按 tag 定位。
+          # 两个分支统一为按当前 tag 定位小节，结构上不可能包含 Unreleased。
+          awk -v tag="$TAG" '
+            $0 ~ "^## \\[" tag "\\]" { found=1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > release_notes.md
+          if [ ! -s release_notes.md ]; then
+            echo "::warning::CHANGELOG.md 里找不到 ## [$TAG] 小节，Release 说明为空"
           fi
           echo "=== Release notes ==="
           cat release_notes.md
@@ -174,6 +178,21 @@ jobs:
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-35" "build-tools;35.0.0" 2>&1 || true
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --stacktrace
+
+  # Room 迁移校验（N-35）：
+  # DEV §3.1 要求每个迁移配 MigrationTestHelper 测试，但那需要 Android 插桩环境，
+  # 仓库里实际上一个都没有 —— 迁移是零覆盖上线的。Room 运行时会拿迁移后的真实 schema
+  # 与 N.json 逐项比对，不一致就抛 "Migration didn't properly handle"，用户升级即崩溃。
+  # 这个 job 用 Python + sqlite3 复现同一条校验，**不需要 Android SDK**，几秒跑完。
+  room-migrations:
+    name: Room migrations
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      # schema JSON 由 exportSchema=true 的构建生成，必须已提交进仓库（含新增的 3.json）
+      - name: Verify Room migrations
+        run: python3 tools/db-verify/verify_room_migrations.py
 
   # lint：本地门禁 warningsAsErrors=true，CI 同为阻塞门禁
   lint:

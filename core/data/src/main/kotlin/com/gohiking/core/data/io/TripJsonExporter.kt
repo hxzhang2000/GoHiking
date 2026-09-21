@@ -7,6 +7,8 @@ import com.gohiking.core.database.entity.PlannedRouteEntity
 import com.gohiking.core.database.entity.PlannedWaypointEntity
 import com.gohiking.core.database.entity.TrackPointEntity
 import com.gohiking.core.database.entity.TripEntity
+import com.gohiking.core.data.stats.LegSplitter
+import com.gohiking.core.data.stats.LegSummary
 import com.gohiking.core.location.crs.CoordinateConverter
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -84,6 +86,11 @@ object TripJsonExporter {
                 status = trip.status,
                 hasBarometer = trip.hasBarometer,
                 stats = stats,
+                // L-11：PRD 7.3 的 trip.legs 此前只声明、从不导出（恒为 null），与 schema 不符。
+                // 这里复用 F-REC-37 的上下山切分（以时间上最后一个 SUMMIT 为界）填充。
+                // 无登顶点、或无任何海拔样本时保持 null —— 阈值累加器在无高程输入时返回 0，
+                // 直接写 0 等于编造数据（H-06）。
+                legs = exportLegs(points, markers),
                 segments = segments,
                 trackPoints = trackPoints,
                 markers = markers.sortedBy { it.timestamp }.map { m -> m.toMarkerJson(convert) },
@@ -94,6 +101,23 @@ object TripJsonExporter {
             ),
         )
     }
+
+    /** 见 [export] 中 legs 的注释：仅在确有海拔样本时才产出上下山汇总 */
+    private fun exportLegs(points: List<TrackPointEntity>, markers: List<MarkerEntity>): TripLegsJson? {
+        if (points.none { it.altitude != null }) return null
+        val legs = LegSplitter.split(points, markers) ?: return null
+        return TripLegsJson(
+            outbound = legs.uphill.toLegJson(),
+            returnLeg = legs.downhill.toLegJson(),
+        )
+    }
+
+    private fun LegSummary.toLegJson(): TripLegJson = TripLegJson(
+        distanceM = distanceM,
+        ascentM = ascentM,
+        descentM = descentM,
+        durationSec = movingSec,
+    )
 
     /** 计划线路单文件信封（F-PLAN-43，PRD 7.3 末尾） */
     fun exportPlannedRoute(

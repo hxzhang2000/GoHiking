@@ -33,9 +33,21 @@ val checkStringKeys by tasks.registering {
         if (!en.exists() || !zh.exists()) {
             throw GradleException("strings.xml missing: en=${en.exists()} zh=${zh.exists()}")
         }
-        val keyRegex = Regex("""<string name="([^"]+)"""")
-        val enKeys = keyRegex.findAll(en.readText()).map { it.groupValues[1] }.toSet()
-        val zhKeys = keyRegex.findAll(zh.readText()).map { it.groupValues[1] }.toSet()
+        // L-21：原正则会连注释里的 <string name="..."> 一起匹配 —— 把某个键注释掉，
+        // 门禁依然「通过」，等于可以静默绕过。先剥离 XML 注释再提取键。
+        val commentRegex = Regex("""<!--.*?-->""", RegexOption.DOT_MATCHES_ALL)
+        fun keysOf(f: java.io.File): Set<String> {
+            val text = f.readText().let { commentRegex.replace(it, "") }
+            // 顺带抓出重名键：两份文件各自内部重名时，后面的会静默覆盖前面的
+            val all = Regex("""<string name="([^"]+)"""").findAll(text).map { it.groupValues[1] }.toList()
+            val dup = all.groupBy { it }.filter { it.value.size > 1 }.keys
+            if (dup.isNotEmpty()) {
+                throw GradleException("${f.name} 存在重名 string 键：$dup")
+            }
+            return all.toSet()
+        }
+        val enKeys = keysOf(en)
+        val zhKeys = keysOf(zh)
         val missingInZh = enKeys - zhKeys
         val extraInZh = zhKeys - enKeys
         val problems = buildList {

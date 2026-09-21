@@ -73,7 +73,21 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            manifestPlaceholders["AMAP_KEY"] = localProps.getProperty("AMAP_KEY_RELEASE").orEmpty()
+            // N-14：local.properties 被 .gitignore 排除，CI checkout 后不存在 → Properties 为空
+            // → .orEmpty() → 空字符串写进 manifest → 产出的 release APK 地图全白屏，
+            // 而本地构建完全正常，因此这个缺陷只会在真实发布路径上暴露。这里改为构建期失败。
+            // 仅编译验证（不发版）时用 -PamapKeyOptional=true 放行。
+            val releaseKey = localProps.getProperty("AMAP_KEY_RELEASE").orEmpty()
+            if (releaseKey.isBlank() &&
+                (project.findProperty("amapKeyOptional") as String?).toBoolean().not()
+            ) {
+                throw GradleException(
+                    "AMAP_KEY_RELEASE 缺失：release 包地图会白屏。" +
+                        "请在 local.properties 配置，CI 需设置 AMAP_KEY_RELEASE secret；" +
+                        "仅做编译验证时加 -PamapKeyOptional=true。",
+                )
+            }
+            manifestPlaceholders["AMAP_KEY"] = releaseKey
             if (keystoreProps.getProperty("storeFile") != null) {
                 signingConfig = signingConfigs.getByName("release")
             }

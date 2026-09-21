@@ -8,7 +8,9 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
 
@@ -46,42 +48,74 @@ class SwitchingLocationProvider(
 
     override fun start(intervalMs: Long) {
         primary.start(intervalMs)
+        // N-06：主源报不可用错误（KEY 鉴权失败 7 / 缺权限 12 / 定位失败 14）时切备源。
+        // 此前该回调全仓库零赋值点——DEV §6.2 的「主源报不可用错误 → 切备源」完全没接线，
+        // 三条通路里只剩 watchdog 一条，而那一条也被错误回调刷新时钟给废掉了（见下）。
+        // 回调来自 AMap 的 binder 线程，切源涉及 GMS 调用，这里切回协程执行。
+        primary.onPrimaryUnavailable = {
+            Timber.w("主源报不可用错误，准备切换备源")
+            scope.launch { switchToBackup(intervalMs) }
+        }
         backupCollectJob?.cancel()
+        // S-01：原实现没有取消旧的 primaryCollectJob。一旦出现「未 stop 就再 start」，
+        // 旧 collector 会永久存活并继续向 _fixes 发射，每个 fix 被转发两次（距离翻倍）。
+        primaryCollectJob?.cancel()
         primaryCollectJob = scope.launch {
             primary.fixes.collect { fix ->
                 if (!usingBackup) {
-                    if (!_fixes.tryEmit(fix)) _dropped.value += 1
+                    if (!_fixes.tryEmit(fix)) _dropped.update { it + 1 }
                 } else {
                     // 主源恢复出点 → 切回（DEV §6.2「恢复后切回」）
                     Timber.i("主源恢复，切回高德定位")
                     usingBackup = false
                     backup?.stop()
-                    if (!_fixes.tryEmit(fix)) _dropped.value += 1
+                    if (!_fixes.tryEmit(fix)) _dropped.update { it + 1 }
                 }
             }
         }
         watchdogJob?.cancel()
         watchdogJob = scope.launch {
-            while (true) {
-                delay(5_000)
-                if (usingBackup) continue
-                val last = primary.lastCallbackAtMs
-                val silent = last == 0L || System.currentTimeMillis() - last > WATCHDOG_TIMEOUT_MS
-                if (silent) {
-                    if (backup != null && !usingBackup) {
-                        // H-03：此前这里会 primary.stop()，主源停止后不再回调，
-                        // 第 55-59 行「主源恢复，切回」分支永远不可达 —— 降级变成不可逆。
-                        // 改为保留主源、只屏蔽其转发，恢复时自然能切回（DEV §6.2）。
-                        Timber.w("高德定位 30 秒无回调，切换 Fused 备源（主源保留待恢复）")
-                        backup.start(intervalMs)
-                        usingBackup = true
-                        collectBackup()
-                    } else {
-                        Timber.w("高德定位 30 秒无回调，但 GMS 不可用，继续等待主源")
-                    }
+            // N-41：watchdog 在新起的协程里跑，任何异常都会冒泡到无 CoroutineExceptionHandler
+            // 的 ApplicationScope → 线程默认未捕获处理器 → 进程崩溃、记录中断。加兜底。
+            try {
+                while (true) {
+                    delay(5_000)
+                    if (usingBackup) continue
+                    // N-06：判定的是「有没有**有效定位**」，不是「有没有回调」。
+                    // 原实现读 lastCallbackAtMs，而它在判定错误码之前就被刷新——只要错误回调
+                    // 的间隔 < 30s，watchdog 就永远判不出静默：主源持续失败却不切源、也不报错，
+                    // 用户走完全程得到 0 点轨迹，且 droppedCount 仍是 0，无任何可诊断痕迹。
+                    val last = primary.lastValidFixAtMs
+                    val silent = last == 0L || System.currentTimeMillis() - last > WATCHDOG_TIMEOUT_MS
+                    if (silent) switchToBackup(intervalMs)
                 }
+            } catch (c: CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                Timber.e(t, "定位 watchdog 异常，watchdog 退出")
             }
         }
+    }
+
+    /** 切备源；主源保留待恢复（H-03：此前 stop 主源会让「恢复后切回」永远不可达） */
+    private fun switchToBackup(intervalMs: Long) {
+        if (usingBackup) return
+        val b = backup
+        if (b == null) {
+            Timber.w("高德定位不可用，但 GMS 不可用，继续等待主源")
+            return
+        }
+        try {
+            b.start(intervalMs)
+        } catch (t: Throwable) {
+            // N-41：用户撤销定位权限、「仅此次」授权过期时会抛 SecurityException，
+            // 不能让切源动作把整个 App 带崩。
+            Timber.w(t, "切换 Fused 备源失败，继续使用主源")
+            return
+        }
+        Timber.w("高德定位 30 秒无有效定位，切换 Fused 备源（主源保留待恢复）")
+        usingBackup = true
+        collectBackup()
     }
 
     private fun collectBackup() {
@@ -89,7 +123,7 @@ class SwitchingLocationProvider(
         val b = backup ?: return
         backupCollectJob = scope.launch {
             b.fixes.collect { fix ->
-                if (usingBackup && !_fixes.tryEmit(fix)) _dropped.value += 1
+                if (usingBackup && !_fixes.tryEmit(fix)) _dropped.update { it + 1 }
             }
         }
     }
@@ -101,6 +135,7 @@ class SwitchingLocationProvider(
         primaryCollectJob = null
         backupCollectJob?.cancel()
         backupCollectJob = null
+        primary.onPrimaryUnavailable = null
         primary.stop()
         backup?.stop()
         usingBackup = false

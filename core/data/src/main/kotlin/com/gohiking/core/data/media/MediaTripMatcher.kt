@@ -8,7 +8,13 @@ import com.gohiking.core.database.entity.MediaIndexEntity
  *
  * 规则（PRD 7.6 / DEV §4.2）：
  * - 时间：拍摄时间落在 [tripStart - WINDOW, tripEnd + WINDOW]（WINDOW = 30 min，F-MEDIA-41）；
- *   无拍摄时间的照片用 DATE_MODIFIED 兜底（MediaIndexEntity.dateTakenMs 可空，扫描器已保证非空时才进 time 字段）；
+ *   无拍摄时间（DATE_TAKEN 为 NULL）的照片用 DATE_MODIFIED 兜底。
+ *
+ *   ⚠ N-42：此处的 `?: m.dateModifiedMs` 兜底**曾经是死代码** —— 候选集来自
+ *   `MediaDao.inTimeRange`，而它的 SQL 是 `dateTakenMs BETWEEN ? AND ?`，SQL 三值逻辑下
+ *   NULL 参与比较的结果是 NULL，那些照片在进本函数之前就被过滤掉了。
+ *   DAO 已改为 `COALESCE(dateTakenMs, dateModifiedMs) BETWEEN ? AND ?`，两边口径才真正一致。
+ *   （原注释写的「扫描器已保证非空时才进 time 字段」是错的：扫描器会如实写入 null。）
  * - 距离：照片 GCJ-02 坐标与任一轨迹点（GCJ-02）距离 ≤ 500 m（F-MEDIA-41）；
  * - **F-MEDIA-43 红线**：两边都必须是 GCJ-02。调用方必须传入 media.latGcj02/lngGcj02 与轨迹的
  *   GCJ-02 点；本类绝不触碰 latWgs84/lngWgs84，杜绝跨坐标系混算。

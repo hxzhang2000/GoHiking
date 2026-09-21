@@ -40,6 +40,7 @@ dependencies {
     implementation(libs.coil.video)
     implementation(libs.androidx.activity.compose) // rememberLauncherForActivityResult 媒体权限（F-MEDIA-04）
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.timber) // N-57：扫描失败落日志，不把技术堆栈弹给用户
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

@@ -186,9 +186,26 @@ class DataStoreSettingsRepository(private val context: Context) : SettingsReposi
         if (v == null) prefs.remove(key) else prefs[key] = v
     }
 
-    /** F-SET-03 恢复默认：清空全部键（首次读取语义即默认值） */
+    /**
+     * F-SET-03 恢复默认：清空全部键（首次读取语义即默认值）。
+     *
+     * L-12：但 `it.clear()` 会连 `privacy_agreed` 一起抹掉 —— 那是「本设备已同意隐私政策」
+     * 的记录，属于设备态/合规证据，不是「偏好」。恢复默认后用户会重新撞上隐私门，
+     * 而合规上更糟的是：同意记录凭空消失，无法自证此前取得过同意。
+     * 与 SettingsBackupMapper.EXCLUDED_KEYS（备份导入不覆盖语言与同意态）保持同一口径。
+     */
     override suspend fun resetToDefault() {
-        store.edit { it.clear() }
+        // 先取出要保留的项（typed 读取，避免 Preferences.Key<*> 的泛型擦除问题）
+        val snapshot = store.data.first()
+        val language = snapshot[stringPreferencesKey(SettingsKeys.APP_LANGUAGE)]
+        val privacyAgreed = snapshot[booleanPreferencesKey(SettingsKeys.PRIVACY_AGREED)]
+        store.edit { prefs ->
+            prefs.clear()
+            if (language != null) prefs[stringPreferencesKey(SettingsKeys.APP_LANGUAGE)] = language
+            if (privacyAgreed != null) {
+                prefs[booleanPreferencesKey(SettingsKeys.PRIVACY_AGREED)] = privacyAgreed
+            }
+        }
     }
 }
 

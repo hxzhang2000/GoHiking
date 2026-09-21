@@ -1,10 +1,20 @@
 package com.gohiking.core.common.format
 
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class FormattersTest {
+
+    /**
+     * L-22：DisplayUnitProvider 是进程内单例，英制用例跑完必须复位，
+     * 否则会污染同批次其它测试（它们全在默认公制下断言）。
+     */
+    @After
+    fun resetUnits() {
+        DisplayUnitProvider.resetToMetric()
+    }
 
     @Test
     fun `distance - meters below 1km, km above`() {
@@ -58,5 +68,42 @@ class FormattersTest {
         assertNull(Formatters.kcalText(-5.0))
         assertEquals("512 kcal", Formatters.kcalText(512.4))
         assertEquals("1 kcal", Formatters.kcalText(1.2))
+    }
+
+    // —— L-22：H-02 新增的英制分支此前零测试（6 用例 32 断言全在默认公制下）——
+
+    @Test
+    fun `imperial - distance in yards below 1 mile, miles above`() {
+        DisplayUnitProvider.update(DisplayUnits(distance = DistanceUnit.IMPERIAL))
+        assertEquals("0 yd", Formatters.distanceText(0.0))
+        assertEquals("910 yd", Formatters.distanceText(832.4)) // 832.4 m ≈ 910 yd
+        assertEquals("1.00 mi", Formatters.distanceText(DisplayUnitProvider.mPerMile))
+        assertEquals("7.67 mi", Formatters.distanceText(12345.6))
+        assertEquals("0 yd", Formatters.distanceText(-5.0)) // 防御
+    }
+
+    @Test
+    fun `imperial - altitude in feet`() {
+        DisplayUnitProvider.update(DisplayUnits(altitude = AltitudeUnit.FEET))
+        assertEquals("4050 ft", Formatters.metersText(1234.6))
+        assertEquals("0 ft", Formatters.metersText(null))
+    }
+
+    @Test
+    fun `imperial - pace per mile and speed in mph`() {
+        DisplayUnitProvider.update(DisplayUnits(distance = DistanceUnit.IMPERIAL))
+        // 754 s/km × 1.609344 = 1213 s/mi → 20'13"
+        assertEquals("20'13\"", Formatters.paceText(754))
+        assertEquals("2.6 mph", Formatters.speedText(1.1666667))
+    }
+
+    @Test
+    fun `paceOrSpeedText - follows the pace display preference`() {
+        // 默认 PACE：有配速时优先配速
+        assertEquals("12'34\"", Formatters.paceOrSpeedText(754, 1.1666667))
+        DisplayUnitProvider.update(DisplayUnits(pace = PaceDisplay.SPEED))
+        assertEquals("4.2 km/h", Formatters.paceOrSpeedText(754, 1.1666667))
+        // 速度取不到时回落到配速（PRD 6.5 二选一）
+        assertEquals("12'34\"", Formatters.paceOrSpeedText(754, null))
     }
 }

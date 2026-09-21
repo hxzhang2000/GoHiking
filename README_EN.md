@@ -3,7 +3,7 @@
 An Android hiking recorder for mountain lovers: fully offline-capable, private by design, and built for real terrain.
 From route planning to on-trail recording to post-hike analysis — the complete loop for a day in the mountains.
 
-> Current version **0.5.0** (in development) · See [CHANGELOG.md](CHANGELOG.md) · 中文：[README.md](README.md)
+> Current version **0.5.1** (in development) · See [CHANGELOG.md](CHANGELOG.md) · 中文：[README.md](README.md)
 
 ## Features
 

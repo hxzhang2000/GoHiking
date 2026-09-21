@@ -8,6 +8,15 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Relation
 
+/**
+ * 线路缺名称时的占位值（L-06）。
+ *
+ * 此前 core 层硬编码英文 `"Imported route"`（ImportEngine），中文界面会直接显示英文，
+ * 与「core 只产出码、不产出用户可见文案」的约定（H-09）相悖。
+ * 改为落库一个中性哨兵值，UI 渲染时替换为本地化文案（见 PlanListScreen）。
+ */
+const val UNNAMED_ROUTE_PLACEHOLDER = "__unnamed_route__"
+
 /** 计划线路主表（PRD 7.1）。[source]：AUTO / MANUAL / MIXED */
 @Entity(tableName = "planned_route")
 data class PlannedRouteEntity(

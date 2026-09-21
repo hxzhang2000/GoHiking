@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GoHiking 代码深度审查报告 · 2026-09-21（第二轮）</title>
+<style>
+:root{
+  --bg:#f7f8fa; --card:#ffffff; --bd:#e3e6ec; --bd2:#eef0f4;
+  --tx:#1c2028; --tx2:#5a6272; --tx3:#8b93a3;
+  --crit:#c62828; --crit-bg:#fdecec; --crit-bd:#f3c2c2;
+  --high:#e65100; --high-bg:#fff3e6; --high-bd:#f7d5b0;
+  --med:#1565c0; --med-bg:#eaf2fd; --med-bd:#c2daf5;
+  --low:#5f6b7a; --low-bg:#f1f3f6; --low-bd:#dde1e7;
+  --ok:#1b7f4d; --ok-bg:#e9f7ef;
+  --mono:"JetBrains Mono",Consolas,"Courier New",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--tx);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  font-size:14px;line-height:1.7;padding:32px 20px 80px}
+.wrap{max-width:1080px;margin:0 auto}
+header{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:28px 32px;margin-bottom:20px}
+h1{font-size:23px;font-weight:700;letter-spacing:-.3px;margin-bottom:6px}
+.sub{color:var(--tx2);font-size:13px}
+.sub b{color:var(--tx);font-weight:600}
+.meta{margin-top:14px;padding-top:14px;border-top:1px solid var(--bd2);
+  display:flex;flex-wrap:wrap;gap:10px 28px;font-size:12.5px;color:var(--tx2)}
+.meta span b{color:var(--tx);font-weight:600}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px}
+.st{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:18px 20px;text-align:center}
+.st .n{font-size:30px;font-weight:700;line-height:1.1}
+.st .l{font-size:11.5px;color:var(--tx2);margin-top:4px;letter-spacing:.4px}
+.st.c .n{color:var(--crit)} .st.h .n{color:var(--high)}
+.st.m .n{color:var(--med)} .st.l .n{color:var(--low)} .st.o .n{color:var(--ok)}
+
+.bar{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px 16px;margin-bottom:20px;
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.bar .lb{font-size:12.5px;color:var(--tx2);margin-right:4px}
+.btn{border:1px solid var(--bd);background:#fff;color:var(--tx2);border-radius:8px;
+  padding:6px 14px;font-size:12.5px;cursor:pointer;font-family:inherit;transition:.15s}
+.btn:hover{border-color:#c3c9d4;color:var(--tx)}
+.btn.on{background:var(--tx);color:#fff;border-color:var(--tx)}
+
+section{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:26px 30px;margin-bottom:20px}
+h2{font-size:17px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:9px}
+h2::before{content:"";width:3px;height:16px;background:var(--tx);border-radius:2px}
+.h2sub{font-size:12.5px;color:var(--tx3);margin-bottom:18px;padding-left:12px}
+
+.item{border:1px solid var(--bd2);border-radius:11px;padding:18px 20px;margin-bottom:14px;background:#fcfcfd}
+.item.C{border-left:4px solid var(--crit);background:var(--crit-bg)}
+.item.H{border-left:4px solid var(--high);background:var(--high-bg)}
+.item.M{border-left:4px solid var(--med);background:var(--med-bg)}
+.item.L{border-left:4px solid var(--low);background:var(--low-bg)}
+.ihead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.id{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--tx2)}
+.it{font-size:15px;font-weight:650;flex:1;min-width:240px}
+.tag{font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:20px;letter-spacing:.5px;white-space:nowrap}
+.tag.C{background:var(--crit);color:#fff}
+.tag.H{background:var(--high);color:#fff}
+.tag.M{background:var(--med);color:#fff}
+.tag.L{background:var(--low);color:#fff}
+.tag.OK{background:var(--ok);color:#fff}
+.loc{font-family:var(--mono);font-size:11.5px;color:var(--tx2);background:#fff;
+  border:1px solid var(--bd2);border-radius:5px;padding:5px 9px;display:block;margin-bottom:10px;word-break:break-all}
+.row{display:flex;gap:9px;margin-bottom:7px;font-size:13.2px}
+.row .k{color:var(--tx3);min-width:52px;font-size:11.5px;font-weight:600;padding-top:2px;flex-shrink:0}
+.row .v{flex:1;color:var(--tx)}
+.row .v code{font-family:var(--mono);font-size:12px;background:#fff;border:1px solid var(--bd2);
+  padding:1px 5px;border-radius:4px;color:#b03030}
+pre{font-family:var(--mono);font-size:11.5px;background:#fff;border:1px solid var(--bd2);
+  border-radius:6px;padding:10px 12px;overflow-x:auto;margin:6px 0 10px;color:#2b3038;line-height:1.6}
+.chain{background:#fff;border:1px solid var(--bd2);border-left:3px solid var(--tx3);
+  border-radius:6px;padding:9px 12px;font-size:13px;color:var(--tx2);margin:4px 0}
+.item.C .chain{border-left-color:var(--crit)} .item.H .chain{border-left-color:var(--high)}
+
+table{width:100%;border-collapse:collapse;font-size:12.8px;margin-top:8px}
+th{background:#f4f6f9;text-align:left;padding:9px 11px;font-weight:650;
+  border-bottom:1px solid var(--bd);color:var(--tx2);font-size:11.5px;letter-spacing:.3px}
+td{padding:9px 11px;border-bottom:1px solid var(--bd2);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td code{font-family:var(--mono);font-size:11.5px;color:#b03030}
+.pill{font-size:10.5px;padding:2px 8px;border-radius:20px;font-weight:700;white-space:nowrap;display:inline-block}
+.pill.fix{background:var(--ok-bg);color:var(--ok)}
+.pill.part{background:var(--high-bg);color:var(--high)}
+.pill.no{background:var(--crit-bg);color:var(--crit)}
+.pill.reg{background:#f3e5f5;color:#7b1fa2}
+
+.note{background:#fffbe9;border:1px solid #f2e2b0;border-radius:9px;padding:14px 17px;font-size:13px;color:#6b5714;margin:14px 0}
+.note b{color:#4d3d0a}
+ol.flow{counter-reset:f;list-style:none;margin-top:10px}
+ol.flow li{counter-increment:f;position:relative;padding-left:34px;margin-bottom:11px;font-size:13.3px}
+ol.flow li::before{content:counter(f);position:absolute;left:0;top:1px;width:22px;height:22px;
+  background:var(--tx);color:#fff;border-radius:50%;font-size:11.5px;font-weight:700;
+  display:flex;align-items:center;justify-content:center}
+ol.flow li b{font-weight:650}
+ol.flow li .why{color:var(--tx2);font-size:12.6px;display:block;margin-top:2px}
+footer{text-align:center;color:var(--tx3);font-size:12px;padding:26px 0 0}
+.hl{background:#fff3cd;padding:1px 4px;border-radius:3px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>GoHiking 代码深度审查报告 · 第二轮</h1>
+  <div class="sub">审查时间 <b>2026-09-21</b> · 仓库 <b>D:\hxzhang\MyGithubSoftware\GoHiking</b> · 基线 <b>v0.5.0</b>（上轮审查修复批次之后）</div>
+  <div class="meta">
+    <span>范围：<b>18 个 Gradle 模块 · 115 个 Kotlin 文件 · 16,862 行</b> + Manifest + res/ + Gradle + CI</span>
+    <span>方法：<b>5 路并行子系统扫描 → 对 CRITICAL/HIGH 逐条独立存疑复核</b></span>
+    <span>复核：<b>10 条关键结论已验证，0 条推翻</b></span>
+  </div>
+  <div style="margin-top:14px;padding:12px 16px;border-radius:10px;background:var(--ok-bg);
+              border:1px solid var(--bd);font-size:13px;color:var(--tx)">
+    <b style="color:var(--ok)">修复状态（2026-09-21 同日落地）</b>：2 CRITICAL + 16 HIGH + 18 MEDIUM 已改完，
+    门禁 <code>compileDebugKotlin</code> + <code>testDebugUnitTest</code> + <code>:core:resources:checkStringKeys</code>
+    全绿。明细见 <code>CHANGELOG.md</code> 的 <code>[Unreleased]</code> 节。<br>
+    <span style="color:var(--tx2)">刻意未修：N-13（16KB 对齐，需高德官方修，已在 README 标注已知限制）、
+    N-35（需 instrumentation 环境）、N-23 扫描器逐表容错、N-43 媒体分页、N-47~N-51、N-56。</span>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="st c"><div class="n">2</div><div class="l">CRITICAL</div></div>
+  <div class="st h"><div class="n">16</div><div class="l">HIGH</div></div>
+  <div class="st m"><div class="n">40</div><div class="l">MEDIUM</div></div>
+  <div class="st l"><div class="n">25</div><div class="l">LOW</div></div>
+  <div class="st o"><div class="n">0</div><div class="l">推翻的误报</div></div>
+</div>
+
+<div class="bar">
+  <span class="lb">筛选：</span>
+  <button class="btn on" data-f="all">全部</button>
+  <button class="btn" data-f="C">CRITICAL</button>
+  <button class="btn" data-f="H">HIGH</button>
+  <button class="btn" data-f="M">MEDIUM</button>
+  <button class="btn" data-f="L">LOW</button>
+  <button class="btn" data-f="R">修复复核</button>
+</div>
+
+<!-- ============ 摘要 ============ -->
+<section>
+  <h2>一句话结论</h2>
+  <div class="h2sub">本轮不是上轮问题的重复，而是「上轮修复引入的回归」+「上轮未覆盖的系统性缺陷」</div>
+  <p style="font-size:14px;color:var(--tx2);margin-bottom:14px">
+  上轮《代码审查报告-2026-09-20》的 C-01~C-04 与 HIGH 批次已在 <code style="font-family:var(--mono);font-size:12px">a449c5b</code> 落地，本次逐条核对确认<b>主要问题确已修好</b>（保存失败不再白屏、崩溃恢复已接线、隐私 Gate 已加、返回键已分发）。
+  但这些修复是<b>局部的</b>，而契约是全局的——本轮两个 CRITICAL 都源于此：
+  </p>
+  <div class="note">
+    <b>最需要立刻处理的三件事：</b>① <b>N-01</b>：上轮 C-03（定位 SDK 合规 Gate）与 M-02（同意状态以 DataStore 为准）两处修复<b>各自都对、合起来必崩</b>——首次同意后的每一次冷启动，点「开始记录」都抛 <code style="font-family:var(--mono)">IllegalStateException</code>。
+    ② <b>N-02</b>：上轮 H-14 把分段表从 <code style="font-family:var(--mono)">Column</code> 改成嵌套 <code style="font-family:var(--mono)">LazyColumn</code>，任何有真实数据的行程<b>打开详情页必崩</b>。
+    ③ <b>N-13 / N-14</b>：当前流水线即便跑绿，产出的 release APK <b>也不可用</b>——高德 native 库未 16KB 对齐（Android 15 + Play 2025-11 起硬性要求），且 CI 从未注入高德 Key（地图全白屏）。
+  </div>
+  <p style="font-size:13.5px;color:var(--tx2)">
+  一个贯穿全仓的模式值得单独指出：<b>「同一份样板被复制 N 份，只修了 1 份」</b>。
+  MapView 生命周期样板 5 个宿主只修 1 个（N-19）、edge-to-edge insets 只修 1 个页面而其余 7 个在 targetSdk 35 下必被遮挡（N-11）、
+  保存失败可见性只覆盖记录页而删除/改名/改设置全是裸协程（N-25）、隐私 Gate 只覆盖了地图与定位而搜索 SDK 漏接（N-16）。
+  这类问题不会被单元测试发现，只有真机回归能拦住。
+  </p>
+</section>
+
+<!-- ============ 修复复核 ============ -->
+<section data-sec="R">
+  <h2>上轮报告修复状态复核</h2>
+  <div class="h2sub">对《代码审查报告-2026-09-20》C-01~C-04 及代表性 HIGH/MEDIUM 条目的源码级核对</div>
+  <table>
+    <thead><tr><th style="width:78px">编号</th><th style="width:88px">状态</th><th>核对结论</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>C-01</b><br><span style="color:var(--tx3);font-size:11.5px">保存失败白屏</span></td>
+        <td><span class="pill fix">已修</span></td>
+        <td>逐行核对 <code>RecordingSession.save()</code>：成功才置 <code>Idle</code>、失败保持 <code>Finished</code>；<code>RecordingScreen</code> 的 <code>pendingDraft</code> 仅在成功时清空，失败回落到 <code>Finished.draft</code> 可重试。逻辑闭环，不再死锁。</td>
+      </tr>
+      <tr>
+        <td><b>C-02</b><br><span style="color:var(--tx3);font-size:11.5px">崩溃恢复未接线</span></td>
+        <td><span class="pill part">部分修</span></td>
+        <td>主链路确已接线（<code>hasRecoverableSession</code> / <code>restoreFromSnapshot</code> 有调用点了）。但恢复<b>不完整</b>：标记全部丢失（N-32）、无气压计设备海拔永久 null（N-03）、<code>START_STICKY</code> 重启后服务立即自杀（N-33）、<code>accumulatedPausedMs</code> 未结算（L-09）。</td>
+      </tr>
+      <tr>
+        <td><b>C-03</b><br><span style="color:var(--tx3);font-size:11.5px">定位 SDK 合规 Gate</span></td>
+        <td><span class="pill reg">已修·引入回归</span></td>
+        <td>Gate 本身正确（<code>assertAgreed</code> 在 <code>newClient()</code> 前）。但它与 M-02「同意状态以 DataStore 为准」冲突，导致 <b>N-01（本轮 CRITICAL）</b>。另：搜索 SDK 的 <code>ServiceSettings</code> 仍漏接（N-16）。</td>
+      </tr>
+      <tr>
+        <td><b>C-04</b><br><span style="color:var(--tx3);font-size:11.5px">系统返回键分发</span></td>
+        <td><span class="pill part">部分修</span></td>
+        <td>子页面返回已正确分发，但根页面分支只做 <code>moveTaskToBack</code> 无 <code>finish</code> 兜底，用户按返回键永远退不出应用（N-29）。</td>
+      </tr>
+      <tr>
+        <td><b>H-02</b><br><span style="color:var(--tx3);font-size:11.5px">单位设置死设置</span></td>
+        <td><span class="pill part">部分修</span></td>
+        <td>已把设置同步进 <code>DisplayUnitProvider</code>，但单例是 <code>@Volatile var</code> 而非可观察状态，历史列表把格式化文案缓存在 <code>init</code> 里永久不重算——切英里后列表仍显示 km（<b>N-07</b>）。记录页因每秒刷新侥幸正确，掩盖了问题。</td>
+      </tr>
+      <tr>
+        <td><b>H-10</b><br><span style="color:var(--tx3);font-size:11.5px">坐标转换系数</span></td>
+        <td><span class="pill fix">已修</span></td>
+        <td>本轮复算确认 <code>transformLat</code> 系数仍正确，与标准实现逐条子串一致，往返闭环误差 &lt; 0.03mm。</td>
+      </tr>
+      <tr>
+        <td><b>H-14</b><br><span style="color:var(--tx3);font-size:11.5px">分段表性能</span></td>
+        <td><span class="pill no">改错了</span></td>
+        <td>把 <code>Column</code> 改成嵌套 <code>LazyColumn</code> 属引入崩溃，且注释声称的「按需组合」也不成立（无界高度下必须量完所有 item）。见 <b>N-02</b>。</td>
+      </tr>
+      <tr>
+        <td><b>M-01</b><br><span style="color:var(--tx3);font-size:11.5px">MapView 生命周期</span></td>
+        <td><span class="pill part">部分修</span></td>
+        <td>5 个 MapView 宿主中只有 <code>MainActivity</code> 补了 <code>onPause()→onDestroy()</code>，其余 4 处仍是裸 <code>onDestroy()</code>（N-19）。</td>
+      </tr>
+      <tr>
+        <td><b>M-09</b><br><span style="color:var(--tx3);font-size:11.5px">状态栏遮挡</span></td>
+        <td><span class="pill part">部分修</span></td>
+        <td>只修了首页一处，其余 7 个页面在 targetSdk 35 强制 edge-to-edge 下仍被系统栏遮挡（N-11）。</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ CRITICAL ============ -->
+<section data-sec="C">
+  <h2>CRITICAL — 2 项：核心功能不可用</h2>
+  <div class="h2sub">均经独立复核：grep 调用点 + 读源码交叉验证</div>
+
+  <div class="item C">
+    <div class="ihead"><span class="id">N-01</span><span class="it">首次同意后的每一次冷启动，点「开始记录」必抛异常</span><span class="tag C">CRITICAL</span></div>
+    <div class="loc">core/location/.../PrivacyConsent.kt:16,28-32 × app/.../MainActivity.kt:237,367,372 × core/location/.../source/AmapLocationSource.kt:99-104 × core/data/.../RecordingSession.kt:493</div>
+    <div class="row"><span class="k">症状</span><span class="v">除首次安装外，所有冷启动后定位与轨迹记录 100% 失效</span></div>
+    <div class="row"><span class="k">成因</span><span class="v">上轮 <b>C-03</b>（定位 SDK 合规 Gate）与 <b>M-02</b>（同意状态以 DataStore 为准）两条修复<b>互相打架</b></span></div>
+    <pre>// MainActivity.kt:236-238  —— M-02：同意状态以 DataStore 为准
+LaunchedEffect(Unit) { agreed = settingsRepository.settings.first().privacyAgreed }
+
+// MainActivity.kt:367-378   —— agreed 读回 true 后，PrivacyGate 不再组合
+if (agreed != true) { PrivacyGate(onAgree = {
+        agreed = true
+        PrivacyConsent.markAgreed()        // ← :372 全仓库唯一调用点（已 grep 确认）
+    ...) ; return }
+
+// PrivacyConsent.kt:15-16   —— 纯内存态，冷启动必然复位
+@Volatile var agreed: Boolean = false   private set
+
+// AmapLocationSource.kt:99-100 —— start() 必经 newClient()
+private fun newClient(): AMapLocationClient {
+    PrivacyConsent.assertAgreed("location SDK")   // check(agreed) → 抛 IllegalStateException</pre>
+    <div class="chain"><b>后果链：</b>首次安装 → 用户同意 → <code>markAgreed()</code> 置位 + DataStore 写 true → 记录正常。
+    <b>之后任意一次冷启动</b>：<code>agreed</code> 从 DataStore 读回 <code>true</code> → 跳过 PrivacyGate → <code>markAgreed()</code> 永不执行 →
+    <code>PrivacyConsent.agreed</code> 保持 <code>false</code> → 点「开始记录」→ <code>newClient()</code> → <code>check(false)</code> → 主线程抛异常 → <b>崩溃</b>。
+    计划页「以当前位置为起点」因有 try/catch 只表现为定位失败，掩盖了问题。</div>
+    <div class="row"><span class="k">修复</span><span class="v">把「闸门状态」与「用户已同意」解耦，二者只能有一个真源。最小改法：读取到持久化同意后同步补调
+      <code>if (agreed == true) PrivacyConsent.markAgreed()</code>。更稳妥是让 <code>PrivacyConsent</code> 自读持久化值，并把 <code>assertAgreed</code> 的 <code>check</code> 换成「记日志 + 返回是否可用」——<b>合规闸门本身不应成为崩溃源</b>。</span></div>
+  </div>
+
+  <div class="item C">
+    <div class="ihead"><span class="id">N-02</span><span class="it">行程详情页分段表嵌套 LazyColumn，任何有真实数据的行程打开必崩</span><span class="tag C">CRITICAL</span></div>
+    <div class="loc">feature/history/.../Charts.kt:219（SplitsTable）× feature/history/.../TripDetailScreen.kt:174（外层 LazyColumn）、:209-212（item 包裹）</div>
+    <div class="row"><span class="k">症状</span><span class="v">组合期抛 <code>IllegalStateException: Vertically scrollable component was measured with an infinity maximum height constraints</code></span></div>
+    <pre>// Charts.kt:215-222（上轮 H-14 的「性能优化」）
+// H-14：分段可能几十上百行，普通 Column 会一次性组合全部行。
+// 外层已是纵向滚动容器，这里禁掉自身滚动即可享受 Lazy 的按需组合。
+LazyColumn(modifier = Modifier.fillMaxWidth(), userScrollEnabled = false) {
+    itemsIndexed(rows) { _, row -> ... }
+}
+
+// TripDetailScreen.kt:209-212 —— 外层是 LazyColumn 的 item
+if (state.kmSplits.isNotEmpty()) item { KmSplitsTable(state.kmSplits) }
+if (state.gainSplits.isNotEmpty()) item { GainSplitsTable(state.gainSplits) }</pre>
+    <div class="chain"><b>为什么必崩：</b>Compose 的 <code>LazyListMeasurePolicy</code> 内部<b>无条件</b>调用 <code>checkScrollableContainerConstraints()</code>，
+    该校验检查 <code>maxHeight != Infinity</code>；而纵向 LazyColumn 的 item 正是以 <code>maxHeight = Infinity</code> 测量的
+    （<code>LazyListMeasuredItemProvider</code>）。<code>userScrollEnabled = false</code> 只摘掉 scroll modifier，绕过的是「同方向嵌套滚动」校验，<b>绕不过这一处</b>。
+    注释声称的「按需组合」同样不成立——无界高度下 LazyColumn 必须量完所有 item 才能定尺寸。</div>
+    <div class="row"><span class="k">可达性</span><span class="v">任何爬升/距离数据非空的行程（≈ 所有真实记录）都会命中。全仓无 <code>androidTest</code>、feature 模块无测试，该路径零拦截。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">删掉内层 <code>LazyColumn</code> 改回 <code>Column</code>；或把每行提升为外层 LazyColumn 的独立 <code>item</code>（推荐，保留按需组合）；
+      若要限高用 <code>Modifier.heightIn(max = 320.dp)</code> + 自身 <code>verticalScroll</code>。<b>建议补一条 Compose UI 测试</b>（打开详情页断言无异常）——这类问题只有渲染层测试能拦住。</span></div>
+  </div>
+</section>
+
+<!-- ============ HIGH ============ -->
+<section data-sec="H">
+  <h2>HIGH — 16 项</h2>
+  <div class="h2sub">数据静默错误、功能不可达、崩溃风险、发布阻塞</div>
+
+  <div class="item H">
+    <div class="ihead"><span class="id">N-03</span><span class="it">崩溃恢复后，无气压计设备海拔永久为 null</span><span class="tag H">HIGH</span></div>
+    <div class="loc">core/location/.../altitude/AltitudeFuser.kt:196-202（restoreRef）× :88-97 × :143-148 × core/data/.../RecordingSession.kt:421-422</div>
+    <div class="row"><span class="k">证据</span><span class="v"><code>restoreRef</code> 只回灌 <code>altRef</code>/<code>pressureRefHpa</code>／<code>source</code>，<b>漏了 <code>confirmedAlt</code></b>；而 GPS_ONLY 路径的唯一输出就是 <code>confirmedAlt</code>，第 148 行 <code>val confirmed = confirmedAlt ?: return</code> 永久 return。</span></div>
+    <div class="chain"><b>实算验证</b>（1:1 复刻状态机）：<code>restoreRef(1200.0)</code> 后 10s/60s/120s 的 <code>current()</code> <b>恒为 None</b>；对照组（正常起）为 1201.0。
+    <b>后果：</b>无气压计设备（国产中低端机常见）恢复后累计爬升不再增长、<code>maxAltitudeM</code> 恒 null、UI 显示「—」，数据不可挽回。<code>AltitudeFuserTest</code> 199 行<b>无任何 restoreRef 用例</b>。</div>
+    <div class="row"><span class="k">修复</span><span class="v"><code>if (!hasBarometer) confirmedAlt = ref</code>；补两条回归用例（baro / gps-only）。</span></div>
+  </div>
+
+  <div class="item H">
+    <div class="ihead"><span class="id">N-04</span><span class="it">距离统计被 GPS 跳变点污染：文档承诺的「quality≠0 不参与距离」只在入边生效</span><span class="tag H">HIGH</span></div>
+    <div class="loc">core/location/.../sampler/TrackSampler.kt:38-45 × core/data/.../RecordingSession.kt:515-520</div>
+    <div class="row"><span class="k">证据</span><span class="v">两处 <code>lastAccepted</code> / <code>lastAcceptedFix</code> 都<b>无条件更新</b>，异常点成为下一段的位移基准。</span></div>
+    <pre>// RecordingSession.kt:516-520
+if (sample.quality == 0 && last != null) distanceM += GeoMath.distanceMeters(...)
+lastAcceptedFix = fix            // ← :520 不区分 quality，异常点成为下一段基准</pre>
+    <div class="chain"><b>实算：</b>单次 300m 跳变 → 累计距离 715.6m（真值 118.8m，<b>虚增 +596.8m</b>）；即使跳变点被正确判为 quality=2，累计仍 413.5m——
+    <b>排除只作用于「进入异常点的那一段」，离开的那一段照旧累加</b>。山区峡谷/林下多径恰是徒步 App 主场，一次跳变可让 5km 行程虚增 12%，距离/配速/卡路里/难度全连带失真，且用户无法察觉。</div>
+    <div class="row"><span class="k">修复</span><span class="v">距离基准只由 quality==0 更新；位移门基准与距离基准分离；给 <code>TrackSampler</code> 加按 accuracy 的相对位移门。<code>TrackSamplerTest</code> 已把错误行为固化成断言，需同步改。</span></div>
+  </div>
+
+  <div class="item H">
+    <div class="ihead"><span class="id">N-05</span><span class="it">计步级③预热阈值写死 0.8：轻步态/背包放置时预热永不完成，步数恒为 0</span><span class="tag H">HIGH</span></div>
+    <div class="loc">core/location/.../step/AccelStepDetector.kt:38,64,67-73,95</div>
+    <div class="row"><span class="k">证据</span><span class="v">预热期阈值是固定常量 <code>DEFAULT_THRESHOLD = 0.8</code>，峰值必须超过它才递减 <code>warmupRemaining</code>；阈值只在集满 25 峰后才自适应——形成死锁。</span></div>
+    <div class="chain"><b>实算</b>（复刻去重力 IIR → RBJ 带通 → 峰值检测 → 250ms 门 → 预热）：单频正弦下幅度 0.5/0.8 <b>预热期最大峰 = 0.000</b>，记步数 0（−100%）；卡死边界 <b>≈0.965 m/s²</b>。
+    含谐波的更真波形 + <code>damp=0.4</code>（手机放背包/厚衣物）<b>全部组合 100% 失败</b>。
+    <b>这是静默失效而非降级</b>：<code>StepSourceFactory</code> 已把 wire 记为 <code>ACCEL_ALGORITHM</code>，UI 显示「0 步」而不是「—」，违反「绝不编造」。</div>
+    <div class="row"><span class="k">修复</span><span class="v">① 预热期用滚动分位数替代常量；② 加时间兜底（20s 未集满就用最大峰×0.6 结束预热）；③ 全程无峰时降级为 <code>UNAVAILABLE</code> 让 UI 显示「—」。</span></div>
+  </div>
+
+  <div class="item H">
+    <div class="ihead"><span class="id">N-06</span><span class="it">主源不可用切备源的两条通路同时断开</span><span class="tag H">HIGH</span></div>
+    <div class="loc">core/location/.../source/AmapLocationSource.kt:52,58,63 × SwitchingLocationProvider.kt:64-84</div>
+    <div class="row"><span class="k">证据</span><span class="v">① <code>onPrimaryUnavailable</code> <b>全仓库零赋值点</b>（grep 确认：仅 :52 声明与 :63 invoke）；② <code>lastCallbackAtMs</code> 在<b>判定错误码之前</b>就刷新（:58），错误回调也算「有回调」。</span></div>
+    <div class="chain"><b>后果：</b>KEY 鉴权失败(7)/缺权限(12)/定位失败(14) 都不会切备源；同时只要错误回调间隔 &lt; 30s，watchdog 永远判不出 <code>silent</code>。
+    净效果：主源持续失败时既不切备源也不报错，<b>用户走完全程得到 0 点轨迹</b>，且 <code>droppedCount</code> 仍是 0（该计数只在 <code>tryEmit</code> 失败时自增）——无任何可诊断痕迹。</div>
+    <div class="row"><span class="k">修复</span><span class="v">新增 <code>lastValidFixAtMs</code>（仅 <code>errorCode==0</code> 时刷新），watchdog 改读它；在 <code>AppModule</code> 把 <code>onPrimaryUnavailable</code> 真正接上。</span></div>
+  </div>
+
+  <div class="item H">
+    <div class="ihead"><span class="id">N-07</span><span class="it">单位/配速设置切换后历史列表不刷新（推翻 H-02 的修复结论）</span><span class="tag H">HIGH</span></div>
+    <div class="loc">core/common/.../format/DisplayUnits.kt:39-45 × feature/history/.../HistoryListViewModel.kt:73-79,114-122 × MainActivity.kt:243-248</div>
+    <div class="row"><span class="k">证据</span><span class="v"><code>DisplayUnitProvider.units</code> 是 <code>@Volatile var</code>，<b>不是 Compose State / StateFlow</b>，读它不会订阅重组；而 <code>HistoryListViewModel</code> 在 <code>init</code> 里对 <code>observeFinished()</code> 常驻 collect，<code>toRowUi()</code> 一次性算好 <code>distanceText</code> 存进 StateFlow。</span></div>
+    <div class="chain"><b>复现：</b>进记录列表（显示 8.23 km）→ 设置切「英里」→ 返回列表 → <b>仍显示 km</b>，直到新增/删除行程或重启进程。
+    单位变更不会 <code>recreate()</code>（语言变更才会），DB 无变化 → 不重新发射 → 文案不重算；VM 挂在 Activity store 上被复用，连重组都不发生。记录页因每秒刷新 state 侥幸正确，掩盖了问题。</div>
+    <div class="row"><span class="k">修复</span><span class="v">把单位做成 <code>StateFlow</code>/<code>CompositionLocal</code> 由 UI 读；或单位变更时 <code>recreate()</code>（与语言同款，代价最低）；至少把格式化从 VM 挪到组合期。</span></div>
+  </div>
+
+  <div class="item H">
+    <div class="ihead"><span class="id">N-08</span><span class="it">RouteSearchClient 用 runCatching 包挂起调用，吞掉 CancellationException</span><span class="tag H">HIGH</span></div>
+    <div class="loc">core/map/.../route/RouteSearchClient.kt:35,38</div>
+    <pre>val byV2 = runCatching { requestByV2(from, to) }.getOrDefault(emptyList())
+if (byV2.isNotEmpty()) return byV2
+return runCatching { requestByV1(from, to) }.getOrDefault(emptyList())</pre>
+    <div class="chain">取消被转成 <code>emptyList()</code>，函数<b>正常返回不上抛</b>：① 被取消的协程不会停，后续 <code>_state.update { planFailed = true }</code> 是非挂起代码照样执行，与新任务写同一份 state；
+    ② <b>每次取消都真实发出一次多余的 V1 请求</b>（body 在 <code>getResult()</code> 前执行，结果无人消费）；③ 结构化并发被破坏。</div>
+    <div class="row"><span class="k">修复</span><span class="v">不要用 <code>runCatching</code> 包挂起调用：<code>catch (c: CancellationException) { throw c }</code> 置于 <code>catch (Throwable)</code> 之前。</span></div>
+  </div>
+
+  <div class="item H">
+    <div class="ihead"><span class="id">N-09</span><span class="it">AmapSearchClient 三处 catch(Exception) 把取消转为用户可见的「搜索不可用」</span><span class="tag H">HIGH</span></div>
+    <div class="loc">core/map/.../search/AmapSearchClient.kt:62-64, 106-108, 143-145 × feature/plan/.../PlanViewModel.kt:601,608-610</div>
+    <div class="chain">用户敲下一个字符时若上一条请求仍在飞行（网络慢时必然），旧协程的取消被转成 <code>SearchOutcome.Failed</code> → <code>search()</code> 继续执行并写入
+    <code>searching=false, suggestions=空, hint=OFFLINE</code> → 界面弹出「搜索暂不可用，请直接在地图上点选」并清空候选。
+    <b>这恰好把上轮 H-11（「慢的旧响应覆盖快的新响应」）想修的问题以另一种形式复现了。</b></div>
+    <div class="row"><span class="k">修复</span><span class="v">三处同 N-08；并加 <code>invokeOnCancellation</code> 清理 SDK 监听。</span></div>
+  </div>
+
+  <div class="item H">
+    <div class="ihead"><span class="id">N-10</span><span class="it">照片地图的 marker 永不渲染（缺数据就绪触发）</span><span class="tag H">HIGH</span></div>
+    <div class="loc">feature/media/.../PhotoMapScreen.kt:183-188, 197-206（rebuildCluster 唯一调用点）、:147（LaunchedEffect 只处理 mediaGranted）</div>
+    <div class="row"><span class="k">证据</span><span class="v">grep 确认：<b>没有 <code>LaunchedEffect(state.photos)</code></b>；<code>rebuildCluster</code> 只在相机 zoom 变化回调里调用，且第 201 行「zoom 未变直接 return」使<b>平移地图也无效</b>。</span></div>
+    <div class="chain">进入页面 → 相机监听器注册时扫描未完成（<code>state.photos == null</code>）→ 首次回调空转 → 扫描完成后<b>没有任何东西再调用 rebuildCluster</b> → 地图上一个照片 marker 都没有。页面核心内容（P-12 全部功能）实质不可达。</div>
+    <div class="row"><span class="k">修复</span><span class="v">加 <code>LaunchedEffect(state.photos) { ... rebuildCluster(...) }</code>；第 201 行去重条件改为「zoom 相同且 target 位移小于阈值」才跳过。</span></div>
+  </div>
+
+  <div class="item H">
+    <div class="ihead"><span class="id">N-11</span><span class="it">targetSdk 35 强制 edge-to-edge，但 7 个页面完全没有 insets 处理</span><span class="tag H">HIGH</span></div>
+    <div class="loc">MainActivity.kt:148（enableEdgeToEdge）× app/build.gradle.kts:33（targetSdk 35）× RecordingScreen.kt:236-241 等</div>
+    <div class="row"><span class="k">证据</span><span class="v">全仓 insets 扫描<b>只有 2 处命中，全在 MainActivity 的 MapVerifyScreen</b>（:766, :779）。其余页面顶部只有 <code>padding(4~16.dp)</code>。</span></div>
+    <div class="chain">Android 15 上记录页<b>停止按钮（1.5 秒长按）底部被导航栏覆盖</b>、历史/详情/设置/计划页的返回按钮与标题被状态栏压住（点击区域被系统栏抢走）。
+    <code>PhotoMapScreen.kt:226</code> 用魔法数 <code>padding(top = 40.dp)</code> 代替 <code>statusBarsPadding()</code>，在刘海机型上遮挡程度不一。</div>
+    <div class="row"><span class="k">修复</span><span class="v">各页面根容器加 <code>safeDrawingPadding()</code>；建议在 <code>GhTheme</code> 或统一 <code>ScreenScaffold</code> 里收口，避免再次遗漏。</span></div>
+  </div>
+
+  <div class="item H">
+    <div class="ihead"><span class="id">N-12</span><span class="it">SettingsViewModel 持有 Activity 回调：泄漏 + 第二次语言切换静默失效</span><span class="tag H">HIGH</span></div>
+    <div class="loc">feature/settings/.../SettingsScreen.kt:55-59 × SettingsViewModel.kt:68 × MainActivity.kt:486-490</div>
+    <div class="chain"><b>① 泄漏：</b><code>Activity.recreate()</code> 属配置变更路径，<code>ViewModelStore</code> 经 <code>NonConfigurationInstances</code> 保留 → 旧 Activity 销毁后 VM 仍持其强引用（经 lambda 捕获 <code>context</code>），每切一次语言泄漏一个 Activity。
+    <b>② 失效：</b>新 Activity 里 <code>viewModel(factory=…)</code> 命中已有实例 → factory 不被调用 → 返回<b>仍持旧 lambda 的旧 VM</b> → 第二次切换时 <code>Toast</code> 用已销毁 Activity、<code>recreate()</code> token 失效无效果 → DataStore 已写入但界面不切换，<b>用户必须手动重启 App</b>。</div>
+    <div class="row"><span class="k">修复</span><span class="v">VM 不持有回调/Context，改为一次性 UI 事件（<code>Channel</code>）由 Composable 用 <code>LocalContext</code> 调用 <code>recreate()</code>。</span></div>
+  </div>
+
+  <div class="item H">
+    <div class="ihead"><span class="id">N-13</span><span class="it">高德 native 库未 16KB 页对齐：targetSdk 35 下在 16KB 设备无法加载</span><span class="tag H">HIGH</span></div>
+    <div class="loc">gradle/libs.versions.toml:19（amapCombined）× libAMapSDK_MAP_v10_0_700.so</div>
+    <div class="row"><span class="k">实测</span><span class="v">自写 ELF 解析器读取 program header 的 <code>p_align</code>（本轮独立复算，非引用子代理结论）：</span></div>
+    <pre>lib/arm64-v8a/libAMapSDK_MAP_v10_0_700.so     align={4096}  >>> NOT 16KB <<<
+lib/armeabi-v7a/libAMapSDK_MAP_v10_0_700.so   align={4096}  >>> NOT 16KB <<<
+lib/arm64-v8a/libandroidx.graphics.path.so    align={16384} 16KB-OK
+lib/arm64-v8a/libdatastore_shared_counter.so  align={16384} 16KB-OK</pre>
+    <div class="chain">Android 15 起支持 16KB 页；Google Play 自 <b>2025-11-01</b> 起要求新应用/更新必须支持。<code>p_align=4096</code> 在 16KB 设备上<b>加载失败</b>→ 地图/定位崩溃或黑屏，上架 Play 会被拒。
+    注意 APK 内 <code>.so</code> 的 zip 未压缩页对齐打包是<b>对的</b>，缺的是 ELF 内部对齐——这一项只能由库作者修，无法用 Gradle 配置补救。</div>
+    <div class="row"><span class="k">修复</span><span class="v">① 查高德是否已发布 16KB 适配版并升级 <code>amapCombined</code>；② 若暂无，需在 README/PRD 明确声明不支持 16KB 设备并推迟 Play 上架；
+    ③ 加 CI 门禁（<code>tools/m0-verify/</code> 已有 ELF 解析能力可复用）：任一 <code>.so</code> 的 <code>p_align &lt; 16384</code> 即失败。</span></div>
+  </div>
+
+  <div class="item H">
+    <div class="ihead"><span class="id">N-14</span><span class="it">CI 产出的 release APK 高德 Key 为空 → 发布包地图全白屏</span><span class="tag H">HIGH</span></div>
+    <div class="loc">.github/workflows/build.yml（AMAP_KEY 零匹配）× app/build.gradle.kts:6-10,40,76 × AndroidManifest.xml:47-49</div>
+    <div class="chain">工作流只声明了 <code>SIGNING_*</code> 四个 secret，<b>无任何 <code>AMAP_KEY</code></b>；<code>local.properties</code> 被 <code>.gitignore:14</code> 排除，CI checkout 后不存在 →
+    <code>Properties</code> 为空 → <code>.orEmpty()</code> → 空字符串写入 manifestPlaceholders。
+    <b>本地构建不受影响，因此该缺陷只会在真实发布路径上暴露。</b>CI 的 sed 只修了 <code>distributionUrl</code>（见 N-15），没修 Key。</div>
+    <div class="row"><span class="k">修复</span><span class="v">① 新增 <code>AMAP_KEY_RELEASE</code> secret 并在构建前生成 <code>local.properties</code>；② 在 <code>app/build.gradle.kts</code> 的 release 块加构建期断言，避免静默产出空 Key 的包。</span></div>
+  </div>
+
+  <div class="item H">
+    <div class="ihead"><span class="id">N-15</span><span class="it">gradle-wrapper.properties 提交了开发者本机 file:/// 路径，新克隆无法构建</span><span class="tag H">HIGH</span></div>
+    <div class="loc">gradle/wrapper/gradle-wrapper.properties:3</div>
+    <pre>distributionUrl=file:///C:/Users/hxzha/Downloads/gradle-8.9-bin.zip</pre>
+    <div class="chain">① 任何其他机器/新克隆执行 <code>./gradlew</code> 都会去找该本机路径 → <b>bootstrap 直接失败</b>，仓库对协作者不可构建；
+    ② 缺 <code>distributionSha256Sum</code>，发行包无完整性校验；③ CI 依赖一条 sed 才能跑通——<b>「CI 能跑」不等于「仓库可构建」</b>，掩盖了根因。</div>
+    <div class="row"><span class="k">修复</span><span class="v">改回官方网络地址并补 sha256，然后删除 build.yml 里 3 处 "Use network Gradle distribution" 的 sed 兜底。</span></div>
+  </div>
+
+  <div class="item H">
+    <div class="ihead"><span class="id">N-16</span><span class="it">高德搜索 SDK 的合规接口 ServiceSettings 从未调用</span><span class="tag H">HIGH</span></div>
+    <div class="loc">core/map/.../search/AmapSearchClient.kt（Inputtips / PoiSearch / GeocodeSearch 三入口）× core/location/.../PrivacyConsent.kt:6-8</div>
+    <div class="row"><span class="k">证据</span><span class="v"><code>git grep "ServiceSettings"</code> → 全仓库零调用；但 APK dex 中该类确实存在，且搜索 SDK 三个入口全部实装。已调用的只有地图侧（5 处 <code>MapsInitializer</code>）与定位侧（<code>AMapLocationClient</code>）。<code>PrivacyConsent</code> 的注释也只声明了「地图」和「定位」，<b>遗漏了搜索</b>。</span></div>
+    <div class="chain">这是上轮 C-03 的<b>同类残留</b>。搜索/逆地理编码未走合规声明，高德会拦截请求（返回非 1000 的 rCode），表现为计划页候选始终空、照片地图逆地理恒「—」；
+    而这些失败都被 <code>catch</code> 吞成 <code>SearchOutcome.Failed</code>/<code>null</code>，<b>静默降级不报错</b>，真机极难定位。</div>
+    <div class="row"><span class="k">修复</span><span class="v">在 <code>PrivacyConsent</code> 收口处补第三个 SDK 的 <code>ServiceSettings.updatePrivacyShow/Agree</code>，并把 <code>assertAgreed</code> 的 component 扩展到 <code>"search SDK"</code>。</span></div>
+  </div>
+
+  <div class="item H">
+    <div class="ihead"><span class="id">N-17</span><span class="it">RecordingSession 可变状态在多线程上完全无同步，最坏导致整场轨迹静默丢失</span><span class="tag H">HIGH</span></div>
+    <div class="loc">core/data/.../di/AppModule.kt:34-35 × RecordingSession.kt:140, 560, 598, 606, 647-659 × RecordingScreen.kt:303,477</div>
+    <div class="row"><span class="k">证据</span><span class="v"><code>@ApplicationScope</code> 是 <code>SupervisorJob() + Dispatchers.Default</code>（多线程工作窃取池）；<code>buffer</code> 是裸 <code>ArrayList</code>；
+    <code>flushBuffer</code> 的 <code>toList()→clear()→insertBatch</code> 三步无锁；<code>markers</code> 被 Default 线程与主线程同时写；全文件无 <code>Mutex</code>/<code>@Synchronized</code>。</span></div>
+    <div class="chain"><b>最坏后果：</b><code>buffer += </code> 与 <code>toList()/clear()</code> 交错抛 <code>ConcurrentModificationException</code> →
+    该异常发生在 <code>collectJob</code> 内且<b>无 try/catch</b>，<code>SupervisorJob</code> 只让这一个子协程失败 → <code>locationProvider.fixes.collect</code> <b>静默终止</b>：
+    状态仍是 RECORDING、通知仍在跳、UI 仍显示记录中，但此后一个点都不再落库。
+    次要后果：整批轨迹点重复入库（<code>track_point</code> 无唯一约束兜底）、暂停状态被 onSample 的旧快照覆盖回 RECORDING、标记丢失。</div>
+    <div class="row"><span class="k">修复</span><span class="v">引入单一串行化点：<code>Mutex</code> 包住 buffer/markers 全部读写，或注入 <code>Dispatchers.Default.limitedParallelism(1)</code> 的单线程调度器；
+    <code>collectJob</code> 的 collect 体加 <code>try/catch(Throwable)</code> + 日志；给 ApplicationScope 挂 <code>CoroutineExceptionHandler</code>。</span></div>
+  </div>
+
+  <div class="item H">
+    <div class="ihead"><span class="id">N-18</span><span class="it">单次距离跳变引发「提醒风暴」：一次漂移 → 连续 N 条打点 + N 条 TTS</span><span class="tag H">HIGH</span></div>
+    <div class="loc">core/data/.../alert/AlertEngine.kt:41-56（距离）、:64-95（海拔）</div>
+    <pre>val nextMark = lastDistanceMarkM + settings.distanceIntervalM
+if (sample.distanceM >= nextMark) { lastDistanceMarkM = nextMark; distanceSeq += 1; events += ... }</pre>
+    <div class="chain">每次调用<b>最多推进一个间隔</b>，而 <code>distanceM</code> 是单调累计值 → 基准长期落后。
+    <b>实算：</b>单次跳到 1050m 后用户原地不动 → 连续 10 个采样各触发 1 条 → <b>10 秒内 10 条打点 + 10 条语音播报</b>；+350m 漂移后正常前进 → 听到「已行进 100/200/300 米」三连播。海拔同理。</div>
+    <div class="row"><span class="k">修复</span><span class="v">基准一次性对齐到当前档位：<code>val n = floor(distanceM / interval)</code>，只发 1 条；或保留补齐语义但同一 <code>onSample</code> 内最多 1 条播报。</span></div>
+  </div>
+</section>
+
+<!-- ============ MEDIUM ============ -->
+<section data-sec="M">
+  <h2>MEDIUM — 40 项</h2>
+  <div class="h2sub">功能静默失效、资源泄漏、数据不一致、工程化风险</div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-19</span><span class="it">MapView 生命周期 pause→destroy 配对只在 1/5 个宿主里修过；5 处均未转发 onSaveInstanceState</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">MainActivity.kt:733-738（唯一正确）× RecordingScreen.kt:150-153 × TripDetailScreen.kt:457-460 × PlanScreen.kt:178-181 × PhotoMapScreen.kt:170-173</div>
+    <div class="row"><span class="k">后果</span><span class="v">从详情页/计划页/照片页返回（Activity 未 pause）时直接 <code>onDestroy()</code> → AMap 内部 GL 资源与监听器释放顺序错乱 → 地图黑屏/瓦片不刷新/偶发崩溃。<code>grep onSaveInstanceState|onLowMemory</code> 全仓 0 命中，进程被杀恢复时相机位置丢失。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">把这段 5 行样板抽成公共 <code>GhMapView</code>（core:map），内部统一四个生命周期回调 + <code>onSaveInstanceState</code>。<b>这是「复制 5 份、只改 1 份」的典型</b>。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-20</span><span class="it">ZIP 解压把每个条目整体读入内存，2GB 上限远超 Android 堆</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/data/.../io/BackupBuilder.kt:258-275, 143-145</div>
+    <div class="row"><span class="k">后果</span><span class="v">文件头自述「流式解压不整包进内存」与实际不符：<code>media/*</code> 条目（:288）读完只取文件名即丢弃，但<b>内容已完整进内存</b>。单个 300MB 视频即可让 <code>ByteArrayOutputStream</code> 扩容到 600MB → OOM；2GB 上限在 128–512MB 堆面前不构成保护。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v"><code>media/*</code> 只读前若干字节后 <code>closeEntry()</code>；单条目体积上限（JSON 32MB / 其他 8MB）；<code>MAX_TOTAL_BYTES</code> 按 <code>Runtime.maxMemory()</code> 动态计算。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-21</span><span class="it">导入把「无坐标的标记/途经点」写成 (0,0)，违反「绝不编造」</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/data/.../io/ImportEngine.kt:295 × IoModels.kt:86-87, 118-119 × core/database/.../entity/TripEntities.kt:79-80</div>
+    <div class="row"><span class="k">后果</span><span class="v"><code>?: (0.0 to 0.0)</code> —— 第三方/手工编辑的 JSON 缺坐标时，标记被钉在<b>几内亚湾 (0,0)</b>。详情页地图在非洲西海岸出现「登顶」标记，用户完全无法理解。与 PRD 红线「绝不编造」直接冲突。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v"><code>lat/lng</code> 任一为 null 时<b>跳过该标记</b>并计入 <code>MARKER_NO_COORD</code> 警告（带条数）。绝不写 0,0。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-22</span><span class="it">导入重算 track_point.distanceM 时每段清零，与记录链路全局累加口径不一致</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/data/.../io/ImportEngine.kt:266-271 × RecordingSession.kt:517-519 × feature/history/.../Charts.kt:73</div>
+    <div class="row"><span class="k">后果</span><span class="v">导出再导入后：详情页海拔曲线右下角「总距离」标签显示为<b>最后一段的距离</b>（如 800m），而行程卡片显示 5km，<b>两处数字自相矛盾</b>；备份文件的往返不可逆（导出→导入→导出 JSON 不稳定）。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">导入时不要因 segment 变化清零 <code>cumulative</code>，与 <code>RecordingSession</code> 保持同口径。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-23</span><span class="it">媒体扫描无逐表容错 + 权限判定三套口径不一致 → 照片功能静默全空</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/data/.../media/MediaScanner.kt:137-165 × MediaRepository.kt:30-37 × PhotoMapScreen.kt:142-143</div>
+    <div class="row"><span class="k">后果</span><span class="v">IMAGE 先查、VIDEO 后查，VIDEO 抛 <code>SecurityException</code> 会让整个 <code>queryStore()</code> 抛出，<b>已收集的 image 行全部丢弃</b>；调用侧全部 <code>runCatching</code> 吞掉 → 详情页照片条永远为空、照片地图永远空白，<b>没有任何错误提示</b>，用户无法区分「没有照片」与「功能坏了」。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">每个 <code>spec</code> 单独 <code>runCatching</code>；<code>hasMediaAccess</code> 与 UI 判定统一口径。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-24</span><span class="it">Android 14「部分照片访问」已声明但完全未处理 → 授权死循环</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">AndroidManifest.xml:29 × MediaRepository.kt:30-37 × PhotoMapScreen.kt:131-137, 298-307</div>
+    <div class="row"><span class="k">后果</span><span class="v">用户在权限弹窗选「选择照片」（最常见的隐私友好选项）后系统只授予 <code>READ_MEDIA_VISUAL_USER_SELECTED</code>，而 <code>hasMedia()</code> 只认 <code>READ_MEDIA_IMAGES</code> →
+    判为无权限 → 显示授权引导 → 用户再点、再选「选择照片」→ 仍判无权限 → <b>死循环</b>。且无 <code>shouldShowRequestPermissionRationale</code> 判断、无「去系统设置」入口，永久拒绝时按钮点了完全没反应。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">把「部分授权」纳入判定（三态：全部/部分/无）；Android 14+ 申请数组加入该权限；永久拒绝时按钮改为跳转 <code>ACTION_APPLICATION_DETAILS_SETTINGS</code>。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-25</span><span class="it">ViewModel 协程普遍无异常兜底：DB/DataStore 写失败 → 未捕获异常 → 崩溃</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">HistoryListViewModel.kt:96 × TripDetailViewModel.kt:148,153,158-161 × PlanListViewModel.kt:35-45 × SettingsViewModel.kt:225-275 × DataStoreSettingsRepository（runCatching 计数 = 0）</div>
+    <div class="row"><span class="k">后果</span><span class="v"><code>viewModelScope</code> 是 <code>SupervisorJob + Main.immediate</code> 且无 <code>CoroutineExceptionHandler</code>，子协程未捕获异常走线程默认 handler → <b>进程崩溃</b>。触发条件（磁盘满、DataStore 损坏、SQLiteException）虽不常见，但一旦发生就是闪退且无提示。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">统一包一层 <code>launchSafe { }</code>（<code>runCatching</code> + 失败写入 <code>UiState.error</code>）。<b>这是 C-01 修复原则在同一页面的遗漏</b>——保存有错误态，删除/改名/改设置没有。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-26</span><span class="it">9 个设置项在 UI 里可改但代码完全不读（含 P0 的「屏幕常亮」）</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">RecordingScreen.kt:108-113（无条件 addFlags）× docs/DEV-DESIGN.md:1357 × docs/PRD.md:695（F-REC-18 P0）</div>
+    <div class="row"><span class="k">零引用项</span><span class="v"><code>recordKeepScreenOn</code>、<code>recordLocationMode</code>、<code>recordAutoPause</code>、<code>recordBackgroundEnabled</code>、<code>mapType</code>、<code>mapTrackWidth</code>、<code>mapShowMediaCluster</code>、<code>ioBackupIncludeMedia</code>、<code>ioExtraFormats</code>（已 grep 排除定义与备份序列化）。反证：alert 与 <code>ioBackupIncludeChecksum</code> 是正确接线的。</span></div>
+    <div class="row"><span class="k">后果</span><span class="v">关掉「屏幕常亮」记录时屏幕依旧常亮（耗电）；打开「自动暂停」静止不会暂停；选卫星底图不变。用户可见的「设置失灵」，且无从判断是 bug 还是未实现。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">按优先级接线；v1 不做的项应在 UI 上禁用并标注「即将支持」，而不是给出可用开关。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-27</span><span class="it">AmapSearchClient / RouteSearchClient 持有 Activity Context，被常驻 ViewModel 长期引用</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">MainActivity.kt:189-190 × AmapSearchClient.kt:43 × RouteSearchClient.kt:31 × PlanScreen.kt:87-99（对比例：PhotoMapScreen.kt:127 用 applicationContext）</div>
+    <div class="row"><span class="k">后果</span><span class="v">二者进入挂在 Activity <code>ViewModelStore</code> 上的 <code>PlanViewModel</code>（跨配置变更存活）→ 语言切换 <code>recreate()</code> 后仍持有旧 MainActivity → <b>Activity 泄漏</b>（与 N-12 叠加，一次切换泄漏两份引用）。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">改用 <code>context.applicationContext</code>；更彻底的是在 core:map 提供 Hilt 绑定，用 <code>@ApplicationContext</code> 强制约束。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-28</span><span class="it">ACTIVITY_RECOGNITION 已声明但从未动态申请 → 计步静默失效</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">AndroidManifest.xml:22 × MainActivity.kt:863-866（申请清单不含它）× core/location/.../step/StepSources.kt:85-86, 200-202</div>
+    <div class="row"><span class="k">后果</span><span class="v">API 29+ 该权限是运行时权限。未申请时 <code>registerListener</code> <b>静默无效不抛异常</b>，而 <code>getDefaultSensor()</code> 仍返回非 null → 源选择「选中」计步源但<b>一个步数都收不到</b>，且不会 fallback 到加速度计——比直接走降级路径更糟。表现为「步数恒为 0」且日志无任何异常。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">API ≥ 29 时追加到申请清单；在 <code>StepSources</code> 源选择处增加权限判定，未授权直接降级。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-29</span><span class="it">返回键在首页被拦截为 moveTaskToBack，用户永远无法用返回键退出</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">MainActivity.kt:380-401</div>
+    <div class="row"><span class="k">后果</span><span class="v">C-04 的修复方向正确（子页面返回不再 finish 整个 App），但<b>首页分支没有 finish 兜底</b>：反复按返回键只会一次次退到后台，永远不会退出，与平台惯例不符，也让「长按返回退出」等系统手势失效。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">改为「2 秒内两次返回则 <code>finish()</code>」；或直接 <code>finish()</code>（前台服务仍在，记录不会中断）。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-30</span><span class="it">崩溃恢复不恢复标记：整场 SUMMIT / MANUAL 打点丢失</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">RecordingSession.kt:134（纯内存 markers）× :601-639 × :357-361（仅 save 时落库）× :661-695（快照无标记字段）× :409（恢复时 clear）</div>
+    <div class="row"><span class="k">后果</span><span class="v">轨迹点每 10 点/5 秒分批落库，崩溃后可恢复；但用户按下的所有「登顶」「手动打点」只存在于内存，进程一死全消失 → <b>「轨迹在、登顶点没了」的不对称丢失</b>。<code>LegSplitter</code> 依赖 SUMMIT 标记，恢复后的记录连上下山切分也永久缺失。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">打点即落库（推荐，增量落库天然抗崩溃）；或把 markers 序列化进 <code>recording_state</code>。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-31</span><span class="it">TtsSpeaker 音频焦点泄漏：speak() 返回值被忽略 + 未覆写 onStop</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">feature/recording/.../TtsSpeaker.kt:46-67</div>
+    <div class="row"><span class="k">后果</span><span class="v">三种情况下 <code>abandonAudioFocusRequest</code> 永不调用：① <code>speak()</code> 返回 ERROR；② <code>setLanguage</code> 不支持导致无法开始；③ <code>QUEUE_FLUSH</code> 冲掉上一条（终态回调是 <code>onStop</code>，本类未覆写）。
+    → <b>App 永久持有音频焦点，用户后台音乐/导航被持续压声</b>。另 <code>languageSet</code> 赋值后全类无读取点（死字段）。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">覆写 <code>onStop</code>；检查 <code>speak()</code> 返回值；<code>setLanguage</code> 失败时直接 return 不播报。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-32</span><span class="it">START_STICKY 重启后服务立即自杀：系统回收进程后记录静默中断</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/data/.../recording/RecordingService.kt:44-67, 69-78, 77（START_STICKY）× MainActivity.kt:406-409（恢复入口只在 UI）</div>
+    <div class="row"><span class="k">后果</span><span class="v">进程被系统回收后 <code>START_STICKY</code> 用 null intent 重启服务 → 新进程 <code>RecordingSession</code> 状态 Idle → collector 立刻 <code>stopSelf()</code> →
+    <b>通知闪一下就消失、记录悄悄停止，无任何提示</b>。「任务划掉后仍记录」的承诺在系统回收路径上不成立。另：<code>onCreate</code> 里 <code>startForeground(type=LOCATION)</code> 在后台启动受限的 Android 12+ 上可能抛 <code>ForegroundServiceStartNotAllowedException</code>，而 <code>onCreate</code> 无 try/catch，存在崩溃循环风险。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v"><code>onCreate</code> 先判 <code>hasRecoverableSession()</code>，为真则不 <code>stopSelf()</code> 而发「记录已中断，点按继续」的常驻通知；整体包 <code>runCatching</code>。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-33</span><span class="it">详情页行程不存在时永久停在「加载中…」（缺 not-found 终态）</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">feature/history/.../TripDetailViewModel.kt:61-68 × TripDetailScreen.kt:165-173</div>
+    <div class="row"><span class="k">后果</span><span class="v"><code>loading = it.loading &amp;&amp; t == null</code> —— tripId 无效时 <code>loading</code> 永远 true → <b>永远显示「加载中…」</b>，无超时、无「记录不存在」文案、无返回引导。
+    若行程「先存在后被删」则 loading 变 false 而 trip 为 null → 第 173 行提前返回 → <b>标题栏下方完全空白</b>。这是本项目历史上出现过的「白屏/卡死」同类问题，C-01 只修了记录页保存路径。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">加 <code>notFound: Boolean</code>（首次 null 后或 3~5s 超时置位）+ 对应文案与返回按钮。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-34</span><span class="it">导入是逐条 N+1 查询，且 trip 表无任何索引</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">ImportEngine.kt:67-75, 153-154 × RoomImportSink.kt:13-26 × core/database/schemas/.../2.json（trip 无 indices）</div>
+    <div class="row"><span class="k">后果</span><span class="v">N 个文件 × 2 次查询 × 每次全表扫描。备份 2000 条、库内 3000 条时约 1200 万行扫描量；<b>预览阶段（用户还没点「导入」）就要跑完全部查询</b> → 进度条长时间不动，用户易误以为卡死并杀进程。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">批量取 id/时间集合；给 trip 加 <code>Index(["status","startTime"])</code> 与 <code>Index(["name","startTime"])</code>（后者直接服务 <code>observeFinished</code> 的全表扫描+排序）。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-35</span><span class="it">MIGRATION_1_2 零测试覆盖：core:database 连测试源集都不存在</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/database/.../Migrations.kt:7-8（自述「每个迁移必须配 MigrationTestHelper 测试」）× core/database/src（无 test/androidTest 目录）</div>
+    <div class="row"><span class="k">手工核对</span><span class="v">本次已把建表 SQL 与 <code>2.json</code> 逐列比对，列名/亲和性/NOT NULL/主键/外键/索引<b>完全一致</b>；且 Room 的 <code>PRAGMA foreign_keys=ON</code> 在 <code>onOpen</code> 执行（晚于 <code>onUpgrade</code>），迁移期间 <code>DROP TABLE planned_route</code> <b>不会</b>级联删掉 <code>planned_leg</code>——当前是安全的。</span></div>
+    <div class="row"><span class="k">风险</span><span class="v">但迁移含「建新表→抄数据→删旧表→改名」四步 + 依赖「迁移期间外键关闭」这一隐式前提，<b>无任何回归护栏</b>。后续改动会在用户设备上炸在 <code>Room.databaseBuilder().build()</code>（已禁用 <code>fallbackToDestructiveMigration</code>）→ <b>App 无法打开数据库，老用户全部数据不可访问</b>。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">新建 <code>core/database/src/androidTest/.../MigrationTest.kt</code> + <code>room-testing</code> 依赖。低成本、一次性收益。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-36</span><span class="it">PolylineJson 零测试且在该模块结构上无法编写测试，decode 无防御而调用点无保护</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/common/.../geo/PolylineJson.kt:21-29 × feature/recording/.../RecordingScreen.kt:198 × core/common/build.gradle.kts:25-32</div>
+    <div class="row"><span class="k">后果</span><span class="v"><code>decode</code> 对空串/非数组/null 一律抛 <code>JSONException</code>，而唯一调用点在 <code>LaunchedEffect</code> 内<b>无 try/catch</b> → 抛异常即崩溃。
+    <b>不可测的根因</b>：使用 Android 专有 <code>org.json</code>，而 core:common 未设 <code>unitTests.isReturnDefaultValues = true</code>（只有 app 模块设了）→ 单测里 <code>JSONArray.put</code> 抛 "not mocked"。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v"><code>decode</code> 加 <code>runCatching</code> 并对齐 <code>IoCodecs</code> 返回 <code>emptyList()</code>；改 kotlinx.serialization 或补真实 org.json 测试依赖后补用例。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-37</span><span class="it">同一磁盘格式存在两套独立编解码，且无互操作测试</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">PolylineJson（org.json，写+读）× IoCodecs.encode/decodePolyline（kotlinx/拼接，写+读）× TripJsonExporter.kt:202（导出时读 PlanViewModel 写入的那一列）</div>
+    <div class="row"><span class="k">后果</span><span class="v">两套实现的数字序列化策略不同（org.json 剥离尾随 <code>.0</code>，kotlinx 不会），当前恰好互相可解析——<b>这是巧合而非契约</b>。任何一方改动都会让导出<b>静默丢几何</b>（<code>decodePolyline</code> 捕获全部异常返回空列表，折线变 <code>[]</code> 且不报错）。两侧均零测试。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">统一到一套实现，并补跨模块往返测试 <code>IoCodecs.decodePolyline(PolylineJson.encode(pts)) == pts</code> 及反向。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-38</span><span class="it">AltitudeFuser.current() 是有副作用的「读」方法，且每个 fix 被调用两次</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/location/.../altitude/AltitudeFuser.kt:88-97, 207-211 × RecordingSession.kt:537, 585</div>
+    <div class="row"><span class="k">实算</span><span class="v">每 fix 推 1 次（设计意图）输出标准差 0.3981；每 fix 推 2 次（实际行为）0.5315 → <b>噪声放大 1.335×</b>（理论 √2 = 1.414×）。9 点中值滤波退化为 4.5 点。</span></div>
+    <div class="row"><span class="k">后果</span><span class="v">DEV §4.3 明确把「9 点中值滤波」列为抗噪声防线，真机上只有 4.5 点 → 爬升统计更易被噪声触发。
+    <b>更隐蔽的是</b>：任何未来新增的 <code>current()</code> 调用点（UI 轮询、日志、地图渲染）都会继续「喂」这个窗口，滤波强度随调用次数进一步退化。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">推进滤波与读值拆开（<code>onGpsFix</code>/<code>onPressure</code> 推进并缓存，<code>current()</code> 纯读）；<code>RecordingSession.kt:585</code> 复用 :537 已算出的值。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-39</span><span class="it">高程批量查询 IN 子句参数超限：长线路在 Android ≤ 11 上抛 SQLiteException</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/elevation/.../ElevationRepository.kt:136-146 × core/database/.../dao/SupportDaos.kt:26-30 × RouteEvaluator.kt:54（50m 重采样）</div>
+    <div class="row"><span class="k">后果</span><span class="v">两个 <code>IN</code> 列表展开为 <code>2×N</code> 个绑定参数。minSdk 26 覆盖 Android 8~11（SQLite &lt; 3.32，<code>SQLITE_MAX_VARIABLE_NUMBER</code> 默认 999）→
+    ≥ 25km 线路（~500 采样点 = 1000 参数）触发 <code>too many SQL variables</code>。候选列表路径被 <code>runCatching</code> 吞掉（爬升静默丢失），返程线路路径<b>直接崩溃</b>。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">按 ≤ 200 点分批；<code>replanReturnInternal</code> 也纳入 <code>runCatching</code>。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-40</span><span class="it">单批高程请求超时 → RouteEvaluator 全量否决整条线路</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/elevation/.../ElevationRepository.kt:92-125 × RouteEvaluator.kt:59-62 × OpenMeteoElevationSource.kt:40-41,68</div>
+    <div class="row"><span class="k">后果</span><span class="v">分批循环允许部分失败并仍返回 <code>Ok</code>，但 <code>RouteEvaluator</code> 只要有一个点为 null 就整条放弃。
+    20km 线路 = 4 批串行请求，任一批 6s 超时（山区弱网是常态）→ <b>爬升/难度/最高最低海拔全部为 null</b>，而实际 3/4 的高程数据已拿到手。
+    对 <code>maxAltitudeM</code> 这类只要有任一有效点就能给出的指标，明显过度保守。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">分指标口径：<code>max/minAltitudeM</code> 用非 null 子集；爬升在缺失点处断开累加器但保留其余区间；新增 <code>elevationCoverage</code> 供 UI 提示。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-41</span><span class="it">watchdog 协程内异常无兜底 → 切备源时崩溃</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/location/.../source/SwitchingLocationProvider.kt:64-84 × FusedLocationSource.kt:60-68 × AppModule.kt:34-35</div>
+    <div class="row"><span class="k">后果</span><span class="v">用户撤销定位权限（或「仅此次」授权过期）→ watchdog 触发切备源 → <code>requestLocationUpdates</code> 抛 <code>SecurityException</code> →
+    无 handler → <b>应用崩溃、记录中断</b>。与 N-06 叠加时更糟：主源错误不切源，一旦切源就崩。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">协程体包 <code>runCatching</code>（<code>CancellationException</code> 重抛）；<code>start()</code> 内显式 <code>checkSelfPermission</code>。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="item-head"></div>
+    <div class="ihead"><span class="id">N-42</span><span class="it">无 DATE_TAKEN 的照片永远不会被关联（dateModified 兜底是死代码）</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/database/.../dao/MediaDao.kt:34-35 × MediaScanner.kt:158 × MediaTripMatcher.kt:62 × MediaRepository.kt:62</div>
+    <div class="row"><span class="k">后果</span><span class="v">SQL 中 <code>NULL BETWEEN x AND y</code> 恒不成立 → <code>dateTakenMs IS NULL</code> 的行<b>永远查不出来</b>；而扫描器明确允许该列为 null。
+    截图、微信/浏览器保存的图片、部分视频<b>永远不会出现在行程照片条里</b>。注释声称「扫描器已保证非空」，与实际实现相反。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">查询改为 <code>WHERE (dateTakenMs BETWEEN …) OR (dateTakenMs IS NULL AND dateModifiedMs BETWEEN …)</code>。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-43</span><span class="it">全库媒体扫描无分页、无窗口，一次性读入两张 MediaStore 表并逐条读 EXIF</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/data/.../media/MediaScanner.kt:113-167, 72-91, 170-234</div>
+    <div class="row"><span class="k">后果</span><span class="v">首次全量扫描在 1–5 万张照片的设备上需数分钟、<code>toWrite</code> 常驻数十 MB；扫描被 ViewModel 取消时已做的 EXIF 解析<b>全部丢弃</b>，下次进页面从头再来 → <b>用户永远等不到照片出现</b>。进度回调 <code>index % 50</code> 在 EXIF 解析耗时下形同虚设。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">分页查询（<code>ORDER BY _ID LIMIT 500 OFFSET n</code>）+ 每批落库并回调进度；<code>toWrite</code> 按 200 条分片。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-44</span><span class="it">导入未校验 status：非 FINISHED 的记录「导入成功」但永远不可见</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/data/.../io/ImportEngine.kt:245 × core/database/.../dao/TripDao.kt:21,25,40（全部 WHERE status='FINISHED'）</div>
+    <div class="row"><span class="k">后果</span><span class="v"><code>status = t.status ?: "FINISHED"</code> 直接采信文件内容。文件里是 <code>"RECORDING"</code>/拼写错误时，导入报告显示 IMPORTED，用户却在历史列表找不到（数据在库里、占空间、不可见、不可删）。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">白名单校验，非白名单值落 <code>"FINISHED"</code> 并记 warning；<code>stepSource</code>/<code>altitudeSource</code> 同样校验。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-45</span><span class="it">inputTips 完全忽略 rCode，把服务端失败误判为「无结果」</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/map/.../search/AmapSearchClient.kt:51-55（对照 :92-93 的正确写法）×</div>
+    <div class="row"><span class="k">后果</span><span class="v">高德返回失败码（Key 无效 1001、配额超限、参数错误）且 <code>tips</code> 为非空空列表时返回 <code>SearchOutcome.Empty</code> →
+    UI 显示「未找到相关地点，试试其他关键词」——<b>把服务端故障引导成用户改关键词</b>。同一个 client 内两种口径，行为取决于 SDK 返回 null 还是空表。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">与 <code>poiSearch</code> 对齐：<code>if (rCode == RCODE_OK) … else Failed("rCode=$rCode")</code>，并把 rCode 记入日志。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-46</span><span class="it">core/map 零日志、Failed.cause 从不消费：Key/网络/配额故障完全不可诊断</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/map/src/main/kotlin（grep Timber|Log. → 无）× AmapSearchClient.kt:34 × PlanViewModel.kt:608-610</div>
+    <div class="row"><span class="k">后果</span><span class="v">Key 未注入/无效、域名白名单未配、配额耗尽、离线这四种情况在日志里<b>都无迹可寻</b>，在 UI 上<b>都是同一句</b>「搜索暂不可用」。
+    <code>RouteSearchClient</code> 更彻底：连结果类型都没有，全部失败都变成 <code>emptyList()</code>，与「山区确实规划不出线路」完全同形——而 PRD F-PLAN-09 要求区分。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">失败分支加 <code>Timber.w(..., "amap rCode=$rCode")</code>；<code>RouteSearchClient</code> 返回值改为可区分失败的结果类型。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-47</span><span class="it">PolylineSimplifier 的「10000 点 &lt;30ms」性能门禁是空转，最坏情形 O(n²)</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/common/src/test/.../PolylineSimplifierTest.kt:72-84</div>
+    <div class="row"><span class="k">实算</span><span class="v">输入 10000 点 → <b>输出 2 点</b>，DP 内部 <code>passes=1</code>、距离计算 9998 次。每 10 点偏移 <code>0.0001°</code> 经度 = <b>9.64m &lt; epsilon 12m</b> → 全部丢弃，<b>一次递归拆分都没发生</b>。</span></div>
+    <div class="row"><span class="k">后果</span><span class="v">该用例退化成与「共线点被移除」完全等价的测试，既发现不了 DP 退化为 O(n²)（n=8000 → 3198 万次距离计算），也验证不了 DEV §4.5 的 30ms 硬指标。<b>性能回归零保护。</b></span></div>
+    <div class="row"><span class="k">修复</span><span class="v">改用能触发深度拆分的数据（交替 ±(epsilon+δ) 锯齿），断言 <code>out.size</code> 与 <code>dist_ops</code> 上界；把 200ms 收紧到 30ms。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-48</span><span class="it">GhError 的错误信息全链路丢失：cause 从不读取，8 个子类中 7 个从未被构造</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/common/.../result/GhResult.kt:12-36 × core/elevation/.../ElevationRepository.kt:124（唯一构造点）</div>
+    <div class="row"><span class="k">后果</span><span class="v"><code>grep "\.cause"</code> 全仓 0 命中；<code>map/onOk/onErr</code> 三个扩展全仓 0 引用；7 个子类无构造点。
+    唯一保留异常的 <code>cause</code> 字段<b>没有任何消费者</b>（不显示、不日志）。线上「爬升估算为什么总是 —」这类问题无法从日志定位根因。<code>GhResult</code> 作为「统一错误类型」目前是装饰性的。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">所有子类加 <code>cause</code> 并在 catch 点透传；在 <code>Err</code> 产生边界统一 <code>Timber.w</code>；删除或补全未使用的子类与扩展。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-49</span><span class="it">core:model 领域模型约 95% 是死代码，且已与 datastore / entity 漂移</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/model/.../Models.kt（Trip/TrackPoint/Marker/PlannedRoute/MediaItem/AppSettings/…）× core/datastore/.../AppSettings.kt:11</div>
+    <div class="row"><span class="k">证据</span><span class="v"><code>grep "import com.gohiking.core.model"</code> 只有 <code>LatLngValue</code>(14)、<code>Difficulty</code>(4)、<code>TripStats</code>(1)。<b>漂移已实际发生</b>：<code>Models.kt:183 weightKg</code> ↔ <code>AppSettings.bodyWeightKg</code>；<code>status: TripStatus</code>（枚举）↔ <code>TripEntity.status: String</code>。</span></div>
+    <div class="row"><span class="k">后果</span><span class="v">PRD 7.1 的字段契约在两个地方各写一遍，真正落库的是 entity 与 datastore。任何「照 Models.kt 改」的改动都是无效改动；新成员读 Models.kt 会得到<b>错误认知</b>。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">二选一并一次性做完：删除未使用类型（只留 3 个），或反向收敛让 entity 只做持久化映射。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-50</span><span class="it">Trip 爬升非空默认 0.0 → 「无高程数据」与「爬升 0」不可区分，界面谎报</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/model/.../Models.kt:46-48 × core/database/.../TripEntities.kt:24-27 × TripDetailScreen.kt:521-528（对比同页 :523-528 用了 <code>?: unknown</code>）</div>
+    <div class="row"><span class="k">后果</span><span class="v">无气压计且 GPS 无高程解算时全程 0.0 → 详情页显示「累计爬升 0 m」，与「确实全程平路」无法区分。
+    <b>对比</b>：计划线路侧已按 H-06 做到「不可用落 null」<code>PlanViewModel.kt:346-347</code>，行程侧没做到。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">爬升改为可空（或加 <code>ascentKnown</code>），UI 走 <code>?: unknown</code>；判定依据 <code>TripEntity.altitudeSource</code> 已有。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-51</span><span class="it">18 个模块重复硬编码 compileSdk / minSdk，无 convention plugin</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">19 处 <code>compileSdk = 35</code> + 19 处 <code>minSdk = 26</code>（app + 10 core + 7 feature）× settings.gradle.kts（无 build-logic）</div>
+    <div class="row"><span class="k">后果</span><span class="v">升级 SDK 版本需同步改 19 个文件，<b>漏改一个不会报错</b>（AGP 各自编译），最终在合并/打包阶段才可能出现兼容性异常。
+    对比 <code>versionName</code> 已做单一来源而 SDK 版本没有——<b>工程化不对称</b>。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">新增 <code>build-logic</code> 复合构建，集中声明 compileSdk/minSdk/targetSdk/compileOptions/jvmTarget，各模块脚本缩到 3–5 行。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-52</span><span class="it">ACCESS_BACKGROUND_LOCATION 已声明但零使用、零动态申请</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">app/src/main/AndroidManifest.xml:13 × MainActivity.kt:863-866（申请清单不含它）</div>
+    <div class="row"><span class="k">后果</span><span class="v">Google Play 的敏感权限，上架需单独提交用途说明与演示视频；<b>无实际用途即声明会被拒审</b>。功能上无收益——前台服务 + <code>FOREGROUND_SERVICE_LOCATION</code> 已覆盖「划掉任务仍记录」。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">直接删除；确需时连同「先前台、再单独二次申请后台」的两段式引导一起加回。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-53</span><span class="it">versionCode 恒为 1，与自身版本管理规则冲突</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">gradle.properties:9,11 × CHANGELOG.md:19 × .github/workflows/build.yml:84（CI 只读 versionName）</div>
+    <div class="row"><span class="k">后果</span><span class="v">CHANGELOG 已有 <code>[v0.5.0]</code>、<code>[v0.4.0]</code> 两个已定版小节，但 <code>git tag -l</code> 只有 <code>v0.3.0</code>，versionCode 仍为 1 →
+    <b>至少 2 个对外分发批次未递增</b>。Play 会直接拒绝同 versionCode 的更新；侧载场景下更新器无法区分版本。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">发布前改 <code>versionCode=3</code>；长期建议由 CI 从 tag 派生，消除手工遗漏。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-54</span><span class="it">gradle.properties 中 org.gradle.caching 重复定义，后值静默覆盖前值</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">gradle.properties:13（true）× :26（false）</div>
+    <div class="row"><span class="k">后果</span><span class="v">第 13 行是死配置。当前生效值 false 是本机规避方案（Defender 抢锁 <code>.part</code> 文件）的 <b>本地 hack</b>，却被写进所有机器共享的文件 →
+    CI（Linux，无该问题）与其他开发者被迫关闭构建缓存。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">删除第 13 行；或把本机规避移到 <code>~/.gradle/gradle.properties</code>，仓库内恢复 true。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-55</span><span class="it">记录通知里的距离硬编码 km，无视「距离单位 = 英里」设置</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">core/resources/src/main/res/values/strings.xml:56 × core/data/.../recording/RecordingService.kt:62,111</div>
+    <div class="row"><span class="k">后果</span><span class="v"><code>Distance %1$.2f km</code> —— 单位是英里的用户在通知里仍看到 km；且 <code>distanceM &lt; 500</code> 时显示「0.25 km」比「250 m」更差。
+    通知是记录过程中唯一常驻可见的数值，单位不跟随设置属明确违背 F-SET-04。文案与单位耦合在资源里，使刚修好的单位切换对它完全无效。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">资源改为纯占位 <code>Distance %1$s</code>，由服务调用 <code>Formatters.distanceText()</code> 传入。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-56</span><span class="it">TripDetailViewModel 以 tripId 为 key 常驻 Activity store：内存只增不减 + 复用时页面秒退</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">feature/history/.../TripDetailScreen.kt:98-103, 127-129 × TripDetailViewModel.kt:70-106（无 onCleared）</div>
+    <div class="row"><span class="k">后果</span><span class="v">① 每浏览一条行程永久保留一份折线+图表序列+照片列表，浏览几十条后低端机有 OOM 风险；
+    ② <code>deleted</code> 一旦为 true 永不复位，若同 id 被再次打开（导入 OVERWRITE 可重建同 id）<b>详情页打开瞬间自动关闭</b>，本次会话内该行程再也无法查看。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">给详情页独立 <code>ViewModelStoreOwner</code> 并在返回时 <code>clear()</code>；<code>deleted</code> 改一次性事件（Channel）。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-57</span><span class="it">PhotoMapViewModel 扫描无 try/finally，异常时 scanning 永久 true 且直接崩溃</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">feature/media/.../PhotoMapViewModel.kt:44-57（located() 无兜底）</div>
+    <div class="row"><span class="k">后果</span><span class="v">Room/ContentResolver 抛异常 → <code>scanning</code> 永远 true → 顶部进度条永久停留；同时 <code>photos == null &amp;&amp; !scanning</code> 为 false →
+    「无权限引导卡」和「空态卡」<b>都不显示</b>，页面只剩地图 + 卡住的进度条；异常逃逸到无 handler 的 <code>viewModelScope</code> → <b>直接崩溃</b>。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">整个 body 包 <code>try/catch/finally</code> 并复位 <code>scanning</code>。</span></div>
+  </div>
+
+  <div class="item M">
+    <div class="ihead"><span class="id">N-58</span><span class="it">计划页搜索框清空后 searching 不复位 → 转圈图标永久旋转</span><span class="tag M">MEDIUM</span></div>
+    <div class="loc">feature/plan/.../PlanViewModel.kt:166-177 × PlanScreen.kt:402-406</div>
+    <div class="row"><span class="k">后果</span><span class="v"><code>kw.isEmpty()</code> 分支未置 <code>searching = false</code>，而 <code>cancel()</code> 掉的协程永远不会走到收尾分支 →
+    输入后立刻清空（很常见的「改主意」）→ <b>搜索框右侧转圈图标永久旋转</b>，直到下次搜索完成。</span></div>
+    <div class="row"><span class="k">修复</span><span class="v">在空关键词分支一并复位；更稳妥是放进 <code>searchJob</code> 的 <code>try/finally</code>。</span></div>
+  </div>
+</section>
+
+<!-- ============ LOW ============ -->
+<section data-sec="L">
+  <h2>LOW — 25 项</h2>
+  <div class="h2sub">打磨项、一致性问题、可维护性债务</div>
+  <table>
+    <thead><tr><th style="width:64px">编号</th><th>问题</th><th style="width:26%">位置 / 建议</th></tr></thead>
+    <tbody>
+      <tr><td><b>L-01</b></td><td>丢点计数非原子：<code>_dropped.value += 1</code> 在多线程下丢更新，而该计数是定位质量<b>唯一</b>可观测出口</td><td>3 处 source 文件 · 改 <code>update { it + 1 }</code></td></tr>
+      <tr><td><b>L-02</b></td><td><code>AmapLocationSource.release()</code> 从未被调用（grep 零命中），原生资源不释放</td><td>AmapLocationSource.kt:106-109 · 由 stop/Service.onDestroy 调用</td></tr>
+      <tr><td><b>L-03</b></td><td>气压基准在标定时刻为 null 时，气压路径冻结至首次漂移修正（最长 60s）→「开爬后第一分钟海拔不动」</td><td>AltitudeFuser.kt:114-127, 215-220 · 惰性补基准</td></tr>
+      <tr><td><b>L-04</b></td><td>崩溃恢复后 <code>accumulatedPausedMs</code> 与内部字段不一致，暂停期间崩溃会让运动时长偏大</td><td>RecordingSession.kt:397-398 vs :441 · 用已结算字段值</td></tr>
+      <tr><td><b>L-05</b></td><td><code>start()</code> 先启动采集后置位状态：首点的 distanceM 回写被覆盖、该点触发的提醒标记丢失</td><td>RecordingSession.kt:191 vs :194 · 调换顺序</td></tr>
+      <tr><td><b>L-06</b></td><td>导入缺名计划线路时 core 层硬编码英文 <code>"Imported route"</code>，与「core 只产出码」的约定相悖</td><td>ImportEngine.kt:353 · 生成中性占位或返回原因码</td></tr>
+      <tr><td><b>L-07</b></td><td>单条导入的 <code>catch (Throwable)</code> 吞掉 <code>CancellationException</code> → 取消后报告凭空多一条失败</td><td>ImportEngine.kt:134-137, 190-193 · 先重抛取消</td></tr>
+      <tr><td><b>L-08</b></td><td>包内任意 <code>*.json</code> 都被当待导入文件，无关 JSON 出现在「失败」列表（自有测试也未断言）</td><td>BackupBuilder.kt:289 · 限定目录前缀</td></tr>
+      <tr><td><b>L-09</b></td><td>完整性校验可被轻易绕过：校验和缺失即 <code>continue</code>，且 manifest 自身不参与校验</td><td>BackupBuilder.kt:162-168 · 明确语义或加自校验</td></tr>
+      <tr><td><b>L-10</b></td><td><code>BackupBuilder.Result.manifest</code> 比包内 manifest 多一项自身校验和，重放时永远对不上</td><td>BackupBuilder.kt:48-65 vs 67-76 · 复用同一变量</td></tr>
+      <tr><td><b>L-11</b></td><td><code>TripJson.legs</code> 字段声明但从不导出，与 PRD 7.3 schema 不符</td><td>IoModels.kt:168 · 用 <code>LegSplitter</code> 填充或注明保留字段</td></tr>
+      <tr><td><b>L-12</b></td><td><code>resetToDefault()</code> 清空 <code>privacy_agreed</code>——设备态同意记录被一并抹掉</td><td>DataStoreSettingsRepository.kt:190-192 · 与 EXCLUDED_KEYS 一致</td></tr>
+      <tr><td><b>L-13</b></td><td>导出完成对话框标题用了「正在处理…」，与正文「完成，共处理 N 项」语义矛盾</td><td>MainActivity.kt:580-589 · 新增 <code>io_done_title</code></td></tr>
+      <tr><td><b>L-14</b></td><td>历史列表空态文案与删除弹窗标题被误用：搜索无结果显示「还没有已完成的行程」；删除弹窗标题是「记录」</td><td>HistoryListScreen.kt:133-147, 232 · 新增 <code>history_no_result</code></td></tr>
+      <tr><td><b>L-15</b></td><td>无障碍：两个返回按钮 <code>contentDescription = null</code>；记录页停止按钮只有长按手势，<b>TalkBack 完全不可达</b></td><td>HistoryListScreen.kt:88 / TripDetailScreen.kt:144 / RecordingScreen.kt:321-359</td></tr>
+      <tr><td><b>L-16</b></td><td>历史列表 <code>items(grouped.size)</code> 未用 key（同项目 PlanListScreen 已有正确先例）</td><td>HistoryListScreen.kt:174 · 加 <code>key = { … }</code></td></tr>
+      <tr><td><b>L-17</b></td><td><code>attachBaseContext</code> 在主线程 <code>runBlocking</code> 读 DataStore，冷启动与每次 recreate 都阻塞一次</td><td>MainActivity.kt:131-144 · Application 异步预读并缓存</td></tr>
+      <tr><td><b>L-18</b></td><td>设置页数字项 ± 步进依赖异步 Flow 回读，快速连点丢步</td><td>SettingsScreen.kt:104-109 · VM 内维护乐观值</td></tr>
+      <tr><td><b>L-19</b></td><td>i18n 细节：硬编码 <code>"—"</code> / <code>"?"</code> 与资源约定 <code>common_stat_unknown</code>(<code>--</code>) 不一致；「标签: 值」拼接无法区分全角/半角冒号</td><td>PhotoMapScreen.kt:475,595 / PlanScreen.kt:149 · 统一走资源占位符</td></tr>
+      <tr><td><b>L-20</b></td><td>英文侧<b>全仓无 <code>&lt;plurals&gt;</code></b>：会显示 "1 photos"、"1 meters"（TTS 场景更明显）；<code>checkStringKeys</code> 结构上看不见 plurals</td><td>values/strings.xml:274,250,253-259,74-76 · 改用 plurals 并升级门禁</td></tr>
+      <tr><td><b>L-21</b></td><td><code>checkStringKeys</code> 门禁可被静默绕过：注释掉的键仍会被正则匹配；不校验代码引用</td><td>core/resources/build.gradle.kts:36-38 · 先剥离注释 + 扩展正则</td></tr>
+      <tr><td><b>L-22</b></td><td><code>FormattersTest</code> 6 用例 32 断言<b>全在默认公制下</b>，H-02 新增的英制分支零测试（<code>resetToMetric()</code> 标注「仅供测试」却无人调用）</td><td>FormattersTest.kt · 补英制组用例</td></tr>
+      <tr><td><b>L-23</b></td><td><code>PolylineSimplifier</code> 三个公开 API 中两个是死代码，真实渲染路径绕过它们并硬编码 12m —— PRD「按缩放抽稀」未实现</td><td>PolylineSimplifier.kt:17,83 vs TripDetailViewModel.kt:165 · 接线或删除</td></tr>
+      <tr><td><b>L-24</b></td><td>CI 的 awk 分支 A 会把 <code>[Unreleased]</code> 段一起写进 Release 说明（已实测：25 行输出，首行即 <code>## [Unreleased]</code>）；分支 B 正确</td><td>.github/workflows/build.yml:116-120 · 显式跳过 Unreleased</td></tr>
+      <tr><td><b>L-25</b></td><td>工具脚本硬编码本机绝对路径，<code>stage2_fix.py</code> 是一次性脚本且已失效（重跑必 AssertionError）</td><td>tools/m2-verify/verify_amap_arrow.py:3,6 / docs/output/.../stage2_fix.py</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ 建议 ============ -->
+<section data-sec="all">
+  <h2>建议的修复顺序</h2>
+  <div class="h2sub">按「用户可感知 × 修复成本」排序，前 4 项建议在打 v0.5.0 tag 之前完成</div>
+  <ol class="flow">
+    <li><b>N-01 隐私同意内存态（CRITICAL）</b><span class="why">3 行改动，立刻可验证。放在第一是因为它让所有冷启动后的记录功能 100% 失效，且是上轮修复引入的回归。</span></li>
+    <li><b>N-02 详情页嵌套 LazyColumn（CRITICAL）</b><span class="why">改回 Column 即可。这是「上轮 H-14 性能优化」改出来的崩溃，任何真实行程都会命中。</span></li>
+    <li><b>N-14 CI 高德 Key + N-15 gradle-wrapper（HIGH）</b><span class="why">两者都只需改几行。它们意味着当前流水线产出的 release APK 在任何设备上都地图白屏，且仓库对新克隆不可构建。</span></li>
+    <li><b>N-16 ServiceSettings（HIGH）</b><span class="why">上轮 C-03 的同类残留，一行调用 + 一处断言，不做则搜索功能在真机上静默失效。</span></li>
+    <li><b>N-13 16KB 对齐（HIGH）</b><span class="why">需先调研高德是否已发布适配版。若没有，需在 README/PRD 明确声明不支持 16KB 设备并推迟 Play 上架——这是发布决策而非纯代码修复。</span></li>
+    <li><b>N-17 并发串行化 + N-03/N-04 数据正确性（HIGH）</b><span class="why">N-17 最坏后果是整场轨迹静默丢失，需引入 Mutex 或单线程调度器一并解决 buffer/markers/state。N-03/N-04 属于「不崩溃、不报错、但记下来的数是错的」，对离线优先的徒步记录 App 比崩溃更伤信任。</span></li>
+    <li><b>N-07 单位切换 + N-10 照片 marker + N-11 edge-to-edge（HIGH）</b><span class="why">都是用户一眼能看见的功能失效/遮挡，且修复明确。</span></li>
+    <li><b>样板收口（N-19 MapView / N-25 异常兜底 / N-11 insets）</b><span class="why">这三项本质是同一件事：「复制 N 份、只修 1 份」。抽成公共组件后同类问题一次性消失，比逐个打补丁划算。</span></li>
+  </ol>
+  <div class="note" style="margin-top:18px">
+    <b>两条建议写进团队规范的硬规则：</b>
+    ① <b>挂起调用一律先重抛 <code>CancellationException</code></b>——它能一次性消掉 N-08 / N-09 及同类隐患；
+    ② <b>「UI 可改的设置项」必须要么接线、要么在 UI 上禁用</b>——N-26 的 9 个死设置就是这条规则缺失的产物。
+  </div>
+</section>
+
+<section data-sec="all">
+  <h2>复核方法与可信度说明</h2>
+  <div class="h2sub">本轮 0 条误报，但以下结论的成立条件需要说明</div>
+  <table>
+    <thead><tr><th style="width:150px">结论</th><th>验证方式 / 成立条件</th></tr></thead>
+    <tbody>
+      <tr><td><b>N-01 / N-02 / N-06 / N-07 / N-10 / N-14 / N-15</b></td><td>已由主审独立复核：grep 全仓调用点 + 逐行读源码交叉验证，非引用子代理结论。</td></tr>
+      <tr><td><b>N-13 16KB 对齐</b></td><td>主审自写 ELF parser 读取 program header <code>p_align</code> 重算，与子代理结论一致；同时确认 zip 打包层面的页对齐是正确的（缺的是 ELF 内部对齐）。</td></tr>
+      <tr><td><b>N-03 / N-04 / N-05 / N-38 / N-47</b></td><td>由子代理 1:1 复刻算法后实算得出（脚本在 <code>tmp-logs/</code>），非估算。<b>N-05 的触发边界（≈0.965 m/s²）来自仿真波形</b>，真机步态幅值通常更高，建议真机确认后再定优先级——但它揭示的「预热期固定阈值会死锁」这一结构性缺陷是确定的。</td></tr>
+      <tr><td><b>未列入的疑似项</b></td><td>子代理另有约 12 条「疑似待确认」（如 <code>SwitchingLocationProvider.start()</code> 未取消旧 collectJob、MediaTripMatcher 高纬度包围盒、<code>applicationVariants.all</code> 的 AGP 升级风险等），因无法构造真实触发路径或需真机验证，<b>未计入</b>上述统计，可在修复批次中一并处理。</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  报告由 5 路并行子系统扫描 + 主审独立存疑复核生成 · GoHiking v0.5.0 · 2026-09-21<br>
+  上轮报告见 <code>GoHiking-代码审查报告-2026-09-20.html</code>
+</footer>
+
+</div>
+
+<script>
+document.querySelectorAll('.btn').forEach(function(b){
+  b.addEventListener('click', function(){
+    document.querySelectorAll('.btn').forEach(function(x){x.classList.remove('on')});
+    b.classList.add('on');
+    var f = b.getAttribute('data-f');
+    document.querySelectorAll('.item').forEach(function(it){
+      it.style.display = (f==='all' || it.classList.contains(f)) ? '' : 'none';
+    });
+    document.querySelectorAll('section').forEach(function(s){
+      var sec = s.getAttribute('data-sec');
+      if(!sec) return;
+      s.style.display = (f==='all' || sec===f || sec==='all') ? '' : 'none';
+    });
+  });
+});
+</script>
+</body>
+</html>

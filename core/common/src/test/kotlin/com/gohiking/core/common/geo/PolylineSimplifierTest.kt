@@ -82,4 +82,56 @@ class PolylineSimplifierTest {
         // 单测只防数量级回归（阈值放宽到 200ms，容忍门禁并行执行的负载抖动——实测贴边 30ms 假失败）
         assertTrue("cost=${costMs}ms", costMs < 200)
     }
+
+    /**
+     * N-47：上面那条性能测试**此前是空转的** —— 它的输入（每 10 点抖一次）能让 DP 去掉
+     * 99% 的点、切分也很平衡，实际扫描量只有 ~1×10⁶，永远测不出 O(n²) 退化。
+     *
+     * 这条用例用「每个点都在容差外」的输入（等幅锯齿，epsilon 极小）逼出最坏情形：
+     * 几乎所有点都要保留 → 分割次数趋近 n、每次扫描 ~n/2 → 扫描量 n²/2 ≈ 5×10⁷。
+     * 没有 [SCAN_BUDGET_FACTOR] 保护时，JVM 上约 150~300ms，详情页直接掉帧。
+     */
+    @Test
+    fun `worst case O(n^2) input stays within budget`() {
+        val n = 10_000
+        val pts = (0 until n).map {
+            // 等幅锯齿：相邻点交替偏移 ~11m，epsilon=1m → 全部保留，切分极不平衡
+            LatLngValue(30.0 + it * 0.00001, 120.0 + (if (it % 2 == 0) 0.0001 else 0.0))
+        }
+        val start = System.nanoTime()
+        val out = PolylineSimplifier.simplify(pts, 1.0)
+        val costMs = (System.nanoTime() - start) / 1_000_000
+        assertTrue("cost=${costMs}ms（预算保护未生效？）", costMs < 200)
+        // 退化时允许少保留一些点，但形状骨架必须在：首尾一定要在，且不能退化成 2 个点
+        assertTrue("out.size=${out.size}", out.size > 2)
+        assertEquals(pts.first(), out.first())
+        assertEquals(pts.last(), out.last())
+    }
+
+    /** N-47：预算只在病态输入下生效 —— 正常轨迹的输出必须与「无预算」时一致 */
+    @Test
+    fun `budget does not alter normal trajectories`() {
+        // 接近真实 GPS：沿经线匀速 + 小幅噪声，epsilon=12m（详情页默认容差）
+        val n = 4_000
+        var seed = 12345L
+        fun rnd(): Double { // 确定性伪随机，避免测试依赖 java.util.Random 版本
+            seed = (seed * 1103515245 + 12345) and 0x7fffffff
+            return (seed / 0x7fffffff.toDouble()) - 0.5
+        }
+        val pts = (0 until n).map {
+            LatLngValue(30.0 + it * 0.00001, 120.0 + rnd() * 0.00005)
+        }
+        val out = PolylineSimplifier.simplify(pts, 12.0)
+        // 预算 1024n = 4.1e6，而这类轨迹实测扫描量 ~15n~200n，远未触及 → 输出应显著抽稀但仍保形
+        assertTrue("out.size=${out.size}", out.size in 2 until n)
+        assertEquals(pts.first(), out.first())
+        assertEquals(pts.last(), out.last())
+        // 抽稀必须是保序的子序列
+        var lastIdx = -1
+        for (p in out) {
+            val idx = pts.indexOf(p)
+            assertTrue("子序列必须保序", idx > lastIdx)
+            lastIdx = idx
+        }
+    }
 }

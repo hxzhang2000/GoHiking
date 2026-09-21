@@ -31,7 +31,15 @@ interface MediaDao {
     @Query("SELECT * FROM media_index WHERE latGcj02 IS NOT NULL")
     suspend fun allLocated(): List<MediaIndexEntity>
 
-    @Query("SELECT * FROM media_index WHERE dateTakenMs BETWEEN :from AND :to")
+    /**
+     * N-42：原 SQL 是 `WHERE dateTakenMs BETWEEN :from AND :to`。SQL 三值逻辑里
+     * `NULL BETWEEN a AND b` 求值为 NULL（不是 false 也不是 true），该行**直接被过滤掉**。
+     * 而 MediaStore 的 DATE_TAKEN 对截图、下载图、社交 App 保存的图、部分不写 EXIF 的
+     * 相机一律为 NULL —— 这些照片永远进不了候选集，于是 [MediaTripMatcher] 里那句
+     * `m.dateTakenMs ?: m.dateModifiedMs` 的兜底成了**永远走不到的死代码**。
+     * 这里用 COALESCE 让 SQL 的时间口径与 Matcher 的兜底口径一致（dateModifiedMs 非空）。
+     */
+    @Query("SELECT * FROM media_index WHERE COALESCE(dateTakenMs, dateModifiedMs) BETWEEN :from AND :to")
     suspend fun inTimeRange(from: Long, to: Long): List<MediaIndexEntity>
 
     @Query("SELECT mediaStoreId, dateModifiedMs FROM media_index")

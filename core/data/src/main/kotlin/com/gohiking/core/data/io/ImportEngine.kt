@@ -4,8 +4,10 @@ import com.gohiking.core.common.format.Formatters
 import com.gohiking.core.database.entity.MarkerEntity
 import com.gohiking.core.database.entity.TrackPointEntity
 import com.gohiking.core.database.entity.TripEntity
+import com.gohiking.core.database.entity.UNNAMED_ROUTE_PLACEHOLDER
 import com.gohiking.core.location.crs.CoordinateConverter
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonPrimitive
 import timber.log.Timber
 
@@ -132,6 +134,10 @@ class ImportEngine(private val sink: ImportSink) {
                     }
                 }
             } catch (t: Throwable) {
+                // L-07：取消不是「导入失败」。吞掉 CancellationException 会让协程取消后
+                // 依旧返回一份报告，并凭空多出一条 FAILED 记录（F-IO-28 的故障隔离
+                // 只针对真实异常，不针对取消）。
+                if (t is CancellationException) throw t
                 Timberw(t)
                 items.add(ItemResult(f.name, ItemResult.Status.FAILED, ImportReasonCode.IMPORT_FAILED))
             }
@@ -188,6 +194,10 @@ class ImportEngine(private val sink: ImportSink) {
                     )
                 )
             } catch (t: Throwable) {
+                // L-07：取消不是「导入失败」。吞掉 CancellationException 会让协程取消后
+                // 依旧返回一份报告，并凭空多出一条 FAILED 记录（F-IO-28 的故障隔离
+                // 只针对真实异常，不针对取消）。
+                if (t is CancellationException) throw t
                 Timberw(t)
                 items.add(ItemResult(f.name, ItemResult.Status.FAILED, ImportReasonCode.IMPORT_FAILED))
             }
@@ -206,6 +216,14 @@ class ImportEngine(private val sink: ImportSink) {
     }
 
     // ---- TripEnvelope → TripBundle（含坐标系转换 F-IO-26 / 距离重算）----
+
+    /** N-44：只有 FINISHED 会在历史列表里出现（DEV 决策 13）；其余一律纠正并记录 */
+    private fun normalizeStatus(raw: String?): String {
+        if (raw == null) return "FINISHED"
+        if (raw == "FINISHED") return raw
+        Timber.w("导入行程 status=%s 非终态，已纠正为 FINISHED", raw)
+        return "FINISHED"
+    }
 
     internal fun toTripBundle(envelope: TripEnvelope): TripBundle {
         val t = envelope.trip
@@ -242,7 +260,11 @@ class ImportEngine(private val sink: ImportSink) {
             caloriesKcal = stats?.caloriesKcal,
             altitudeSource = t.altitudeSource ?: "GPS_ONLY",
             hasBarometer = t.hasBarometer ?: false,
-            status = t.status ?: "FINISHED",
+            // N-44：此前直接 `t.status ?: "FINISHED"`，完全不校验。历史列表与统计只取
+            // FINISHED（DEV 决策 13），一旦文件里是 RECORDING/PAUSED 或任意垃圾值，
+            // 行程会「导入成功」（报告 imported=N）却在列表里永远看不见——用户以为数据丢了。
+            // 导入的是历史归档，本就不该有进行中的记录，非终态一律纠正为 FINISHED。
+            status = normalizeStatus(t.status),
             createdAt = System.currentTimeMillis(),
         )
 
@@ -263,9 +285,14 @@ class ImportEngine(private val sink: ImportSink) {
             val lng = IoCodecs.rowDouble(row, rowIdx("lng") ?: -1)
             if (lat == null || lng == null) return@forEach // 无坐标的行丢弃（无法定位）
             val (gLat, gLng) = toGcj(lat, lng)
+            // N-22：此前每段开头把 cumulative 清零，与记录链路的口径相反 ——
+            // RecordingSession 的 distanceM 是**整程全局累加**（pause/resume 只重置
+            // 位移基准，不清零累计值），track_point.distanceM 写的就是那个全局值。
+            // 导入却按段清零，于是同一条轨迹导出再导入后，每段的距离都从 0 起算：
+            // 分段表、图表横轴、按距离切分全部错位。这里改成全程累加，段与段之间不重置。
             if (seg != segIndex) {
                 segIndex = seg
-                cumulative = 0.0
+                // 段间不连线（与记录链路一致：新段的第一点不参与距离累加）
             } else if (!lastLat.isNaN()) {
                 cumulative += IoCodecs.haversineM(lastLat, lastLng, gLat, gLng)
             }
@@ -291,8 +318,17 @@ class ImportEngine(private val sink: ImportSink) {
 
         // 标记：未知 type 降级 UNKNOWN 且原始值保留在 extraJson（F-IO-55 / PRD 7.5）
         val knownTypes = setOf("SUMMIT", "ALERT_DISTANCE", "ALERT_ASCENT", "ALERT_DESCENT", "MANUAL")
-        val markers = t.markers.map { m ->
-            val (gLat, gLng) = m.lat?.let { la -> m.lng?.let { lo -> toGcj(la, lo) } } ?: (0.0 to 0.0)
+        var markersWithoutCoord = 0
+        val markers = t.markers.mapNotNull { m ->
+            // N-21：缺坐标时原实现写 (0.0, 0.0)——标记被钉在几内亚湾，详情页地图会在
+            // 非洲西海岸出现一个「登顶」标记。这与 PRD 红线「绝不编造」直接冲突。
+            // 改为跳过该标记并计入警告条数，绝不写 0,0。
+            val coord = m.lat?.let { la -> m.lng?.let { lo -> toGcj(la, lo) } }
+            if (coord == null) {
+                markersWithoutCoord += 1
+                return@mapNotNull null
+            }
+            val (gLat, gLng) = coord
             val (type, extraJson) = if (m.type in knownTypes) {
                 m.type to m.extra?.toString()
             } else {
@@ -317,6 +353,9 @@ class ImportEngine(private val sink: ImportSink) {
                 sequence = m.sequence,
                 extraJson = extraJson,
             )
+        }
+        if (markersWithoutCoord > 0) {
+            Timber.w("导入跳过 %d 个无坐标的标记（N-21：绝不写 0,0）", markersWithoutCoord)
         }
 
         val media = t.media.map { m ->
@@ -350,7 +389,8 @@ class ImportEngine(private val sink: ImportSink) {
         val routeId = r.id ?: UUID.randomUUID().toString()
         val route = com.gohiking.core.database.entity.PlannedRouteEntity(
             id = routeId,
-            name = r.name ?: "Imported route",
+            // L-06：core 层不得产出用户可见文案（H-09）→ 落中性哨兵，UI 层本地化
+            name = r.name?.takeIf { it.isNotBlank() } ?: UNNAMED_ROUTE_PLACEHOLDER,
             note = r.note,
             source = r.source ?: "MANUAL",
             createdAt = r.createdAt ?: System.currentTimeMillis(),

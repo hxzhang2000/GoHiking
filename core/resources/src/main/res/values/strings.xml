@@ -53,11 +53,15 @@
     <string name="rec_notif_channel">Recording notifications</string>
     <string name="rec_notif_recording">Recording</string>
     <string name="rec_notif_paused">Paused</string>
-    <string name="rec_notif_distance">Distance %1$.2f km</string>
+    <!-- N-55：单位由 Formatters.distanceText 决定（跟随「距离单位」设置），不再硬编码 km -->
+    <string name="rec_notif_distance">Distance %1$s</string>
 
     <!-- 记录列表（P-10，M1 切片） -->
     <string name="history_search_hint">Search trip name</string>
     <string name="history_empty">No finished trips yet</string>
+    <!-- L-14：搜索无结果 ≠ 一条记录都没有，两者文案必须分开 -->
+    <string name="history_no_result">No trips match "%1$s"</string>
+    <string name="history_delete_title">Delete trip</string>
     <string name="history_summary_format">%1$s · %2$s · ↑%3$s · %4$d trips</string>
     <string name="history_group_by_month">By month</string>
     <string name="history_delete_confirm">Delete "%1$s" and all its track data? This cannot be undone.</string>
@@ -83,6 +87,8 @@
 
     <!-- 行程详情（P-11 M1 切片：F-HIS-20~22/26/27/30） -->
     <string name="hist_detail_loading">Loading…</string>
+    <string name="hist_detail_not_found">Trip not found. It may have been deleted.</string>
+    <string name="hist_detail_back">Back</string>
     <string name="hist_detail_section_overview">Overview</string>
     <string name="hist_detail_section_legs">Uphill / downhill</string>
     <string name="hist_detail_section_markers">Markers</string>
@@ -159,6 +165,7 @@
     <string name="plan_list_title">Planned routes</string>
     <string name="plan_list_empty">No planned routes yet. Create one from the map.</string>
     <string name="plan_list_rename">Rename route</string>
+    <string name="plan_unnamed_route">Unnamed route</string>
     <string name="plan_list_delete">Delete</string>
     <string name="plan_export_route">Export JSON</string>
 
@@ -248,6 +255,8 @@
     <string name="io_working">Working…</string>
     <string name="io_progress">%1$d of %2$d</string>
     <string name="io_done">Finished. %1$s item(s) processed.</string>
+    <!-- L-13：完成对话框的标题原本复用「正在处理…」，与正文「完成」自相矛盾 -->
+    <string name="io_done_title">Done</string>
     <string name="io_error">Operation failed</string>
     <string name="io_import_preview_title">Import preview</string>
     <string name="io_import_summary">%1$d trip(s) and %2$d planned route(s) will be imported.</string>
@@ -316,6 +325,7 @@
     <string name="imp_warn_entry_limit">Entry count exceeded the limit (%1$s); reading aborted (possible zip bomb)</string>
     <string name="imp_warn_size_limit">Uncompressed size exceeded the 2 GB limit; reading aborted</string>
     <string name="imp_warn_manifest_parse">manifest.json could not be parsed (%1$s); the folder layout was used instead</string>
+    <string name="imp_warn_checksum_unverified">Checksum declared but entry missing, not verified: %1$s</string>
     <string name="imp_import_failed">%1$s: import failed</string>
     <string name="io_report_item">%1$s: %2$s</string>
     <string name="io_import_ask_hint">These files already exist — choose what to do with each one:</string>

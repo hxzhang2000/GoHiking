@@ -27,6 +27,7 @@ import com.gohiking.core.database.entity.TripEntity
  * 每加表/字段 +1 版本并写 Migration（Migrations.kt）+ MigrationTestHelper 测试。
  */
 @Database(
+    // N-34：见 MIGRATION_2_3（trip 表加索引）
     entities = [
         TripEntity::class,
         TrackPointEntity::class,
@@ -39,7 +40,7 @@ import com.gohiking.core.database.entity.TripEntity
         RecordingStateEntity::class,
         ElevationCacheEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class GhDatabase : RoomDatabase() {

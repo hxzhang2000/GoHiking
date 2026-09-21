@@ -36,6 +36,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.javax.inject)
+    implementation(libs.timber) // N-25：设置写入失败落日志，不把 DataStore 异常抛成崩溃
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

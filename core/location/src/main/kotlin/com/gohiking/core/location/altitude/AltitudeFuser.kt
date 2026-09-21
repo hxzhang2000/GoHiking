@@ -198,6 +198,16 @@ class AltitudeFuser(
         altRef = ref
         pressureRefHpa = pressureRefHpaM
         startAtMs = nowMs() - CALIBRATION_WINDOW_MS - 1
+        // N-03：无气压计路径下 current() 的**唯一**输出是 confirmedAlt，而它只在标定完成时
+        // 被赋值（见 onGpsFix 的 ref == null 分支）。恢复后 altRef != null，标定分支被跳过，
+        // onGpsFix 走到 `val confirmed = confirmedAlt ?: return` 会永久 return——整场剩余
+        // 记录的海拔恒为 null（累计爬升停摆、maxAltitudeM 恒 null、UI 显示「—」）。
+        // 因此恢复必须同步回灌 confirmedAlt，并预热中值窗口使其立即可用。
+        if (!hasBarometer) {
+            confirmedAlt = ref
+            medianBuffer.clear()
+            medianBuffer.addLast(ref)
+        }
         source = if (hasBarometer) Source.BAROMETER_FUSED else Source.GPS_ONLY
     }
 
@@ -215,7 +225,14 @@ class AltitudeFuser(
     private fun baroEstimate(): Double? {
         val ref = altRef ?: return null
         val p = latestPressureHpa ?: return ref
-        val pRef = pressureRefHpa ?: return ref
+        // L-03：标定完成瞬间气压传感器可能尚未出样本，此时 pressureRefHpa 为 null。
+        // 原实现退化为常量 ref（气压计完全不参与输出），且基准只在每 60s 的漂移修正里
+        // 才补写——表现为「开爬后第一分钟海拔不动」。这里惰性补基准即可解除冻结。
+        val pRef = pressureRefHpa
+            ?: run {
+                pressureRefHpa = p
+                return ref
+            }
         return ref + (pressureAltitude(p) - pressureAltitude(pRef))
     }
 

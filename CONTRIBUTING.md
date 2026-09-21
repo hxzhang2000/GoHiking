@@ -30,7 +30,18 @@ JAVA_HOME=<jdk17> ./gradlew assembleDebug :app:lintDebug :core:resources:checkSt
 ```
 
 - 算法层（抽稀/统计/聚类/坐标转换/IO 编解码）**必须带单元测试**；
-- UI 层改动请附截图或简述真机验证结论。
+- UI 层改动请附截图或简述真机验证结论；
+- **改了 Room 实体或 `Migrations.kt` 必须跑迁移校验**（不需要 Android，几秒完成）：
+
+  ```bash
+  python tools/db-verify/verify_room_migrations.py
+  ```
+
+  它会按 `N-1.json` 建库、执行 `Migrations.kt` 里的 SQL，再与 `N.json` 逐项比对
+  （表名/列/类型/NOT NULL/主键/索引名与列顺序）。Room 运行时做的就是这件事，
+  不一致会抛 `Migration didn't properly handle`，用户升级即崩溃 —— 最常见的翻车是
+  **索引名对不上**（Room 规则：`index_<表名>_<列名>`，复合索引按声明顺序用 `_` 连接）。
+  新增的 schema JSON（如 `3.json`）是构建产物，**记得一并提交**。
 
 ## 4. 提交规范
 

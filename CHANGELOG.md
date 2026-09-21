@@ -22,7 +22,146 @@
 
 > 本节用于记录尚未定版的变更。任何改动先写在这里，发布时改为版本号 + 日期。
 
-（暂无）
+## [v0.5.1] - 2026-09-21
+
+> 第二轮深度审查的**打磨项**收尾批次：LOW 18 项 + 三处门禁加固（i18n 键对齐、CI Release 说明、
+> 备份完整性校验）。无新功能、无里程碑。打 `v0.5.1` tag 推送后，CI 自动提取本节生成 GitHub Release 说明。
+
+### Fixed — 《代码审查报告-2026-09-21》（第二轮深度审查）修复落地
+
+**阻断级（CRITICAL）**
+- N-01 首次同意隐私政策后的**每一次冷启动**点「开始记录」必抛异常：`PrivacyConsent` 是进程内内存态，冷启动必复位，而持久化的同意状态从不回灌 → 定位 SDK 初始化在 `assertAgreed()` 处崩溃
+- N-02 行程详情页分段表嵌套 `LazyColumn`，任何有真实数据的行程打开即崩：改回 `Column`（纵向 LazyColumn 的 item 以 `maxHeight = Infinity` 测量，内层再放 LazyColumn 命中 Compose 断言；`userScrollEnabled=false` 绕不过）
+
+**高危（HIGH）**
+- N-03 崩溃恢复后无气压计设备海拔永久 null（`restoreRef` 未回灌 `confirmedAlt`、未预热中值窗口）
+- N-04 距离统计被 GPS 跳变点污染（`quality≠0` 的点只拦了入边，出边仍参与累加）
+- N-05 计步级③预热阈值写死 0.8，轻步态/背包放置时预热永不完成、步数恒为 0（改为自适应 + 20s 时间兜底）
+- N-06 主源不可用切备源的两条通路同时断开（`onPrimaryUnavailable` 从未接线；watchdog 判据用「回调时间」而非「有效定位时间」）
+- N-07 单位/配速设置切换后历史列表不刷新（`DisplayUnits` 由 `@Volatile var` 改为 `StateFlow`，ViewModel 订阅重算）
+- N-08/N-09 `runCatching` / `catch(Exception)` 吞掉 `CancellationException`（高德路径规划与搜索）
+- N-10 照片地图 marker 永不渲染（缺「数据就绪」触发 + 相机去重只看 zoom 不看 target）
+- N-11 targetSdk 35 强制 edge-to-edge，7 个页面补 `statusBarsPadding()` / `navigationBarsPadding()`
+- N-12 `SettingsViewModel` 持 Activity 回调（泄漏 + 第二次语言切换静默失效）→ 改一次性事件流
+- N-14 CI 产出的 release APK 高德 Key 为空 → 新增 Key 注入步骤 + 构建期断言（`-PamapKeyOptional=true` 可豁免）
+- N-15 `gradle-wrapper.properties` 提交了开发者本机 `file:///` 路径 → 改回官方地址
+- N-16 高德搜索 SDK 合规接口 `ServiceSettings` 从未调用
+- N-17 `RecordingSession` 可变状态无同步（`bufferLock` / `markersLock` + 采集链异常兜底）
+- N-18 单次距离跳变引发「提醒风暴」（基准一次性 `floor()` 对齐到档位）
+- N-19 5 处 MapView 生命周期补 `pause → destroy` 配对
+- N-27/N-45/N-46 高德客户端改持 `applicationContext`、`inputTips` 校验 `rCode`、`core:map` 补日志
+- N-28 `ACTIVITY_RECOGNITION` 已声明却从未动态申请 → 计步静默失效
+- N-29 首页返回键被拦截为 `moveTaskToBack`，改为 2 秒内连按两次退出
+- N-31 `TtsSpeaker` 音频焦点泄漏（忽略 `speak()` 返回值、未覆写 `onStop`）
+- N-33 详情页行程不存在时永久停在「加载中…」→ 补 not-found 终态 + 返回按钮
+- N-38 `AltitudeFuser.current()` 每个 fix 被调用两次且有副作用
+- N-41 watchdog 协程无异常兜底
+
+**中危（MEDIUM）**
+- N-20 ZIP 解压把 `media/` 条目整体读入内存（只用到文件名）→ 改为只推进流不落内存
+- N-21 导入把无坐标标记写成 `(0,0)` → 跳过并记日志
+- N-22 导入重算 `distanceM` 每段清零，与记录链路全局累加口径不一致
+- N-23 媒体权限判定三套口径归一到 `MediaRepository.hasMediaAccess`
+- N-24 Android 14「部分照片访问」（`READ_MEDIA_VISUAL_USER_SELECTED`）判成拒绝 → 授权死循环
+- N-25 ViewModel 协程普遍无异常兜底（设置写入/详情页读写失败会崩溃）
+- N-26 「屏幕常亮」（P0）等死设置：记录页改为跟随设置即时生效
+- N-30 崩溃恢复不恢复标记 → 标记即时落库 + 恢复时读回（配套 `MarkerDao.upsert`）
+- N-32 `START_STICKY` 重启后服务立即自杀 → Idle 且有快照时自动恢复继续采
+- N-34 `trip` 表加索引（Room 迁移到 v3）
+- N-39 高程批量查询 `IN` 参数超限（Android ≤ 11 变量上限 999）→ 分块查询
+- N-40 单批高程请求超时即全量否决整条线路 → 按连续已知段累计 + `elevationPartial` 标注
+- N-23 媒体扫描无逐表容错：任一表查询失败会连累另一表，**且**删除同步会把仍存在的
+  媒体索引全部清掉（最坏清空整张 `media_index`）→ 逐表独立容错 + 查询失败时跳过删除同步
+- N-42 无 `DATE_TAKEN` 的照片永远关联不上（截图/下载图/不写 EXIF 的相机）：DAO 的
+  `dateTakenMs BETWEEN ? AND ?` 在 SQL 三值逻辑下对 NULL 求值为 NULL，行直接被过滤，
+  `MediaTripMatcher` 的 `dateModifiedMs` 兜底成了死代码 → 改为 `COALESCE(dateTakenMs, dateModifiedMs)`
+- N-35 Room 迁移零测试覆盖（`MIGRATION_1_2` 此前无任何验证，`MIGRATION_2_3` 同理）：
+  新增 `tools/db-verify/verify_room_migrations.py`，用 Python + sqlite3 复现 Room 的
+  schema 校验（按 N-1.json 建库 → 执行迁移 SQL → 与 N.json 逐项比对），
+  **不需要 Android SDK**，已接进 CI 与提交前门禁
+- N-36 `PolylineJson` 无法编写测试且 `decode` 无防御：改用 kotlinx.serialization（纯 Kotlin，
+  脱离 Android 框架可单测），解码逐元素容错（坏点不连累好点），调用点从此不会因损坏数据崩溃
+- N-37 同一份 `polylineJson` 磁盘格式存在两套独立编解码（`IoCodecs` 与 `PolylineJson`），
+  且服务于同一条数据的两端（导入写库 / 记录页读库）→ `IoCodecs` 改为委托到 `PolylineJson`，单一实现
+- N-44 导入未校验 `status`：非 FINISHED 的记录「导入成功」却永远不可见
+- N-56 `TripDetailViewModel` 以 `tripId` 为 key 常驻，删除后的 `deleted=true` 是粘性状态：
+  再次打开同一行程会命中同一实例并被历史事件立刻触发导航 → **页面秒退**。改为一次性事件流
+- N-47 `PolylineSimplifier` 的「10000 点 < 30ms」性能门禁是空转的：测试输入恰好让 DP 去掉
+  99% 的点且切分平衡，永远测不出最坏 O(n²)。→ 加扫描量上界（1024n）作为防掉帧安全网，
+  并按区间长度优先处理以保证降级时形状均匀；测试补上真正触发 n² 的用例
+- N-52 移除零使用、零申请的 `ACCESS_BACKGROUND_LOCATION`
+- N-53 `versionCode` 恒为 1，而 `v0.3.0` 已打 tag 对外分发 → 旧版用户无法覆盖升级（改为 3）
+- N-54 `gradle.properties` 中 `org.gradle.caching` 重复定义
+- N-55 记录通知距离硬编码 km → 跟随「距离单位」设置
+- N-57 `PhotoMapViewModel` 扫描无 try/finally，异常时 `scanning` 永久 true
+- N-58 计划页搜索框清空后 `searching` 不复位
+
+**低危（LOW）**
+- L-02 `AmapLocationSource.release()` grep 零命中 → `AMapLocationClient` 的原生资源与后台定位线程从不释放，`stop()` 时销毁
+- L-04 崩溃恢复后 state 里的 `accumulatedPausedMs` 用快照值、内部字段用已结算值，两者不一致：暂停期间崩溃会让运动时长偏大
+- L-05 `start()` 先启动采集后置位 Active：首点回写的 `distanceM` 被随后的 `Active(0.0)` 覆盖、该点触发的提醒标记丢失（恢复路径同样问题）
+- L-06 导入缺名计划线路时 core 层硬编码英文 `"Imported route"`（与「core 只产出码」相悖）→ 落中性哨兵 `UNNAMED_ROUTE_PLACEHOLDER`，由 UI 本地化
+- L-07 单条导入的 `catch (Throwable)` 吞掉 `CancellationException` → 取消后仍返回报告并凭空多一条 FAILED
+- L-08 包内**任意** `*.json` 都被当待导入文件，无关 JSON 以 `SCHEMA_UNKNOWN` 出现在「失败」列表（自有测试名写着 ignored 却从未断言）
+- L-09 完整性校验可被绕过：条目缺失即 `continue`，且 `settings.json` / `README.txt` 的校验和从未被核验（只查了 `trips/` `planned_routes/`）
+- L-10 `BackupBuilder.Result.manifest` 比包内 manifest 多一项自身校验和，用它做重放比对永远对不上 → 只构造一次并取 `checksums` 快照
+- L-11 `TripJson.legs` 声明但从不导出，与 PRD 7.3 schema 不符 → 复用 `LegSplitter` 填充（无登顶点或无海拔样本时保持 null，不编造）
+- L-12 `resetToDefault()` 清空 `privacy_agreed` → 设备态同意记录被一并抹掉（合规证据丢失 + 重新撞隐私门），与 `EXCLUDED_KEYS` 同口径保留
+- L-13 导出完成对话框标题复用「正在处理…」，与正文「完成，共处理 N 项」自相矛盾 → 新增 `io_done_title`
+- L-14 搜索无结果显示「还没有已完成的行程」；删除弹窗标题误用底部 tab 名「记录」→ 新增 `history_no_result` / `history_delete_title`
+- L-15 无障碍：历史列表与详情页返回按钮 `contentDescription = null`；记录页停止按钮只有长按手势，TalkBack 完全不可达 → 补描述与等价的无障碍动作
+- L-16 历史列表 `items(grouped.size)` 未用 key（同项目 `PlanListScreen` 已有正确先例）→ 改 `items(items, key = …)`
+- L-19 硬编码 `"—"` / `"?"` 与资源约定 `common_stat_unknown` 不一致（PhotoMapScreen 两处、PlanScreen POI 无名）
+- L-21 `checkStringKeys` 门禁可被静默绕过：注释掉的键仍会被正则匹配 → 先剥离 XML 注释，并新增重名键检测
+- L-22 `FormattersTest` 6 用例 32 断言全在默认公制下，H-02 新增的英制分支零测试（`resetToMetric()` 标注「仅供测试」却无人调用）
+- L-24 CI 的 awk 分支 A 会把 `[Unreleased]` 段一起写进 Release 说明（实测 25 行输出，首行即 `## [Unreleased]`）→ 两分支统一按 tag 定位小节
+- L-25 `tools/m2-verify/verify_amap_arrow.py` 硬编码本机绝对路径 → 改为参数/环境变量/Gradle 缓存自动定位；失效的一次性脚本 `stage2_fix.py` 加显式护栏
+
+### Changed
+- `RouteMetrics` 新增 `elevationPartial`（默认 false）：高程部分可用时爬升为「按已知段累计」的下界，界面需标注不完整
+- `MarkerDao` 新增 `upsert` / `upsertAll`（`REPLACE`）：支持标记即时落库且保存时幂等覆盖
+- Room 数据库版本 2 → 3（`MIGRATION_2_3`：trip 表三个索引）
+- 通知文案 `rec_notif_distance` 由 `距离 %1$.2f km` 改为 `距离 %1$s`（单位由格式化器决定）
+- `MediaDao.inTimeRange` 的时间口径改为 `COALESCE(dateTakenMs, dateModifiedMs)`（N-42）
+- `PolylineJson` 由 `org.json` 改为 kotlinx.serialization；`decode` 入参改为可空 `String?`，
+  且**不再抛异常**（N-36）。`IoCodecs.encodePolyline/decodePolyline` 现为委托实现（N-37）
+- `TripDetailViewModel.deleted`（state 字段）移除，改为 `deletedEvent: SharedFlow<Unit>`（N-56）
+- `PolylineSimplifier.simplify` 引入扫描量上界 `SCAN_BUDGET_FACTOR = 1024n`：预算未耗尽时
+  输出与改动前**逐点一致**（DP 的 keep 结果与处理顺序无关），仅在最坏 O(n²) 输入下生效
+- `BackupBuilder.Result.manifest` 现在是**包内 manifest 的同一个实例**（取 `checksums` 快照），
+  可用于「导出后重放比对」；此前它比包内多一条 `manifest.json` 自身校验和（L-10）
+- `BackupReader` 的校验和核验范围扩大到 `settings.json` / `README.txt`；`manifest.json`
+  自指无法核验（结构性限制，见源码注释），其余条目缺失时显式报 `CHECKSUM_UNVERIFIED`（L-09）
+- `resetToDefault()` 保留 `app_language` 与 `privacy_agreed`（与 `SettingsBackupMapper.EXCLUDED_KEYS` 同口径）（L-12）
+- 导入缺名线路的落库值由英文 `"Imported route"` 改为中性哨兵 `UNNAMED_ROUTE_PLACEHOLDER`（L-06）
+- `AmapLocationSource.stop()` 现在会 `release()` 掉 `AMapLocationClient`（L-02）
+- `Formatters.formatTime`（PhotoMapScreen）改为 `@Composable`，占位符走资源（L-19）
+
+### Added
+- 字符串 `io_done_title` / `history_no_result` / `history_delete_title` / `plan_unnamed_route` /
+  `imp_warn_checksum_unverified`（中英双语）
+- `UNNAMED_ROUTE_PLACEHOLDER`（core:database）：跨模块共用的「线路无名称」哨兵值
+- `ImportWarningCode.CHECKSUM_UNVERIFIED`：manifest 声明了校验和但包内条目缺失
+- 字符串 `hist_detail_not_found` / `hist_detail_back`（中英双语，详情页 not-found 终态）
+- README「已知限制：16 KB 页对齐设备」小节：高德 SDK native 库未 16KB 对齐，App 侧无法补救
+- `tools/db-verify/verify_room_migrations.py`（N-35）：Room 迁移校验脚本，纯 Python 无需 Android
+- CI 新增 `room-migrations` job；`CONTRIBUTING.md` 补「改 Room 必须跑迁移校验」
+
+### 测试
+- `RouteEvaluatorTest`：原「部分点缺失视为不可用」断言固化的是 N-40 缺陷，改为「按已知段累计并标注 partial」+ 新增「已知点太少仍判不可用」
+- `TripJsonRoundTripTest`：原「distanceM recomputed per segment」固化的是 N-22 缺陷，改为「跨段累加」
+- `PolylineSimplifierTest`：新增「最坏 O(n²) 输入仍在预算内」与「预算不改变正常轨迹输出」（N-47，原性能用例是空转的）
+- `MediaTripMatcherTest`：新增「无 dateTaken 且在窗口外仍应拒绝」，并注明该纯函数测试**守不住** N-42（坑在 DAO 的 SQL，需插桩/真机验证）
+- 新增 `PolylineJsonTest`（core:common）：往返、历史整数格式兼容、15 种损坏输入不抛异常、
+  坏点不连累好点（N-36，此前该模块结构下根本无法测试）
+- 新增 `PolylineInteropTest`（core:data）：两套 API 对同一份字节的解释必须一致、
+  导入写入的数据必须能被记录页读出（N-37）
+- `BackupSecurityTest` 新增 3 条：返回值 manifest 与包内 manifest 逐项一致（L-10）、
+  条目缺失时显式报 `CHECKSUM_UNVERIFIED`（L-09）、非数据目录的 JSON 不进失败列表（L-08，
+  原用例名写着 ignored 却只断言了 `trips.size`）
+- `FormattersTest` 新增 4 条英制与配速显示偏好用例（L-22），并补 `@After resetToMetric()`
+  防止进程内单例污染同批次其它用例
+- `checkStringKeys` 门禁负向验证：把中文侧某个键注释掉后门禁确实失败（L-21，修复前会被静默放过）
 
 ## [v0.5.0] - 2026-09-21
 

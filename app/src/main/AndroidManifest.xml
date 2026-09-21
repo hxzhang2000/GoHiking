@@ -7,10 +7,12 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
-    <!-- 定位（PRD 10 权限清单） -->
+    <!-- 定位（PRD 10 权限清单）
+         N-52：移除 ACCESS_BACKGROUND_LOCATION。App 全程只用前台服务（FOREGROUND_SERVICE_LOCATION）
+         采集定位，从未在后台无通知地取位置，也没有任何地方动态申请该权限。
+         保留声明会白白触发 Play Console 的「后台位置信息」政策申报与审核风险。 -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
     <!-- 前台服务记录 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

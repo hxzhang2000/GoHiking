@@ -16,8 +16,11 @@ import com.gohiking.core.database.entity.MediaIndexEntity
 import com.gohiking.core.database.entity.TripEntity
 import com.gohiking.core.model.LatLngValue
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
@@ -47,7 +50,9 @@ data class TripDetailUiState(
      * null = 无媒体权限（整段隐藏，不打扰）；非 null = 权限已授（可能为空列表 = 无关联照片）。
      */
     val photos: List<MediaIndexEntity>? = null,
-    val deleted: Boolean = false, // 删除完成后由壳层导航返回列表
+    /** N-33：行程不存在（tripId 无效 / 已被导入 OVERWRITE 替换）。此前缺这个终态，
+     *  页面会永远停在「加载中…」或标题栏下方一片空白。 */
+    val notFound: Boolean = false,
 )
 
 class TripDetailViewModel(
@@ -61,14 +66,68 @@ class TripDetailViewModel(
     private val _state = MutableStateFlow(TripDetailUiState())
     val state: StateFlow<TripDetailUiState> = _state.asStateFlow()
 
+    /**
+     * N-56：删除完成的导航事件（F-HIS-30 删除后回列表）。
+     *
+     * 此前它是 state 里的一个**粘性布尔** `deleted`。本 VM 以 `tripId` 为 key 常驻
+     * Activity 的 ViewModelStore，于是：打开行程 A → 删除 → `deleted=true` → 回列表，
+     * 但 VM(A) 留在 store 里没被清除；下次再打开同一个 tripId（通知深链、导入覆盖后重进）
+     * 会命中**同一个实例**，`init` 不会重跑，而 `deleted` 仍是 true ——
+     * 组合体一挂上就立刻触发 `onDeleted()`，页面**秒退**，用户根本看不到内容。
+     *
+     * 改成一次性事件流：SharedFlow 无 replay，复用 VM 时不会重放历史事件。
+     */
+    private val _deletedEvent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val deletedEvent: SharedFlow<Unit> = _deletedEvent.asSharedFlow()
+
+    /**
+     * N-25：详情页 init 里的 DB 读取、重命名 / 备注 / 删除的写入，此前全都是裸
+     * `viewModelScope.launch`，Room 抛一次（磁盘满、外键、IO 错误）就会打到全局
+     * CoroutineExceptionHandler → 未捕获异常 → 崩溃。统一兜底。
+     */
+    private fun safeLaunch(tag: String, block: suspend () -> Unit) {
+        viewModelScope.launch {
+            try {
+                block()
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                Timber.e(t, "详情页操作失败：%s", tag)
+            }
+        }
+    }
+
     init {
         viewModelScope.launch {
-            repo.observeById(tripId).collect { t ->
-                _state.update { it.copy(trip = t, loading = it.loading && t == null) }
+            // N-33：`loading = loading && t == null` 意味着行程不存在时 loading 永远为 true
+            // → 页面永远显示「加载中…」，没有超时、没有「记录不存在」、没有返回引导。
+            // Room 的可空查询首帧一定会到达（null 或实体），因此首帧后即可给出终态。
+            // N-25：订阅流本身也要兜底，否则一次 DB 错误会让整个 VM scope 失效
+            try {
+                repo.observeById(tripId).collect { t ->
+                    _state.update { it.copy(trip = t, loading = false, notFound = t == null) }
+                }
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                Timber.e(t, "行程订阅失败 tripId=%s", tripId)
+                _state.update { it.copy(loading = false) }
             }
         }
         viewModelScope.launch(Dispatchers.IO) {
-            val pts = repo.pointsOf(tripId).filter { it.quality == 0 }
+            // N-25：整段 DB 读取此前无任何兜底，Room 一次抛错就是崩溃
+            try {
+                loadDetailBody()
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                Timber.e(t, "详情页数据加载失败 tripId=%s", tripId)
+            }
+        }
+    }
+
+    private suspend fun loadDetailBody() {
+        val pts = repo.pointsOf(tripId).filter { it.quality == 0 }
             val segs = ArrayList<List<LatLngValue>>()
             var i = 0
             while (i < pts.size) {
@@ -103,7 +162,6 @@ class TripDetailViewModel(
                 )
             }
             loadPhotos(pts)
-        }
     }
 
     /**
@@ -145,19 +203,19 @@ class TripDetailViewModel(
     fun rename(name: String) {
         val n = name.trim()
         if (n.isEmpty()) return
-        viewModelScope.launch { repo.rename(tripId, n) }
+        safeLaunch("rename") { repo.rename(tripId, n) } // N-25
     }
 
     /** F-HIS-30 编辑备注 */
     fun updateNote(note: String) {
-        viewModelScope.launch { repo.updateNote(tripId, note.trim().ifEmpty { null }) }
+        safeLaunch("updateNote") { repo.updateNote(tripId, note.trim().ifEmpty { null }) } // N-25
     }
 
     /** F-HIS-30 删除（仓库层级联：点/标记/媒体引用随行程删） */
     fun delete() {
-        viewModelScope.launch {
+        safeLaunch("delete") { // N-25
             repo.delete(tripId)
-            _state.update { it.copy(deleted = true) }
+            _deletedEvent.tryEmit(Unit) // N-56：一次性事件，不留在 state 里
         }
     }
 

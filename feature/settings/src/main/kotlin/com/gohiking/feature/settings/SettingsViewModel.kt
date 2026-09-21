@@ -5,11 +5,15 @@ import androidx.lifecycle.viewModelScope
 import com.gohiking.core.datastore.AppSettings
 import com.gohiking.core.datastore.SettingsRepository
 import com.gohiking.core.resources.R
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 /** 单条设置项 UI 模型（DEV §5.2 P-14） */
 sealed interface SettingItemUi {
@@ -65,8 +69,20 @@ data class SettingsUiState(
 class SettingsViewModel(
     private val repository: SettingsRepository,
     private val hasBarometer: Boolean,
-    private val onLanguageChanged: (String) -> Unit, // 语言切换 → 重建 Activity（F-I18N-11）
 ) : ViewModel() {
+
+    /**
+     * N-12：语言切换的一次性 UI 事件（F-I18N-11：改完需重建 Activity 才生效）。
+     *
+     * 此前这里直接持有 `(String) -> Unit` 回调，而该 lambda 在 MainActivity 里捕获了
+     * Activity context。Activity.recreate() 属配置变更路径，ViewModelStore 经
+     * NonConfigurationInstances 保留 → 旧 Activity 销毁后 VM 仍持其强引用（泄漏）；
+     * 且新 Activity 里 viewModel(factory) 会命中已有实例、factory 不被调用，返回**仍持旧
+     * lambda 的旧 VM** → 第二次切换语言时 Toast/recreate 都作用在已销毁的 Activity 上，
+     * 界面不再切换，用户必须手动重启 App。改为事件流，由 Composable 侧用 LocalContext 消费。
+     */
+    private val _languageChanged = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val languageChanged: SharedFlow<String> = _languageChanged.asSharedFlow()
 
     private val _state = MutableStateFlow(SettingsUiState(barometerHint = !hasBarometer))
     val state: StateFlow<SettingsUiState> = _state.asStateFlow()
@@ -221,8 +237,26 @@ class SettingsViewModel(
         ),
     )
 
-    fun toggle(key: String, checked: Boolean) {
+    /**
+     * N-25：DataStore 写入失败（磁盘满 / 文件损坏 / 序列化异常）此前会一路抛到
+     * viewModelScope 的根 CoroutineExceptionHandler → 未捕获异常 → **App 崩溃**。
+     * 用户只是在设置页拨了个开关。这里统一兜底：失败只记日志，UI 由 settings Flow
+     * 的下一帧自然回滚到真实值，不崩、不弹技术堆栈。
+     */
+    private fun write(tag: String, block: suspend () -> Unit) {
         viewModelScope.launch {
+            try {
+                block()
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                Timber.e(t, "设置写入失败 key=%s", tag)
+            }
+        }
+    }
+
+    fun toggle(key: String, checked: Boolean) {
+        write(key) {
             when (key) {
                 "alert_master" -> repository.setAlertMasterEnabled(checked)
                 "alert_voice" -> repository.setAlertVoiceEnabled(checked)
@@ -246,7 +280,7 @@ class SettingsViewModel(
             when (key) {
                 "app_language" -> {
                     repository.setLanguage(value)
-                    onLanguageChanged(value) // F-I18N-11：重建 Activity 生效
+                    _languageChanged.tryEmit(value) // F-I18N-11：重建 Activity 生效
                 }
                 "record_location_mode" -> repository.setRecordLocationMode(value)
                 "unit_distance" -> repository.setUnitDistance(value)
@@ -272,6 +306,6 @@ class SettingsViewModel(
 
     /** F-SET-03 恢复默认设置 */
     fun resetToDefault() {
-        viewModelScope.launch { repository.resetToDefault() }
+        write("resetToDefault") { repository.resetToDefault() } // N-25
     }
 }

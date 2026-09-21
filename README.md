@@ -3,7 +3,7 @@
 一款面向徒步登山爱好者的 Android 记录应用：离线可用、数据私有、专为山区场景设计。
 从选点规划、沿途记录到回顾分析，覆盖登山出行的完整闭环。
 
-> 当前版本 **0.5.0**（开发期）· 变更记录见 [CHANGELOG.md](CHANGELOG.md) · English: [README_EN.md](README_EN.md)
+> 当前版本 **0.5.1**（开发期）· 变更记录见 [CHANGELOG.md](CHANGELOG.md) · English: [README_EN.md](README_EN.md)
 
 ## 功能特性
 
@@ -76,6 +76,19 @@ AMAP_KEY_RELEASE=你的发布Key
 ```
 
 > 运行 Gradle 的 JDK 必须是 17（AGP 8.7.3 与 JDK 25 组合会失败，详见 `docs/DEV-DESIGN.md` §7.1.1）。
+
+### 已知限制：16 KB 页对齐设备
+
+本项目使用的**高德三合一 SDK**（`3dmap-location-search` 10.0.700）自带的 native 库
+（`libamap3dmap.so` 等）ELF program header 的 `p_align` 仍是 4 KB，**未按 16 KB 页对齐**。
+
+- Android 15（API 35）起系统支持 16 KB 页大小，Google Play 自 2025-11-01 起对
+  `targetSdk ≥ 35` 的应用强制要求 16 KB 对齐；
+- 本 App `targetSdk = 35`，因此在 16 KB 页设备上加载高德地图/定位 native 库会失败；
+- 该问题**只能由高德官方在 SDK 侧修复**，App 侧无法重打包或对齐第三方 `.so`。
+
+缓解措施：升级到高德已声明支持 16 KB 的版本后，用 `tools/` 下的 ELF 检查脚本复核所有
+`lib/*/*.so` 的 `p_align`；在问题解除前，应在分发说明中标注「暂不支持 16 KB 页设备」。
 
 ## 文档索引
 

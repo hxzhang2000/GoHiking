@@ -52,6 +52,21 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+/**
+ * N-34：trip 表此前**一个索引都没有**（除主键）。历史列表 `ORDER BY startTime DESC`、
+ * 汇总统计 `WHERE status='FINISHED'`、导入查重 `WHERE name=? AND startTime=?`
+ * 全部走全表扫描；行程攒到几千条后首页与统计会明显变慢。
+ * 只加索引不改列，因此是纯 CREATE INDEX，不需要重建表。
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_trip_startTime` ON `trip` (`startTime`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_trip_status_startTime` ON `trip` (`status`, `startTime`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_trip_name_startTime` ON `trip` (`name`, `startTime`)")
+    }
+}
+
 val MIGRATIONS: Array<Migration> = arrayOf(
     MIGRATION_1_2,
+    MIGRATION_2_3,
 )

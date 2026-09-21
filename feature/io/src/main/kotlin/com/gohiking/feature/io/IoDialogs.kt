@@ -310,6 +310,8 @@ internal fun warningText(w: ImportWarning): String {
         ImportWarningCode.SIZE_LIMIT -> stringResource(CoreR.string.imp_warn_size_limit)
         ImportWarningCode.MANIFEST_PARSE_FAILED ->
             stringResource(CoreR.string.imp_warn_manifest_parse, w.args.firstOrNull() ?: "")
+        ImportWarningCode.CHECKSUM_UNVERIFIED ->
+            stringResource(CoreR.string.imp_warn_checksum_unverified, w.args.firstOrNull() ?: "")
     }
     return body
 }

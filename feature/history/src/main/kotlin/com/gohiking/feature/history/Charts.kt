@@ -214,22 +214,20 @@ private fun SplitsTable(headers: List<String>, rows: List<List<String>>, modifie
                     )
                 }
             }
-            // H-14：分段可能几十上百行，普通 Column 会一次性组合全部行。
-            // 外层已是纵向滚动容器，这里禁掉自身滚动即可享受 Lazy 的按需组合。
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
-                userScrollEnabled = false,
-            ) {
-                itemsIndexed(rows) { _, row ->
-                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        row.forEach {
-                            Text(
-                                text = it,
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
+            // N-02：本表被放进外层 LazyColumn 的 item 中（TripDetailScreen）。纵向 LazyColumn
+            // 的 item 是以 maxHeight = Infinity 测量的，内层再放 LazyColumn 会命中 Compose
+            // 的 checkScrollableContainerConstraints 断言，组合期直接抛 IllegalStateException
+            // （userScrollEnabled = false 只摘掉 scroll modifier，绕不过这一处校验）。
+            // 分段行数有天然上限（每公里 / 每 100m 爬升一段），Column 全量组合可接受。
+            rows.forEach { row ->
+                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    row.forEach {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            modifier = Modifier.weight(1f),
+                        )
                     }
                 }
             }

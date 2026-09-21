@@ -52,11 +52,15 @@
     <string name="rec_notif_channel">记录通知</string>
     <string name="rec_notif_recording">正在记录</string>
     <string name="rec_notif_paused">已暂停</string>
-    <string name="rec_notif_distance">距离 %1$.2f km</string>
+    <!-- N-55：单位由 Formatters.distanceText 决定（跟随「距离单位」设置），不再硬编码 km -->
+    <string name="rec_notif_distance">距离 %1$s</string>
 
     <!-- 记录列表（P-10，M1 切片） -->
     <string name="history_search_hint">搜索行程名称</string>
     <string name="history_empty">还没有已完成的行程</string>
+    <!-- L-14：搜索无结果 ≠ 一条记录都没有，两者文案必须分开 -->
+    <string name="history_no_result">没有匹配「%1$s」的行程</string>
+    <string name="history_delete_title">删除行程</string>
     <string name="history_summary_format">%1$s · %2$s · ↑%3$s · %4$d 条</string>
     <string name="history_group_by_month">按月分组</string>
     <string name="history_delete_confirm">删除「%1$s」及其全部轨迹数据？此操作不可撤销。</string>
@@ -82,6 +86,8 @@
 
     <!-- 行程详情（P-11 M1 切片：F-HIS-20~22/26/27/30） -->
     <string name="hist_detail_loading">加载中…</string>
+    <string name="hist_detail_not_found">这条记录不存在，可能已被删除。</string>
+    <string name="hist_detail_back">返回</string>
     <string name="hist_detail_section_overview">概览</string>
     <string name="hist_detail_section_legs">上山 / 下山</string>
     <string name="hist_detail_section_markers">标记</string>
@@ -158,6 +164,7 @@
     <string name="plan_list_title">计划线路</string>
     <string name="plan_list_empty">还没有计划线路，去地图上创建一个吧</string>
     <string name="plan_list_rename">重命名线路</string>
+    <string name="plan_unnamed_route">未命名线路</string>
     <string name="plan_list_delete">删除</string>
     <string name="plan_export_route">导出 JSON</string>
 
@@ -247,6 +254,8 @@
     <string name="io_working">正在处理…</string>
     <string name="io_progress">%1$d / %2$d</string>
     <string name="io_done">完成，共处理 %1$s 项。</string>
+    <!-- L-13：完成对话框的标题原本复用「正在处理…」，与正文「完成」自相矛盾 -->
+    <string name="io_done_title">已完成</string>
     <string name="io_error">操作失败</string>
     <string name="io_import_preview_title">导入预览</string>
     <string name="io_import_summary">将导入 %1$d 条记录、%2$d 条计划线路。</string>
@@ -315,6 +324,7 @@
     <string name="imp_warn_entry_limit">条目数超过上限 %1$s，已中止读取（疑似 Zip Bomb）</string>
     <string name="imp_warn_size_limit">解压后总大小超过上限 2 GB，已中止读取</string>
     <string name="imp_warn_manifest_parse">manifest.json 解析失败（%1$s），改为按目录结构推断</string>
+    <string name="imp_warn_checksum_unverified">以下条目声明了校验和但包内缺失，未做核验：%1$s</string>
     <string name="imp_import_failed">%1$s：导入失败</string>
     <string name="io_report_item">%1$s：%2$s</string>
     <string name="io_import_ask_hint">以下文件已存在，请逐个选择处理方式：</string>

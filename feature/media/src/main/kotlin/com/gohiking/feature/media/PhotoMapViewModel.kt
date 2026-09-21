@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 /**
  * 照片地图页（P-12）状态。
@@ -45,14 +46,26 @@ class PhotoMapViewModel(
         if (_state.value.photos != null || scanJob?.isActive == true) return
         scanJob = viewModelScope.launch(Dispatchers.IO) {
             _state.update { it.copy(scanning = true) }
-            runCatching {
+            try {
+                // N-57：原实现用 runCatching 吞掉 rescan 异常，且 located() 在 try 之外裸调。
+                // 一旦扫描或读取抛异常，scanning 会永远停在 true、photos 永远停在 null，
+                // 页面卡在「扫描中」且无任何错误提示。这里改成显式 try/catch/finally：
+                // 异常落日志，finally 保证 scanning 一定复位。
                 mediaRepository.rescan(appContext) { p ->
                     _state.update { it.copy(scanDone = p.scanned, scanTotal = p.total) }
                 }
+                val located = mediaRepository.located()
+                val approx = located.count { it.isApproximate }
+                _state.update { it.copy(photos = located, approximateCount = approx) }
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                Timber.e(t, "媒体扫描失败")
+                // 扫描失败也要给出终态：空列表 + 页面显示「无照片」，而不是永远转圈
+                _state.update { it.copy(photos = emptyList(), approximateCount = 0) }
+            } finally {
+                _state.update { it.copy(scanning = false) }
             }
-            val located = mediaRepository.located()
-            val approx = located.count { it.isApproximate }
-            _state.update { it.copy(photos = located, scanning = false, approximateCount = approx) }
         }
     }
 

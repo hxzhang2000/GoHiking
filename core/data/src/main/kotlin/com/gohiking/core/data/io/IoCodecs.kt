@@ -1,5 +1,7 @@
 package com.gohiking.core.data.io
 
+import com.gohiking.core.common.geo.PolylineJson
+import com.gohiking.core.model.LatLngValue
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -61,19 +63,18 @@ object IoCodecs {
 
     // ---- planned_leg.polylineJson（[[lat,lng],…]）----
 
+    /**
+     * N-37：此前这里是与 `PolylineJson` **完全独立**的第二套实现（自己拼字符串 /
+     * 自己 `Json.decodeFromString`）。同一份磁盘格式两套编解码、且互不出测试：
+     * 导入链路用本类写库（`ImportEngine`），记录页用 `PolylineJson` 读库
+     * （`RecordingScreen`），任一侧格式漂移都会静默读到空折线或直接崩。
+     * 现在统一委托到 core:common 的 [PolylineJson] —— 单一实现、纯 Kotlin、可单测。
+     */
     fun encodePolyline(points: List<Pair<Double, Double>>): String =
-        "[" + points.joinToString(",") { "[${it.first},${it.second}]" } + "]"
+        PolylineJson.encode(points.map { LatLngValue(it.first, it.second) })
 
-    fun decodePolyline(json: String?): List<Pair<Double, Double>> {
-        if (json.isNullOrBlank()) return emptyList()
-        return try {
-            Json.decodeFromString<List<List<Double>>>(json).mapNotNull { p ->
-                if (p.size >= 2) p[0] to p[1] else null
-            }
-        } catch (t: Throwable) {
-            emptyList()
-        }
-    }
+    fun decodePolyline(json: String?): List<Pair<Double, Double>> =
+        PolylineJson.decode(json).map { it.latitude to it.longitude }
 
     /**
      * 球面两点距离（米，haversine）。导入端重算 track_point.distanceM 用

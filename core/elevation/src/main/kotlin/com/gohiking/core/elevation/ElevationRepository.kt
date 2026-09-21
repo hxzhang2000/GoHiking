@@ -137,12 +137,21 @@ class ElevationRepository @Inject constructor(
         wgs: List<LatLngValue>,
         missIdx: List<Int>,
     ): Map<String, Double> {
-        val latKeys = missIdx.map { wgs[it].latitude }.distinct()
-        val lngKeys = missIdx.map { wgs[it].longitude }.distinct()
-        val rows = cacheDao.query(latKeys, lngKeys)
-        // D3：DAO 是笛卡尔积语义，配对一律走 ElevationCacheMatcher（唯一实现，可单测）
-        val wanted = missIdx.mapTo(HashSet()) { ElevationCacheMatcher.key(wgs[it]) }
-        return ElevationCacheMatcher.pair(rows, wanted)
+        // N-39：Android ≤ 11（SQLite < 3.32）的变量数上限是 999，而这里一次查询要传
+        // **两个** IN 列表（latKey IN (...) AND lngKey IN (...)）。长线路一次请求几千点
+        // 就会撞上 "too many SQL variables"(SQLiteException)，高程整条降级为 null。
+        // 按块拆分：每块自身经纬度去重后总和远低于 999，且块的笛卡尔积一定覆盖
+        // 该块内所有请求点（经纬度都取自同一块），语义不变。
+        val out = HashMap<String, Double>()
+        for (chunk in missIdx.chunked(DB_LOOKUP_CHUNK)) {
+            val latKeys = chunk.map { wgs[it].latitude }.distinct()
+            val lngKeys = chunk.map { wgs[it].longitude }.distinct()
+            val rows = cacheDao.query(latKeys, lngKeys)
+            // D3：DAO 是笛卡尔积语义，配对一律走 ElevationCacheMatcher（唯一实现，可单测）
+            val wanted = chunk.mapTo(HashSet()) { ElevationCacheMatcher.key(wgs[it]) }
+            out += ElevationCacheMatcher.pair(rows, wanted)
+        }
+        return out
     }
 
     private suspend fun persist(key: String, wgs: LatLngValue, v: Double, source: String) {
@@ -176,5 +185,8 @@ class ElevationRepository @Inject constructor(
         /** DEV §4.7：同一批最多 100 点 */
         const val REMOTE_BATCH_SIZE = 100
         const val MEMORY_CACHE_SIZE = 8 * 1024
+
+        /** N-39：单次缓存查询的点的上限（两个 IN 列表相加必须 < 999） */
+        const val DB_LOOKUP_CHUNK = 450
     }
 }

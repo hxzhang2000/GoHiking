@@ -20,6 +20,12 @@ data class RouteMetrics(
     val maxAltitudeM: Double?,
     val minAltitudeM: Double?,
     val elevationAvailable: Boolean,
+    /**
+     * N-40：高程**部分**可用（批量远程请求里有若干批超时/失败）。
+     * 为 true 时爬升/下降是「按已知点分段累计」的下界，界面需标注「估算（不完整）」；
+     * 绝不把缺口的爬升编造成 0 之后再当成完整值展示。
+     */
+    val elevationPartial: Boolean = false,
 )
 
 /**
@@ -35,6 +41,9 @@ object RouteEvaluator {
     private const val AVG_HIKING_SPEED_KMH = 3.5
     private const val ELEVATION_SAMPLE_INTERVAL_M = 50.0
     private const val DEM_ASCENT_THRESHOLD_M = 10.0
+
+    /** N-40：少于这么多个已知高程采样点就不给爬升（样本太少，分段累计没有意义） */
+    private const val MIN_KNOWN_ELEVATION_SAMPLES = 2
 
     private const val EARTH_RADIUS_M = 6371000.0
 
@@ -56,27 +65,51 @@ object RouteEvaluator {
             is GhResult.Ok -> r.value
             is GhResult.Err -> null
         }
-        val usable = elevations != null && samples.size == elevations.size && elevations.none { it == null }
-        if (!usable) {
+        if (elevations == null || elevations.size != samples.size) {
             return RouteMetrics(distance, durationSec, null, null, null, null, false)
         }
-        val acc = ThresholdAccumulator(DEM_ASCENT_THRESHOLD_M)
+        // N-40：原判定是 `elevations.none { it == null }` —— 只要有一个采样点没拿到
+        // 高程（某一批远程请求超时/配额失败），整条线路的爬升、最高/最低海拔就被
+        // 全量否决成 null。50m 一个采样点、100 点一批，一条 20km 线路有 400 个采样点、
+        // 4 批请求，任何一批抖动都会让「爬升」永久显示「—」。
+        // 改成按**连续已知段**分段累计：缺口处重建基准（绝不跨缺口连线，与记录链路
+        // 处理 quality≠0 的口径一致），结果是可信下界，并用 elevationPartial 标注。
+        val knownCount = elevations.count { it != null }
+        if (knownCount < MIN_KNOWN_ELEVATION_SAMPLES) {
+            return RouteMetrics(distance, durationSec, null, null, null, null, false)
+        }
+        var totalAscent = 0.0
+        var totalDescent = 0.0
         var maxAlt = Double.NEGATIVE_INFINITY
         var minAlt = Double.POSITIVE_INFINITY
-        for (alt in elevations!!) {
-            val a = alt!!
-            acc.accept(a)
-            if (a > maxAlt) maxAlt = a
-            if (a < minAlt) minAlt = a
+        var i = 0
+        while (i < elevations.size) {
+            if (elevations[i] == null) {
+                i++
+                continue
+            }
+            var j = i
+            while (j < elevations.size && elevations[j] != null) j++
+            val acc = ThresholdAccumulator(DEM_ASCENT_THRESHOLD_M)
+            for (k in i until j) {
+                val a = elevations[k]!!
+                acc.accept(a)
+                if (a > maxAlt) maxAlt = a
+                if (a < minAlt) minAlt = a
+            }
+            totalAscent += acc.ascent
+            totalDescent += acc.descent
+            i = j
         }
         return RouteMetrics(
             distanceM = distance,
             estimatedDurationSec = durationSec,
-            ascentM = acc.ascent,
-            descentM = acc.descent,
+            ascentM = totalAscent,
+            descentM = totalDescent,
             maxAltitudeM = maxAlt,
             minAltitudeM = minAlt,
             elevationAvailable = true,
+            elevationPartial = knownCount < elevations.size,
         )
     }
 

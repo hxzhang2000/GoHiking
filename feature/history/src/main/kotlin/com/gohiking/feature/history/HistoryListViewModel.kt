@@ -2,6 +2,7 @@ package com.gohiking.feature.history
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.gohiking.core.common.format.DisplayUnitProvider
 import com.gohiking.core.common.format.Formatters
 import com.gohiking.core.data.repository.TripRepository
 import com.gohiking.core.database.entity.TripEntity
@@ -65,7 +66,10 @@ sealed interface HistoryListEvent {
 
 class HistoryListViewModel(private val repo: TripRepository) : ViewModel() {
 
-    private val rawRows = MutableStateFlow<List<TripRowUi>>(emptyList())
+    // N-07：缓存**原始 entity** 而不是已格式化的 TripRowUi。此前把 distanceText 等文案
+    // 在 init 里一次性算好存进 StateFlow，单位设置变更后没有任何东西触发重算。
+    private val rawTrips = MutableStateFlow<List<TripEntity>>(emptyList())
+    private val rawSummary = MutableStateFlow<TripSummaryRow?>(null)
     private val query = MutableStateFlow("")
     private val _state = MutableStateFlow(HistoryUiState())
     val state: StateFlow<HistoryUiState> = _state.asStateFlow()
@@ -73,14 +77,20 @@ class HistoryListViewModel(private val repo: TripRepository) : ViewModel() {
     init {
         viewModelScope.launch {
             repo.observeFinished().collect { list ->
-                rawRows.value = list.map { it.toRowUi() }
+                rawTrips.value = list
                 recompute()
             }
         }
         viewModelScope.launch {
             repo.observeSummary().collect { row ->
-                _state.update { it.copy(summary = row.toUi()) }
+                rawSummary.value = row
+                recompute()
             }
+        }
+        // N-07：订阅单位变化并重算全部文案。本 VM 挂在 Activity 的 ViewModelStore 上被复用，
+        // 单位变更不会 recreate（只有语言变更才会），DB 也不会重新发射——不订阅就永远停在旧单位。
+        viewModelScope.launch {
+            DisplayUnitProvider.unitsFlow.collect { recompute() }
         }
         viewModelScope.launch {
             query.collect { q ->
@@ -103,12 +113,22 @@ class HistoryListViewModel(private val repo: TripRepository) : ViewModel() {
     /** 名称包含（不区分大小写）；分组与否不影响 trips 顺序（startTime DESC，UI 渲染时分组） */
     private fun recompute() {
         val q = query.value.trim()
-        val rows = if (q.isEmpty()) {
-            rawRows.value
+        val src = rawTrips.value
+        val filtered = if (q.isEmpty()) {
+            src
         } else {
-            rawRows.value.filter { it.name.contains(q, ignoreCase = true) }
+            src.filter { it.name.contains(q, ignoreCase = true) }
         }
-        _state.update { it.copy(trips = rows, empty = rows.isEmpty()) }
+        // N-07：格式化在这里做（而不是缓存结果），单位/配速设置变更才能随 recompute 生效
+        val rows = filtered.map { it.toRowUi() }
+        val summary = rawSummary.value?.toUi()
+        _state.update {
+            it.copy(
+                trips = rows,
+                empty = rows.isEmpty(),
+                summary = summary ?: it.summary,
+            )
+        }
     }
 
     private fun TripEntity.toRowUi(): TripRowUi = TripRowUi(

@@ -92,16 +92,25 @@ class TripJsonRoundTripTest {
     }
 
     @Test
-    fun `distanceM recomputed per segment on import`() {
+    /**
+     * N-22：原断言 `seg1[0].distanceM == 0.0`（新段重新累计）固化的正是缺陷 ——
+     * 记录链路的 track_point.distanceM 是**整程全局累加**（pause/resume 只重置位移
+     * 基准，不清零累计值），导入却按段清零，于是同一条轨迹导出再导入后分段表、
+     * 图表横轴、按距离切分全部错位。现改为全程累加、段间不重置、不跨段连线。
+     */
+    fun `distanceM accumulates across segments on import`() {
         val bundle = ImportEngine(FakeSink()).toTripBundle(
             TripJsonExporter.export(trip, points, emptyList(), emptyList(), crs = "GCJ-02"),
         )
         val seg0 = bundle.points.filter { it.segmentIndex == 0 }
-        assertTrue(seg0[0].distanceM == 0.0) // 段首 0
+        assertTrue(seg0[0].distanceM == 0.0) // 首点 0
         val expect = IoCodecs.haversineM(39.900, 116.400, 39.901, 116.401)
         assertEquals(expect, seg0[1].distanceM!!, expect * 1e-6)
         val seg1 = bundle.points.filter { it.segmentIndex == 1 }
-        assertEquals(0.0, seg1[0].distanceM!!, 1e-9) // 新段重新累计
+        // 新段首点沿用整程累计值（不为 0），且不与上段末点连线
+        assertEquals(seg0.last().distanceM!!, seg1[0].distanceM!!, 1e-9)
+        // 段内继续累加
+        assertTrue(seg1.last().distanceM!! >= seg1[0].distanceM!!)
     }
 
     @Test

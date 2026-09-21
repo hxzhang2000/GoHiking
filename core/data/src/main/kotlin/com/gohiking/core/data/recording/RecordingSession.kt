@@ -41,7 +41,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -72,6 +75,15 @@ class RecordingSession @Inject constructor(
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.Idle)
     val state: StateFlow<SessionState> = _state.asStateFlow()
+
+    /**
+     * N-26：「屏幕常亮」（F-REC-18，P0）此前是**死设置** —— 设置页能开关、能存、能随备份
+     * 导出导入，但记录页无条件 `addFlags(FLAG_KEEP_SCREEN_ON)`，关掉它屏幕照样常亮，
+     * 夜间长线徒步时白白耗电。这里把设置暴露给 UI（session 已持有 repository，无需改 DI）。
+     */
+    val keepScreenOn: StateFlow<Boolean> = settingsRepository.settings
+        .map { it.recordKeepScreenOn }
+        .stateIn(scope, SharingStarted.Eagerly, true)
 
     private val _samples = MutableSharedFlow<TrackSample>(
         extraBufferCapacity = 64,
@@ -126,6 +138,10 @@ class RecordingSession @Inject constructor(
     private var stepsCollectJob: Job? = null
 
     private var lastAcceptedFix: com.gohiking.core.location.LocationFix? = null
+    // N-04：只有 quality==0 的点才能作为下一个距离区间的起点。异常点（quality 1/2）
+    // 会把基准置为无效，从而同时跳过「进入」与「离开」两段距离累加（详见 onSample）。
+    // 默认 false：恢复/开局后第一个有效点只建立基准，不凭空累计一段距离。
+    private var distanceBaseValid: Boolean = false
     private var seqInSegment: Int = 0
     private var pointCount: Int = 0
     private var distanceM: Double = 0.0
@@ -138,6 +154,14 @@ class RecordingSession @Inject constructor(
     private var sequenceByType = mutableMapOf<String, Int>()
 
     private var buffer = mutableListOf<TrackPointEntity>()
+    // N-17：buffer 被 collectJob（Dispatchers.Default）、tickJob、以及 pause()/stop()
+    // 各自 launch 的 flush 协程并发访问，而 ArrayList 非线程安全。最坏情况是并发结构性
+    // 修改抛异常，使 fixes.collect 静默终止——状态仍是 RECORDING、通知仍在跳，但此后
+    // 一个点都不再落库，整场轨迹丢失且用户无感知。这里用对象锁而非 Mutex，因为
+    // onSample 不是 suspend 函数，无法挂起等待。
+    private val bufferLock = Any()
+    // markers 被 UI 线程（markSummit/dropMarker）与 Default 线程（addAlertMarker）并发写
+    private val markersLock = Any()
     private var lastFlushAtMs: Long = 0
     private var lastStatePersistAtMs: Long = 0
 
@@ -170,7 +194,7 @@ class RecordingSession @Inject constructor(
         distanceM = 0.0
         maxAltitudeM = null
         minAltitudeM = null
-        markers.clear()
+        synchronized(markersLock) { markers.clear() }
         sequenceByType.clear()
         buffer.clear()
         lastFlushAtMs = System.currentTimeMillis()
@@ -188,9 +212,11 @@ class RecordingSession @Inject constructor(
         if (hasBarometer) registerPressureListener()
 
         alertEngine = AlertEngine(alertSettingsProvider.settings.value)
-        startLocationCollection()
         // ⚠ 修复：start() 此前从未把状态从 Idle 切到 Active（UI 无法进入记录页，真机 P0；
         // M1/M2 仅编译/单测验证未真机回归，故未暴露）
+        // L-05：且必须在启动采集**之前**置位。反过来的话，第一个定位点会在状态还是
+        // Idle/Finished 时被处理：onSample 回写的 distanceM 会被随后的 Active(0.0) 覆盖，
+        // 该点触发的提醒标记也会丢。
         _state.value = SessionState.Active(
             tripId = requireNotNull(tripId),
             name = name,
@@ -209,6 +235,7 @@ class RecordingSession @Inject constructor(
             alertsEnabled = alertSettingsProvider.settings.value.masterEnabled,
             markers = emptyList(),
         )
+        startLocationCollection()
         Timber.i("记录开始 id=%s hasBarometer=%s", tripId, hasBarometer)
     }
 
@@ -218,6 +245,9 @@ class RecordingSession @Inject constructor(
         if (!s.isRecording) return
         lastPausedAtMs = System.currentTimeMillis()
         lastSampleTsMs = null // 暂停后的时间差不计入任何段
+        // N-04：暂停期间用户可能移动位置（甚至换了地方），恢复后的第一个点不能与暂停前的
+        // 点连成一段距离。置为无效后，恢复后的首个有效点只建立基准。
+        distanceBaseValid = false
         locationProvider.stop()
         tickJob?.cancel()
         altitudeFuser?.onSessionPause()
@@ -241,6 +271,7 @@ class RecordingSession @Inject constructor(
         currentSegment += 1
         seqInSegment = 0
         lastSampleTsMs = null // 新 segment 从第一个点起算
+        distanceBaseValid = false // 新段起点只建立基准，不跨段累加
         stepSource?.resume()
         if (hasBarometer) registerPressureListener()
         startLocationCollection()
@@ -333,9 +364,10 @@ class RecordingSession @Inject constructor(
             status = "FINISHED",
             createdAt = now,
         )
+        val finalMarkers = synchronized(markersLock) { markers.toList() }
         val draft = TripDraft(
             trip = trip,
-            markers = markers.toList(),
+            markers = finalMarkers,
             droppedCount = droppedCount,
             pointCount = pointCount,
         )
@@ -349,7 +381,7 @@ class RecordingSession @Inject constructor(
         unregisterPressureListener()
         tripId = null
         _state.value = SessionState.Finished(draft)
-        Timber.i("记录停止 distance=%.1fm points=%d markers=%d", distance, pointCount, markers.size)
+        Timber.i("记录停止 distance=%.1fm points=%d markers=%d", distance, pointCount, finalMarkers.size)
         return draft
     }
 
@@ -373,6 +405,8 @@ class RecordingSession @Inject constructor(
     suspend fun discard(draft: TripDraft) {
         withContext(Dispatchers.IO) {
             db.trackPointDao().deleteOf(draft.trip.id)
+            // N-30：标记已即时落库，丢弃行程时必须一起删，否则留下无主标记
+            db.markerDao().deleteOf(draft.trip.id)
             db.recordingStateDao().clear()
         }
         releaseStepSource()
@@ -406,8 +440,22 @@ class RecordingSession @Inject constructor(
         maxAltitudeM = null
         minAltitudeM = null
         buffer.clear()
-        markers.clear()
+        // N-30：读回崩溃前已打下的标记（此前这里只 clear，标记全丢）。
+        // 轨迹点/统计都能从快照恢复，唯独标记是「只增不快照」的数据，必须回库取。
+        val restoredMarkers = try {
+            withContext(Dispatchers.IO) { db.markerDao().allOf(snap.tripId) }
+        } catch (t: Throwable) {
+            Timber.e(t, "恢复标记失败，本次继续记录但历史标记丢失")
+            emptyList()
+        }
+        synchronized(markersLock) {
+            markers.clear()
+            markers.addAll(restoredMarkers)
+        }
         sequenceByType.clear()
+        restoredMarkers.forEach { m ->
+            sequenceByType[m.type] = maxOf(sequenceByType[m.type] ?: 0, m.sequence)
+        }
         sampler = TrackSampler()
         sampler.reset() // 恢复点与中断点不连线 → 位移基准重建
         statAccumulator = ThresholdAccumulator(if (snap.hasBarometer) 3.0 else 10.0)
@@ -425,7 +473,7 @@ class RecordingSession @Inject constructor(
             stepsCollectJob?.cancel()
             stepsCollectJob = scope.launch { src.steps.collect { currentSteps = it } }
         }
-        startLocationCollection()
+        // L-05：与 start() 同理，先置位 Active 再启动采集
         _state.value = SessionState.Active(
             tripId = snap.tripId,
             name = "",
@@ -438,13 +486,19 @@ class RecordingSession @Inject constructor(
             descentM = snap.descentAccumM,
             maxAltitudeM = null,
             minAltitudeM = null,
-            accumulatedPausedMs = snap.accumulatedPausedMs,
+            // L-04：原本写 snap.accumulatedPausedMs，但上面已把「崩溃时正处于暂停」的那段
+            // 时长结算进内部字段。状态里沿用快照值会让 UI 算出的运动时长凭空多出这段暂停。
+            accumulatedPausedMs = accumulatedPausedMs,
             pausedAtMs = null,
             pointCount = 0,
             alertsEnabled = alertSettingsProvider.settings.value.masterEnabled,
-            markers = emptyList(),
+            markers = restoredMarkers, // N-30
         )
-        Timber.w("崩溃恢复 tripId=%s segment=%d", snap.tripId, snap.currentSegment + 1)
+        startLocationCollection()
+        Timber.w(
+            "崩溃恢复 tripId=%s segment=%d markers=%d",
+            snap.tripId, snap.currentSegment + 1, restoredMarkers.size,
+        )
         return true
     }
 
@@ -496,8 +550,15 @@ class RecordingSession @Inject constructor(
         collectJob?.cancel()
         collectJob = scope.launch {
             locationProvider.fixes.collect { fix ->
-                val sample = sampler.accept(fix) ?: return@collect
-                onSample(id, fix, sample)
+                // N-17：单点处理异常绝不能让整条采集链静默终止——否则状态仍是 RECORDING、
+                // 通知仍在跳、UI 仍显示记录中，但此后一个点都不再落库，整场轨迹丢失且
+                // 用户完全无感知。这里吞掉单点异常并记日志，保证后续点继续采集。
+                try {
+                    val sample = sampler.accept(fix) ?: return@collect
+                    onSample(id, fix, sample)
+                } catch (t: Throwable) {
+                    Timber.e(t, "onSample 异常，跳过该定位点")
+                }
             }
         }
         tickJob?.cancel()
@@ -513,11 +574,21 @@ class RecordingSession @Inject constructor(
     }
 
     private fun onSample(id: String, fix: com.gohiking.core.location.LocationFix, sample: TrackSampler.Sample) {
-        val last = lastAcceptedFix
-        if (sample.quality == 0 && last != null) {
-            distanceM += GeoMath.distanceMeters(last.lat, last.lng, fix.lat, fix.lng)
+        // N-04：文档承诺「quality=1/2 不参与距离统计」，但原实现无条件 `lastAcceptedFix = fix`，
+        // 使异常点成为下一段的位移基准——排除只在「进入异常点那一段」生效，离开的那一段
+        // 照旧累加（实测单次 300m 跳变可让距离虚增约 600m，且跳变点还成为后续位移门基准）。
+        // 这里让只有 quality==0 的点更新基准；异常点把基准置为无效，使「进入」与「离开」
+        // 两段都不累加，也不会把跨越异常区间的直线距离误算成实际路程。
+        if (sample.quality == 0) {
+            val last = lastAcceptedFix
+            if (distanceBaseValid && last != null) {
+                distanceM += GeoMath.distanceMeters(last.lat, last.lng, fix.lat, fix.lng)
+            }
+            lastAcceptedFix = fix
+            distanceBaseValid = true
+        } else {
+            distanceBaseValid = false
         }
-        lastAcceptedFix = fix
         // 逐段运动时长（DEV 决策 14）：段内相邻点时间差累加。lastSampleTsMs 在暂停/继续/
         // 恢复时清空，跨段间隙与崩溃空窗都不会被误计为运动时长。
         val prevTs = lastSampleTsMs
@@ -557,7 +628,7 @@ class RecordingSession @Inject constructor(
                 }
             }
         }
-        buffer += TrackPointEntity(
+        val point = TrackPointEntity(
             tripId = id,
             segmentIndex = currentSegment,
             seq = seqInSegment,
@@ -571,6 +642,8 @@ class RecordingSession @Inject constructor(
             quality = sample.quality,
             distanceM = distanceM,
         )
+        // N-17：与 flushBuffer 的 toList()/clear() 互斥（见 bufferLock 注释）
+        synchronized(bufferLock) { buffer += point }
         seqInSegment += 1
         pointCount += 1
         val s = _state.value as? SessionState.Active
@@ -582,7 +655,10 @@ class RecordingSession @Inject constructor(
                 maxAltitudeM = maxAltitudeM,
                 minAltitudeM = minAltitudeM,
                 pointCount = pointCount,
-                currentAltitudeM = if (sample.quality == 0) altitudeFuser?.current() else s.currentAltitudeM,
+                // N-38：current() 名义是 getter，实际会往 9 点中值窗口推一个值（有副作用）。
+                // 同一次 onSample 里上面 :537 已调用过一次，这里再调一次会让窗口只覆盖
+                // 4.5 个独立样本（实测噪声放大约 1.34×）。直接复用已算好的 altitude。
+                currentAltitudeM = if (sample.quality == 0) altitude else s.currentAltitudeM,
                 stepCount = currentSteps,
                 stepWire = stepSource?.wire ?: StepWire.UNAVAILABLE,
             )
@@ -595,7 +671,8 @@ class RecordingSession @Inject constructor(
                 timestampMs = fix.timestampMs,
             ),
         )
-        if (buffer.size >= 10) scope.launch { flushBuffer(force = false) } // 每 10 点（PRD 6.3.7）
+        val pending = synchronized(bufferLock) { buffer.size }
+        if (pending >= 10) scope.launch { flushBuffer(force = false) } // 每 10 点（PRD 6.3.7）
     }
 
     private fun addMarker(type: String, note: String?, extraJson: String?) {
@@ -603,7 +680,7 @@ class RecordingSession @Inject constructor(
         val s = _state.value as? SessionState.Active ?: return
         val seq = (sequenceByType[type] ?: 0) + 1
         sequenceByType[type] = seq
-        markers += MarkerEntity(
+        val marker = MarkerEntity(
             id = UUID.randomUUID().toString(),
             tripId = s.tripId,
             type = type,
@@ -616,13 +693,15 @@ class RecordingSession @Inject constructor(
             sequence = seq,
             extraJson = extraJson,
         )
+        // N-17：与 UI 线程的 markSummit/dropMarker 互斥
+        synchronized(markersLock) { markers += marker }
         publishMarkers()
     }
 
     /** 提醒标记（F-ALERT-25/27）：内容来自 AlertEngine.MarkerDraft，序号由引擎按类型维护 */
     private fun addAlertMarker(d: MarkerDraft) {
         val s = _state.value as? SessionState.Active ?: return
-        markers += MarkerEntity(
+        val marker = MarkerEntity(
             id = UUID.randomUUID().toString(),
             tripId = s.tripId,
             type = d.type,
@@ -635,26 +714,51 @@ class RecordingSession @Inject constructor(
             sequence = d.sequence,
             extraJson = d.extraJson,
         )
+        synchronized(markersLock) { markers += marker }
+        persistMarker(marker) // N-30
         publishMarkers()
+    }
+
+    /**
+     * N-30：标记随打随落库。此前标记只活在内存里、stop() 时才 insertAll，
+     * 一旦进程被系统回收（前台服务被杀 / 崩溃），登顶点、手动标记、提醒标记
+     * 全部丢失——而崩溃恢复恰恰最容易发生在长时间登山记录中。
+     * 用 upsert（REPLACE）：save() 会再写一次同一批主键，默认 ABORT 会炸。
+     */
+    private fun persistMarker(marker: MarkerEntity) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                db.markerDao().upsert(marker)
+            } catch (t: Throwable) {
+                Timber.e(t, "标记落库失败 id=%s type=%s", marker.id, marker.type)
+            }
+        }
     }
 
     /** 标记快照推送到 state（记录页地图实时渲染，F-ALERT-25/30） */
     private fun publishMarkers() {
         val s = _state.value as? SessionState.Active ?: return
-        _state.value = s.copy(markers = markers.toList())
+        val snapshot = synchronized(markersLock) { markers.toList() }
+        _state.value = s.copy(markers = snapshot)
     }
 
     private suspend fun flushBuffer(force: Boolean) {
-        if (buffer.isEmpty()) return
-        if (!force && buffer.size < 10) return
-        val batch = buffer.toList()
-        buffer.clear()
+        // N-17：「取走 + 清空」必须在锁内一次完成。原实现三步（isEmpty 检查 → toList → clear）
+        // 无锁，两个并发 flush 可能都读到同一批点并各自 insertBatch，而 track_point 只有
+        // 非唯一索引、主键自增，重复行会被静默写入（轨迹点与 trip 距离对不上）。
+        val batch = synchronized(bufferLock) {
+            if (buffer.isEmpty()) return
+            if (!force && buffer.size < 10) return
+            val b = buffer.toList()
+            buffer.clear()
+            b
+        }
         lastFlushAtMs = System.currentTimeMillis()
         try {
             withContext(Dispatchers.IO) { db.trackPointDao().insertBatch(batch) }
         } catch (t: Throwable) {
             Timber.e(t, "轨迹点批量写入失败 size=%d", batch.size)
-            buffer.addAll(0, batch) // 失败回填，下次重试
+            synchronized(bufferLock) { buffer.addAll(0, batch) } // 失败回填，下次重试
         }
     }
 

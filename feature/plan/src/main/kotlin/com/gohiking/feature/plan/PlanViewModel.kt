@@ -167,7 +167,10 @@ class PlanViewModel(
         val kw = keyword.trim()
         searchJob?.cancel()
         if (kw.isEmpty()) {
-            _state.update { it.copy(suggestions = emptyList(), hint = SearchHint.NONE) }
+            // N-58：清空搜索框时必须把 searching 一起复位。原实现只清了 suggestions/hint，
+            // 若用户在上一次请求返回前删空输入，防抖协程被 cancel（不会走到 search() 里的
+            // searching = false），顶部转圈指示器就永远停不下来。
+            _state.update { it.copy(suggestions = emptyList(), hint = SearchHint.NONE, searching = false) }
             return
         }
         searchJob = viewModelScope.launch {

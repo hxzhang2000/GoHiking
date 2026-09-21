@@ -13,6 +13,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 
 /**
  * 全库媒体扫描（F-MEDIA-01/02/03/05/09，DEV §3.1.1 ②）。
@@ -60,7 +61,7 @@ class MediaScanner @Inject constructor(
         hasMediaLocationPermission: Boolean,
         onProgress: (suspend (ScanProgress) -> Unit)? = null,
     ): Result = withContext(Dispatchers.IO) {
-        val rows = queryStore()
+        val (rows, anyTableFailed) = queryStore()
 
         // DB 侧现有指纹：key=(id, type) -> dateModifiedMs（F-MEDIA-09 比对基准）
         val oldKeys = mediaDao.indexKeys().associate { (it.mediaStoreId to it.mediaType) to it.dateModifiedMs }
@@ -91,12 +92,23 @@ class MediaScanner @Inject constructor(
         if (toWrite.isNotEmpty()) mediaDao.upsertIndex(toWrite)
 
         // 已删除的媒体从缓存移除（F-MEDIA-09）
+        //
+        // N-23：**只要有任意一张表查询失败，就必须跳过删除同步**。
+        // 删除同步的判据是「库里有、但这次没扫到 = 已被用户删掉」，而这个推论的前提是
+        // 「扫描结果是完整的」。查询失败时 seenKeys 天然不完整，照常删除会把
+        // 「还在、只是这次没查到」的媒体索引全部清掉；两张表都失败时更是直接清空
+        // 整张 media_index —— 用户会看到照片地图一夜之间全空，且无法自愈。
+        // 查询不可信时宁可留着旧数据（下次成功扫描会自愈），也绝不误删。
         var removed = 0
-        oldKeys.keys.forEach { key ->
-            if (key !in seenKeys) {
-                mediaDao.deleteIndex(key.first, key.second)
-                removed++
+        if (!anyTableFailed) {
+            oldKeys.keys.forEach { key ->
+                if (key !in seenKeys) {
+                    mediaDao.deleteIndex(key.first, key.second)
+                    removed++
+                }
             }
+        } else {
+            Timber.w("MediaStore 查询有失败，本次跳过删除同步（避免误删 %d 条索引）", oldKeys.size)
         }
 
         Result(
@@ -109,9 +121,20 @@ class MediaScanner @Inject constructor(
         )
     }
 
-    /** 查询两张 MediaStore 表（image + video），F-MEDIA-01 */
-    private fun queryStore(): List<StoreRow> {
+    /** queryStore 的结果：[rows] 已扫到的行，[anyTableFailed] 是否有表查询失败（N-23） */
+    private data class QueryResult(val rows: List<StoreRow>, val anyTableFailed: Boolean)
+
+    /**
+     * 查询两张 MediaStore 表（image + video），F-MEDIA-01。
+     *
+     * N-23：原实现两张表在同一个裸循环里查，任何一张抛异常（`getColumnIndexOrThrow`
+     * 在缺失列时必抛、部分 ROM 的 MediaStore 会返回损坏游标）都会让**整个**扫描失败，
+     * 连另一张表扫到的数据一起丢掉。改为逐表独立容错：一张失败不影响另一张，
+     * 并通过 [QueryResult.anyTableFailed] 告知调用方「本次扫描结果不完整」。
+     */
+    private fun queryStore(): QueryResult {
         val rows = ArrayList<StoreRow>()
+        var anyTableFailed = false
         class Spec(val collection: Uri, val type: String, val projection: Array<String>)
         val specs = listOf(
             Spec(
@@ -135,35 +158,44 @@ class MediaScanner @Inject constructor(
             ),
         )
         for (spec in specs) {
-            context.contentResolver.query(
-                spec.collection,
-                spec.projection,
-                null,
-                null,
-                null,
-            )?.use { c ->
-                val idCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
-                val modifiedCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
-                val takenCol = c.getColumnIndex(MediaStore.MediaColumns.DATE_TAKEN)
-                val sizeCol = c.getColumnIndex(MediaStore.MediaColumns.SIZE)
-                val durationCol = c.getColumnIndex(MediaStore.Video.Media.DURATION)
-                while (c.moveToNext()) {
-                    rows.add(
-                        StoreRow(
-                            mediaStoreId = c.getLong(idCol),
-                            mediaType = spec.type,
-                            uri = ContentUris.withAppendedId(spec.collection, c.getLong(idCol)),
-                            // MediaStore DATE_MODIFIED 单位是秒；DATE_TAKEN 是毫秒
-                            dateModifiedMs = c.getLong(modifiedCol) * 1000,
-                            dateTakenMs = if (takenCol >= 0 && !c.isNull(takenCol)) c.getLong(takenCol) else null,
-                            durationMs = if (durationCol >= 0 && !c.isNull(durationCol)) c.getLong(durationCol) else null,
-                            sizeBytes = if (sizeCol >= 0 && !c.isNull(sizeCol)) c.getLong(sizeCol) else null,
-                        ),
-                    )
+            try {
+                context.contentResolver.query(
+                    spec.collection,
+                    spec.projection,
+                    null,
+                    null,
+                    null,
+                )?.use { c ->
+                    val idCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+                    val modifiedCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
+                    val takenCol = c.getColumnIndex(MediaStore.MediaColumns.DATE_TAKEN)
+                    val sizeCol = c.getColumnIndex(MediaStore.MediaColumns.SIZE)
+                    val durationCol = c.getColumnIndex(MediaStore.Video.Media.DURATION)
+                    while (c.moveToNext()) {
+                        rows.add(
+                            StoreRow(
+                                mediaStoreId = c.getLong(idCol),
+                                mediaType = spec.type,
+                                uri = ContentUris.withAppendedId(spec.collection, c.getLong(idCol)),
+                                // MediaStore DATE_MODIFIED 单位是秒；DATE_TAKEN 是毫秒
+                                dateModifiedMs = c.getLong(modifiedCol) * 1000,
+                                dateTakenMs = if (takenCol >= 0 && !c.isNull(takenCol)) c.getLong(takenCol) else null,
+                                durationMs = if (durationCol >= 0 && !c.isNull(durationCol)) c.getLong(durationCol) else null,
+                                sizeBytes = if (sizeCol >= 0 && !c.isNull(sizeCol)) c.getLong(sizeCol) else null,
+                            ),
+                        )
+                    }
+                } ?: run {
+                    // 查询返回 null 也算失败（部分 ROM 在媒体库未就绪时返回 null）
+                    anyTableFailed = true
+                    Timber.w("MediaStore 查询返回 null type=%s", spec.type)
                 }
+            } catch (t: Throwable) {
+                anyTableFailed = true
+                Timber.e(t, "MediaStore 查询失败 type=%s", spec.type)
             }
         }
-        return rows
+        return QueryResult(rows, anyTableFailed)
     }
 
     /** 组装落库实体：GPS 来源优先级（F-MEDIA-02）+ WGS→GCJ 一次转换（F-MEDIA-03） */

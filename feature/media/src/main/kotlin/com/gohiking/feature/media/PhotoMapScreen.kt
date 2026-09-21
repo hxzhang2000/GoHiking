@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
@@ -97,6 +98,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
+
+/** 地图初始缩放级别（与上面 moveCamera 的 4.5f 一致）；N-10 首次渲染时用它兜底 */
+private const val DEFAULT_MAP_ZOOM = 4.5f
 
 /**
  * 照片地图页（P-12，F-MEDIA-10~15/20~25/30~34；P2 项 24/35/36/42 按 DEV §9.3 暂缓）。
@@ -127,21 +132,19 @@ fun PhotoMapScreen(
     val regeoClient = remember { AmapSearchClient(appContext) }
 
     // ---- 权限（F-MEDIA-04/05）----
-    fun hasMedia(): Boolean {
-        val p = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_IMAGES
-        } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
-        }
-        return ContextCompat.checkSelfPermission(appContext, p) == PackageManager.PERMISSION_GRANTED
-    }
-    var mediaGranted by remember { mutableStateOf(hasMedia()) }
+    // N-23：权限判定统一走 MediaRepository.hasMediaAccess —— 此前本页与详情页各抄一份
+    // 口径，Android 13/14 的分支条件写得还不一样，导致「一处说有权限、一处说没有」。
+    // N-24：该函数已把 Android 14 的 READ_MEDIA_VISUAL_USER_SELECTED（部分访问）算作授权。
+    var mediaGranted by remember { mutableStateOf(mediaRepository.hasMediaAccess(appContext)) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { grants ->
         mediaGranted = grants[Manifest.permission.READ_MEDIA_IMAGES] == true ||
             grants[Manifest.permission.READ_MEDIA_VIDEO] == true ||
-            grants[Manifest.permission.READ_EXTERNAL_STORAGE] == true
+            grants[Manifest.permission.READ_EXTERNAL_STORAGE] == true ||
+            // N-24：Android 14「选择照片」只回这一个权限，也必须算授权
+            grants[Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED] == true ||
+            mediaRepository.hasMediaAccess(appContext)
         if (mediaGranted) viewModel.onPermissionGranted()
     }
     LaunchedEffect(mediaGranted) {
@@ -169,6 +172,10 @@ fun PhotoMapScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            // N-19：从上一页返回时 Activity 并未 pause，直接 onDestroy() 会让 AMap
+            // 内部 GL 资源与监听器释放顺序错乱（地图黑屏/瓦片不刷新/偶发崩溃）。
+            // 必须保证 pause → destroy 的调用顺序（与 MainActivity 的修法一致）。
+            mapView.onPause()
             mapView.onDestroy()
         }
     }
@@ -188,18 +195,39 @@ fun PhotoMapScreen(
         renderMarkers(mapView.map, clusters, density.density, appContext, scope)
     }
 
+    // N-10：扫描是异步完成的，而 rebuildCluster 此前**只在**相机 zoom 变化回调里被调用。
+    // 进入页面时监听器已注册但 state.photos 仍为 null → 首次回调直接 return → 扫描完成后
+    // 没有任何东西再触发渲染 → 地图上一个照片 marker 都没有，页面核心内容（P-12）不可达。
+    LaunchedEffect(state.photos) {
+        val photos = state.photos ?: return@LaunchedEffect
+        if (photos.isEmpty()) {
+            clusters = emptyList()
+            renderMarkers(mapView.map, emptyList(), density.density, appContext, scope)
+            return@LaunchedEffect
+        }
+        rebuildCluster(mapView.map.cameraPosition?.zoom ?: DEFAULT_MAP_ZOOM)
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         AndroidView(
             factory = { _ ->
                 mapView.apply {
                     var debounceJob: Job? = null
                     var lastZoom = Float.NaN
+                    var lastTarget: LatLng? = null
                     map.setOnCameraChangeListener(object : AMap.OnCameraChangeListener {
                         override fun onCameraChange(position: CameraPosition?) = Unit
                         override fun onCameraChangeFinish(position: CameraPosition?) {
                             val zoom = position?.zoom ?: return
-                            if (!zoom.isNaN() && zoom == lastZoom) return
+                            val target = position.target
+                            // N-10：原条件「zoom 相同即 return」使**平移**地图后 marker 不刷新，
+                            // 用户只能靠缩放逼出渲染。这里补充位移判定（约 1m 以上算移动）。
+                            val moved = target != null && lastTarget != null &&
+                                (abs(target.latitude - lastTarget!!.latitude) > 1e-5 ||
+                                    abs(target.longitude - lastTarget!!.longitude) > 1e-5)
+                            if (!zoom.isNaN() && zoom == lastZoom && !moved) return
                             lastZoom = zoom
+                            lastTarget = target
                             debounceJob?.cancel()
                             debounceJob = scope.launch(Dispatchers.Main) {
                                 delay(150) // DEV §4.6：zoom 变化结束防抖 150ms
@@ -472,7 +500,9 @@ private fun ClusterSheet(
                             ?: "" // null = 离线/失败 → 显示「—」（F-MEDIA-23）
                     }
                     Text(
-                        text = place?.ifEmpty { "—" } ?: stringResource(CoreR.string.photo_map_locating),
+                        // L-19：硬编码 "—" 与资源约定 common_stat_unknown 不一致
+                        text = place?.ifEmpty { stringResource(CoreR.string.common_stat_unknown) }
+                            ?: stringResource(CoreR.string.photo_map_locating),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -544,7 +574,12 @@ private fun MediaViewerDialog(
                 }
             }
             // F-MEDIA-34 顶部序号 + 拍摄时间
-            Column(modifier = Modifier.align(Alignment.TopCenter).padding(top = 40.dp)) {
+            // N-11：40.dp 是拍脑袋的魔法数，在刘海/挖孔机型上遮挡程度不一。改用系统 insets。
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding(),
+            ) {
                 Text(
                     text = stringResource(
                         CoreR.string.photo_map_viewer_index,
@@ -590,9 +625,11 @@ private fun MediaViewerDialog(
     }
 }
 
+// L-19：改为 @Composable，才能走资源里的 common_stat_unknown（原来是硬编码 "—"）
+@Composable
 private fun formatTime(m: MediaIndexEntity): String {
     val t = m.dateTakenMs ?: m.dateModifiedMs
-    if (t <= 0) return "—"
+    if (t <= 0) return stringResource(CoreR.string.common_stat_unknown)
     return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
         .withZone(ZoneId.systemDefault())
         .format(Instant.ofEpochMilli(t))

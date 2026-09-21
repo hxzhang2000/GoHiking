@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -17,6 +18,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,14 +56,19 @@ fun SettingsScreen(
 ) {
     val viewModel: SettingsViewModel = viewModel(
         factory = viewModelFactory {
-            initializer { SettingsViewModel(settingsRepository, hasBarometer, onLanguageChanged) }
+            initializer { SettingsViewModel(settingsRepository, hasBarometer) }
         },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // N-12：语言切换由 Composable 侧消费一次性事件，ViewModel 不再持有 Activity 回调
+    LaunchedEffect(viewModel) {
+        viewModel.languageChanged.collect { onLanguageChanged(it) }
+    }
     var selectTarget by remember { mutableStateOf<SettingItemUi.Select?>(null) }
     var showResetConfirm by remember { mutableStateOf(false) }
 
-    Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
+    // N-11：targetSdk 35 强制 edge-to-edge，状态栏会压住顶部的返回按钮与标题
+    Column(modifier = modifier.fillMaxSize().statusBarsPadding().padding(16.dp)) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,

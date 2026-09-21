@@ -108,6 +108,66 @@ class BackupSecurityTest {
         }
         val contents = BackupReader.read(ByteArrayInputStream(out.toByteArray()))
         assertEquals(1, contents.trips.size)
+        // L-08：原来这条只断言 trips.size，而 notes/whatever.json 其实进了「失败」列表
+        // （测试名写着 ignored，却从未验证过）。补上断言，锁住行为。
+        assertTrue(
+            "非数据目录的 JSON 不应进入失败列表，实际：${contents.invalid.map { it.name }}",
+            contents.invalid.isEmpty(),
+        )
+    }
+
+    @Test
+    fun `returned manifest equals the manifest written inside the package`() {
+        val built = BackupBuilder.build(
+            trips = listOf(sampleTripEnvelope("a")),
+            routes = emptyList(),
+            settingsJson = "{\"app_language\":\"zh-CN\"}",
+        )
+        // 直接从包里把 manifest.json 读出来，与返回值逐项比对（L-10 的重放场景）
+        var inPackage: BackupManifest? = null
+        java.util.zip.ZipInputStream(ByteArrayInputStream(built.bytes)).use { zip ->
+            while (true) {
+                val e = zip.nextEntry ?: break
+                if (e.name == "manifest.json") {
+                    inPackage = IoCodecs.json.decodeFromString(
+                        BackupManifest.serializer(),
+                        zip.readBytes().toString(Charsets.UTF_8),
+                    )
+                    break
+                }
+            }
+        }
+        val expected = inPackage
+        assertNotNull("包内应有 manifest.json", expected)
+        assertEquals(expected!!.checksums, built.manifest.checksums)
+        assertEquals(expected.exportedAt, built.manifest.exportedAt)
+    }
+
+    @Test
+    fun `checksum declared but entry missing is reported as unverified`() {
+        val built = BackupBuilder.build(trips = listOf(sampleTripEnvelope("a")), routes = emptyList())
+        // 把 README.txt 从包里删掉，但 manifest 仍然为它登记了校验和
+        val stripped = ByteArrayOutputStream()
+        java.util.zip.ZipInputStream(ByteArrayInputStream(built.bytes)).use { zip ->
+            ZipOutputStream(stripped).use { out ->
+                while (true) {
+                    val e = zip.nextEntry ?: break
+                    if (e.name == "README.txt") continue
+                    out.putNextEntry(ZipEntry(e.name))
+                    out.write(zip.readBytes())
+                    out.closeEntry()
+                }
+            }
+        }
+        val contents = BackupReader.read(ByteArrayInputStream(stripped.toByteArray()))
+        assertEquals(1, contents.trips.size) // 数据本身照常导入
+        assertTrue(
+            "应显式提示 README.txt 未核验，实际 warnings=${contents.warnings.map { it.code }}",
+            contents.warnings.any {
+                it.code == ImportWarningCode.CHECKSUM_UNVERIFIED &&
+                    it.args.firstOrNull()?.contains("README.txt") == true
+            },
+        )
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.gohiking.core.data.alert
 
 import com.gohiking.core.location.altitude.ThresholdAccumulator
+import kotlin.math.floor
 
 /**
  * 提醒触发引擎（DEV §4.9）。纯逻辑、无 Android 依赖，便于单测。
@@ -38,9 +39,14 @@ class AlertEngine(settings: AlertSettings) {
         val events = mutableListOf<AlertEvent>()
 
         if (settings.distanceEnabled) {
-            val nextMark = lastDistanceMarkM + settings.distanceIntervalM
-            if (sample.distanceM >= nextMark) {
-                lastDistanceMarkM = nextMark
+            // N-18：原实现每次只推进**一个**间隔，而 distanceM 是单调累计值 —— 一旦发生
+            // GPS 跳变（隧道/峡谷丢星后重捕获），基准会长期落后于真实距离，用户原地不动
+            // 也会连续 N 个采样各触发一条（实测 10 秒内 10 条打点 + 10 条语音播报）。
+            // 改为一次性对齐到当前所处的档位：每次调用最多推进一档、最多发一条。
+            val intervalM = settings.distanceIntervalM.toDouble()
+            val reachedM = if (intervalM > 0.0) floor(sample.distanceM / intervalM) * intervalM else 0.0
+            if (reachedM > lastDistanceMarkM) {
+                lastDistanceMarkM = reachedM
                 distanceSeq += 1
                 events += AlertEvent(
                     marker = MarkerDraft(
@@ -61,9 +67,11 @@ class AlertEngine(settings: AlertSettings) {
             elevationAccumulator.accept(altitude)
             val asc = elevationAccumulator.ascent
             val desc = elevationAccumulator.descent
-            val nextAsc = lastAscentMarkM + settings.elevationIntervalM
-            if (asc >= nextAsc) {
-                lastAscentMarkM = nextAsc
+            // N-18（同上）：气压计一次性校准偏差可达数百米，逐档推进会造成连续多条播报
+            val elevIntervalM = settings.elevationIntervalM.toDouble()
+            val ascReached = if (elevIntervalM > 0.0) floor(asc / elevIntervalM) * elevIntervalM else 0.0
+            if (ascReached > lastAscentMarkM) {
+                lastAscentMarkM = ascReached
                 ascentSeq += 1
                 events += AlertEvent(
                     marker = MarkerDraft(
@@ -77,9 +85,9 @@ class AlertEngine(settings: AlertSettings) {
                     voice = AlertVoice.Ascent(asc.toInt(), altitude.toInt()),
                 )
             }
-            val nextDesc = lastDescentMarkM + settings.elevationIntervalM
-            if (desc >= nextDesc) {
-                lastDescentMarkM = nextDesc
+            val descReached = if (elevIntervalM > 0.0) floor(desc / elevIntervalM) * elevIntervalM else 0.0
+            if (descReached > lastDescentMarkM) {
+                lastDescentMarkM = descReached
                 descentSeq += 1
                 events += AlertEvent(
                     marker = MarkerDraft(

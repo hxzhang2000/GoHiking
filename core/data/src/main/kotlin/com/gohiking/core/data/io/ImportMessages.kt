@@ -46,6 +46,13 @@ enum class ImportWarningCode {
     ENTRY_LIMIT,
     SIZE_LIMIT,
     MANIFEST_PARSE_FAILED,
+
+    /**
+     * manifest 声明了某条目的校验和，但包内找不到该条目 → 这一项**未**被核验（L-09）。
+     * args = [条目名]。与 [ImportReasonCode.CHECKSUM_MISMATCH]（核验过且不一致）区分：
+     * 这里只是「没验上」，不代表内容被篡改。
+     */
+    CHECKSUM_UNVERIFIED,
 }
 
 /** 与文件绑定的原因，供预览/报告列表渲染 */

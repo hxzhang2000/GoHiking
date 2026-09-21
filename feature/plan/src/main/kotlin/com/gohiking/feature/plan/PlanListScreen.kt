@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
@@ -32,6 +33,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.gohiking.core.common.format.Formatters
+import com.gohiking.core.database.entity.UNNAMED_ROUTE_PLACEHOLDER
 import com.gohiking.core.resources.R as CoreR
 import java.time.Instant
 import java.time.ZoneId
@@ -49,6 +51,10 @@ fun PlanListScreen(
     onExportRoute: ((routeId: String, routeName: String) -> Unit)? = null, // F-PLAN-43（M3-E 接线；文件名由壳层生成）
     modifier: Modifier = Modifier,
 ) {
+    // L-06：导入的线路缺 name 时库里存的是中性哨兵值，这里替换成本地化文案
+    val unnamedRoute = stringResource(CoreR.string.plan_unnamed_route)
+    fun displayName(raw: String): String =
+        if (raw == UNNAMED_ROUTE_PLACEHOLDER) unnamedRoute else raw
     val viewModel: PlanListViewModel = viewModel(
         factory = viewModelFactory {
             initializer { PlanListViewModel(plannedRouteDao) }
@@ -61,7 +67,8 @@ fun PlanListScreen(
     val renameTarget = renameId?.let { id -> items.firstOrNull { it.id == id } }
     val deleteTarget = deleteId?.let { id -> items.firstOrNull { it.id == id } }
 
-    Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
+    // N-11：targetSdk 35 强制 edge-to-edge，状态栏会压住顶部的返回按钮与标题
+    Column(modifier = modifier.fillMaxSize().statusBarsPadding().padding(16.dp)) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -108,7 +115,7 @@ fun PlanListScreen(
                             Text(stringResource(CoreR.string.plan_list_delete))
                         }
                         onExportRoute?.let { export ->
-                            TextButton(onClick = { export(item.id, item.name) }) {
+                            TextButton(onClick = { export(item.id, displayName(item.name)) }) {
                                 Text(stringResource(CoreR.string.plan_export_route))
                             }
                         }
@@ -121,7 +128,10 @@ fun PlanListScreen(
 
     // F-PLAN-42：重命名对话框（默认原名）
     renameTarget?.let { target ->
-        var nameInput by remember(target.id) { mutableStateOf(target.name) }
+        // 哨兵值不回填到输入框：否则用户一点确定就把「未命名线路」写进库
+        var nameInput by remember(target.id) {
+            mutableStateOf(if (target.name == UNNAMED_ROUTE_PLACEHOLDER) "" else target.name)
+        }
         AlertDialog(
             onDismissRequest = { renameId = null },
             title = { Text(stringResource(CoreR.string.plan_list_rename)) },

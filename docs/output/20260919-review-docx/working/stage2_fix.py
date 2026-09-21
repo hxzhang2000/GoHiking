@@ -1,6 +1,18 @@
 # -*- coding: utf-8 -*-
-"""html-review 定向修正：裸值 -> CSS 变量。逐项 assert 落地。"""
-import pathlib
+"""html-review 定向修正：裸值 -> CSS 变量。逐项 assert 落地。
+
+L-25：这是 2026-09-19 生成 review docx 时的**一次性**脚本。它改的那个
+stage2_typeset.py 在脚本跑完的那一刻就已经是修正后的状态，所以重跑必然在第一个
+assert 上炸——那不是 bug，是脚本已过期。保留它只为追溯当时做了什么，请勿再执行。
+"""
+import sys
+
+sys.exit(
+    "stage2_fix.py 是 2026-09-19 的一次性脚本，已执行完毕，重跑必然在第一个 assert 失败。\n"
+    "详见文件头注释；需要再次排版请改 stage2_typeset.py 本身。"
+)
+
+import pathlib  # noqa: E402  （不可达：上面的 exit 是刻意保留的护栏）
 
 P = pathlib.Path(r"D:\hxzhang\MyGithubSoftware\GoHiking\docs\output\20260919-review-docx\working\stage2_typeset.py")
 s = P.read_text(encoding="utf-8")

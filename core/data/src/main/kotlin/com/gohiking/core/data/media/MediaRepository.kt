@@ -26,14 +26,46 @@ class MediaRepository @Inject constructor(
 
     private val mediaDao get() = db.mediaDao()
 
-    /** 媒体读取权限（照片条与照片地图共用）：Android 13+ 细粒度，低版本 READ_EXTERNAL_STORAGE */
+    /**
+     * 媒体读取权限（照片条与照片地图共用）——**全仓库唯一判定口径**（N-23）。
+     *
+     * 三态（不是布尔）：
+     * - 完全授权：Android 13+ READ_MEDIA_IMAGES/VIDEO，低版本 READ_EXTERNAL_STORAGE；
+     * - **部分授权**：Android 14（API 34）+ 用户在系统弹窗里选了「选择照片」，
+     *   系统只授予 READ_MEDIA_VISUAL_USER_SELECTED（N-24）。这**不是拒绝**：
+     *   MediaStore 仍可读，只是只能读用户选中的那批。此前把它判成 false，
+     *   于是再次弹出「授权」引导卡 → 再点 → 系统对话框已经答过不再出现 → 死循环；
+     * - 拒绝：以上都没有。
+     */
     fun hasMediaAccess(context: Context): Boolean {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_IMAGES
-        } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.READ_EXTERNAL_STORAGE,
+            ) == PackageManager.PERMISSION_GRANTED
         }
-        return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        val full = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_IMAGES) ==
+            PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VIDEO) ==
+            PackageManager.PERMISSION_GRANTED
+        if (full) return true
+        // N-24：Android 14+ 的「部分访问」同样可读 MediaStore
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
+            ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    /** N-24：是否只是「部分访问」（Android 14+ 选照片模式）——用于提示用户可扩展选择 */
+    fun hasPartialMediaAccessOnly(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return false
+        if (!hasMediaAccess(context)) return false
+        val full = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_IMAGES) ==
+            PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VIDEO) ==
+            PackageManager.PERMISSION_GRANTED
+        return !full
     }
 
     /** 精确照片位置权限（F-MEDIA-05）：Android 10+ 才有；未授权时位置模糊 ~1km */

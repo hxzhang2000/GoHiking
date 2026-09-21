@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -119,6 +120,8 @@ private fun PlanContent(
     val endLabel = stringResource(CoreR.string.plan_target_end)
     val startUnset = stringResource(CoreR.string.plan_point_unset)
     val endUnset = startUnset
+    // L-19：POI 无名称时原本硬编码 "?"，与资源约定 common_stat_unknown 不一致
+    val unknownName = stringResource(CoreR.string.common_stat_unknown)
 
     // 起终点 Marker 引用 + marker→target 映射（拖动回调定位用，F-PLAN-06）
     val markers = remember { mutableListOf<Marker>() }
@@ -146,7 +149,7 @@ private fun PlanContent(
             map.setOnPOIClickListener { poi ->
                 lastPoiAtMs = System.currentTimeMillis()
                 val coord = poi.coordinate
-                if (coord != null) poiCandidate = (poi.name ?: "?") to coord
+                if (coord != null) poiCandidate = (poi.name?.takeIf { it.isNotBlank() } ?: unknownName) to coord
             }
             // F-PLAN-03/04：空白点选；600ms 内 POI 已命中则让位（双回调同触以 POI 为准）
             map.setOnMapClickListener { latLng ->
@@ -177,6 +180,10 @@ private fun PlanContent(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            // N-19：从上一页返回时 Activity 并未 pause，直接 onDestroy() 会让 AMap
+            // 内部 GL 资源与监听器释放顺序错乱（地图黑屏/瓦片不刷新/偶发崩溃）。
+            // 必须保证 pause → destroy 的调用顺序（与 MainActivity 的修法一致）。
+            mapView.onPause()
             mapView.onDestroy()
         }
     }
@@ -367,6 +374,9 @@ private fun PlanContent(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
+                // N-11：targetSdk 35 强制 edge-to-edge，状态栏会压住顶部的目标切换与搜索框
+                // （点击区域被系统栏抢走）。地图仍铺满全屏，只把这个浮层下移。
+                .statusBarsPadding()
                 .padding(16.dp),
         ) {
             Surface(

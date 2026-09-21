@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,6 +39,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -104,9 +110,13 @@ fun RecordingScreen(
     // 这样旋转/Activity 重建后确认弹窗仍在，不会出现「state=Finished 但界面空白」的死界面。
     val draftToConfirm = pendingDraft ?: (state as? SessionState.Finished)?.draft
 
-    // F-REC-18：记录过程屏幕常亮
-    DisposableEffect(Unit) {
-        (context as? Activity)?.window?.addFlags(FLAG_KEEP_SCREEN_ON)
+    // F-REC-18：记录过程屏幕常亮。
+    // N-26：此前无条件 addFlags，设置页的「屏幕常亮」开关（P0）完全不生效。
+    // 改为跟随设置；设置变更时即时生效（关掉立刻允许熄屏，省电）。
+    val keepScreenOn by session.keepScreenOn.collectAsStateWithLifecycle()
+    DisposableEffect(keepScreenOn) {
+        val window = (context as? Activity)?.window
+        if (keepScreenOn) window?.addFlags(FLAG_KEEP_SCREEN_ON) else window?.clearFlags(FLAG_KEEP_SCREEN_ON)
         onDispose {
             (context as? Activity)?.window?.clearFlags(FLAG_KEEP_SCREEN_ON)
         }
@@ -149,6 +159,10 @@ fun RecordingScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            // N-19：从详情页/其他页返回时 Activity 并未 pause，直接 onDestroy() 会让
+            // AMap 内部 GL 资源与监听器释放顺序错乱（地图黑屏/瓦片不刷新/偶发崩溃）。
+            // 必须保证 pause → destroy 的调用顺序（与 MainActivity 的修法一致）。
+            mapView.onPause()
             mapView.onDestroy()
         }
     }
@@ -237,6 +251,10 @@ fun RecordingScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.background)
+                // N-11：targetSdk 35 起强制 edge-to-edge，导航栏会盖住底部内容。这里的
+                // 停止按钮是 1.5 秒长按手势，被遮挡后用户无法结束记录。背景延伸到导航栏、
+                // 内容上移。
+                .navigationBarsPadding()
                 .padding(16.dp)
                 .graphicsLayer { alpha = if (active?.isRecording != false) 1f else 0.45f }, // F-REC-17
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -318,6 +336,7 @@ fun RecordingScreen(
                 // F-REC-06：停止需长按 1.5 秒，避免误触
                 val errorColor = MaterialTheme.colorScheme.error
                 val onErrorColor = MaterialTheme.colorScheme.onError
+                val stopLabel = stringResource(CoreR.string.rec_action_stop)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -325,6 +344,16 @@ fun RecordingScreen(
                         .heightIn(min = 52.dp)
                         .clip(RoundedCornerShape(20.dp))
                         .background(errorColor)
+                        // L-15：停止只有「长按 1.5 秒」一条路径，TalkBack 用户完全无法触发。
+                        // 补一个无障碍侧的等价动作（双击即停止），触摸行为保持不变。
+                        .semantics {
+                            role = Role.Button
+                            contentDescription = stopLabel
+                            onClick {
+                                scope.launch { pendingDraft = session.stop() }
+                                true
+                            }
+                        }
                         .pointerInput(Unit) {
                             awaitEachGesture {
                                 awaitFirstDown(requireUnconsumed = false)

@@ -114,6 +114,9 @@ private fun userError(resId: Int, vararg args: Any?): Nothing = throw UserMessag
  * ②首页地图（P-02 雏形：地图 + 开始记录）；③记录页切换（session 状态驱动）。
  * 导航宿主在 M1 后续按 DEV §5.4 落地。
  */
+/** N-29：首页「再按一次退出」的确认窗口 */
+private const val EXIT_CONFIRM_WINDOW_MS = 2_000L
+
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
@@ -235,6 +238,12 @@ private fun Root(
     // 而进程被杀后由 Bundle 恢复 true 又会绕过同意直接调用隐私 API。
     LaunchedEffect(Unit) {
         agreed = settingsRepository.settings.first().privacyAgreed
+        // N-01：PrivacyConsent.agreed 是**进程内内存态**，冷启动必然复位为 false。
+        // 而 markAgreed() 只在 PrivacyGate.onAgree 里调用——一旦持久化同意已为 true，
+        // PrivacyGate 不再组合，它就永远不会被调用，之后任何定位 SDK 初始化
+        // （AmapLocationSource.newClient）都会在 assertAgreed() 的 check() 处抛
+        // IllegalStateException。因此必须把持久化态同步回内存态。
+        if (agreed == true) com.gohiking.core.location.PrivacyConsent.markAgreed()
     }
 
     // H-02：单位/配速显示设置此前从不生效（AppSettings 三项除备份序列化外零读取点），
@@ -377,6 +386,11 @@ private fun Root(
         return
     }
 
+    // N-29：C-04 补上了子页面的返回分发，但根页面分支只做 moveTaskToBack——
+    // 用户在首页反复按返回键只会一次次退到后台，永远不会退出应用，与平台惯例不符。
+    // 这里改成「2 秒内连按两次才真正退出」。
+    var lastBackPressAtMs by remember { mutableStateOf(0L) }
+
     fun goBack() {
         when {
             openTripId != null -> openTripId = null
@@ -385,7 +399,15 @@ private fun Root(
             showPhotoMap -> showPhotoMap = false
             showSettings -> showSettings = false
             showHistory -> showHistory = false
-            else -> (context as? Activity)?.moveTaskToBack(true)
+            else -> {
+                val now = System.currentTimeMillis()
+                if (now - lastBackPressAtMs < EXIT_CONFIRM_WINDOW_MS) {
+                    (context as? Activity)?.finish()
+                } else {
+                    lastBackPressAtMs = now
+                    (context as? Activity)?.moveTaskToBack(true)
+                }
+            }
         }
     }
 
@@ -580,7 +602,7 @@ private fun Root(
     ioDoneMsg?.let { n ->
         AlertDialog(
             onDismissRequest = { ioDoneMsg = null },
-            title = { Text(stringResource(CoreR.string.io_working)) },
+            title = { Text(stringResource(CoreR.string.io_done_title)) },
             text = { Text(stringResource(CoreR.string.io_done, n)) },
             confirmButton = {
                 TextButton(onClick = { ioDoneMsg = null }) { Text(stringResource(CoreR.string.common_action_confirm)) }
@@ -866,6 +888,11 @@ private fun MapVerifyScreen(
                         add(Manifest.permission.ACCESS_FINE_LOCATION)
                         add(Manifest.permission.ACCESS_COARSE_LOCATION)
                         if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+                        // N-28：API 29+ 起 ACTIVITY_RECOGNITION 是运行时权限，而清单声明了它
+                        // 却从未申请。未授权时 SensorManager 的 registerListener **静默无效**
+                        // （不抛异常），而 getDefaultSensor 仍返回非 null —— 计步源会被「选中」
+                        // 却一个步数都收不到，比不走降级路径更糟。
+                        if (Build.VERSION.SDK_INT >= 29) add(Manifest.permission.ACTIVITY_RECOGNITION)
                     }.toTypedArray()
                     permissionLauncher.launch(permissions)
                 }) { Text(stringResource(CoreR.string.common_action_confirm)) }

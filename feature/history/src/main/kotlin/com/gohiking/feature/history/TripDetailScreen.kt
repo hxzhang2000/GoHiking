@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -49,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.flow.collect // N-56：收集一次性删除事件
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import coil3.compose.AsyncImage
@@ -124,13 +126,17 @@ private fun TripDetailContent(
     var showNote by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
 
-    LaunchedEffect(state.deleted) {
-        if (state.deleted) onDeleted()
+    // N-56：删除完成是一次性事件，不是粘性状态 —— 用 SharedFlow 收集，
+    // 复用同一个 ViewModel 实例（同一个 tripId 再次进入）时不会被历史事件重放触发秒退。
+    LaunchedEffect(viewModel) {
+        viewModel.deletedEvent.collect { onDeleted() }
     }
 
     Column(
         modifier = modifier
             .fillMaxSize()
+            // N-11：targetSdk 35 强制 edge-to-edge，状态栏会压住顶部的返回按钮与标题
+            .statusBarsPadding()
             .background(MaterialTheme.colorScheme.background),
     ) {
         // F-HIS-20 顶部：返回 + 名称 + 日期（重命名/改备注后 trip Flow 自动刷新）
@@ -141,7 +147,11 @@ private fun TripDetailContent(
                 .padding(horizontal = 4.dp, vertical = 8.dp),
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                // L-15：TalkBack 需要一个可读名称
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(CoreR.string.common_action_back),
+                )
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -157,8 +167,11 @@ private fun TripDetailContent(
                     )
                 }
             }
-            IconButton(onClick = { showRename = true }) {
-                Icon(Icons.Filled.Edit, contentDescription = stringResource(CoreR.string.hist_detail_action_rename))
+            // N-33：记录不存在时重命名无意义
+            if (state.trip != null) {
+                IconButton(onClick = { showRename = true }) {
+                    Icon(Icons.Filled.Edit, contentDescription = stringResource(CoreR.string.hist_detail_action_rename))
+                }
             }
         }
 
@@ -170,7 +183,28 @@ private fun TripDetailContent(
             )
             return@Column
         }
-        val trip = state.trip ?: return@Column
+
+        // N-33：行程不存在（例如被删除后从通知/深链重新进入）时，原实现是
+        // `val trip = state.trip ?: return@Column`——标题栏下方完全空白，用户既看不到
+        // 原因也没有出路，只能靠系统返回键。这里补一个明确的终态 + 返回按钮。
+        if (state.trip == null) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = stringResource(CoreR.string.hist_detail_not_found),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedButton(onClick = onBack) {
+                    Text(text = stringResource(CoreR.string.hist_detail_back))
+                }
+            }
+            return@Column
+        }
+        val trip = state.trip!!
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -456,6 +490,10 @@ private fun TripMap(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            // N-19：从上一页返回时 Activity 并未 pause，直接 onDestroy() 会让 AMap
+            // 内部 GL 资源与监听器释放顺序错乱（地图黑屏/瓦片不刷新/偶发崩溃）。
+            // 必须保证 pause → destroy 的调用顺序（与 MainActivity 的修法一致）。
+            mapView.onPause()
             mapView.onDestroy()
         }
     }

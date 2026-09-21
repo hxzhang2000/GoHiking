@@ -9,7 +9,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+// L-16：LazyListScope 的 items(count) 是成员方法，而带 key 的 items(List) 是扩展 —— 必须导入
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -76,6 +79,8 @@ private fun HistoryListContent(
     Column(
         modifier = modifier
             .fillMaxSize()
+            // N-11：targetSdk 35 强制 edge-to-edge，状态栏会压住顶部的返回按钮与标题
+            .statusBarsPadding()
             .background(MaterialTheme.colorScheme.background),
     ) {
         Row(
@@ -85,7 +90,11 @@ private fun HistoryListContent(
                 .padding(horizontal = 4.dp, vertical = 8.dp),
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                // L-15：contentDescription = null 会让 TalkBack 只念「按钮」，无法操作
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(CoreR.string.common_action_back),
+                )
             }
             Text(
                 text = stringResource(CoreR.string.common_tab_history),
@@ -138,8 +147,14 @@ private fun HistoryListContent(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
+                // L-14：原实现无论有没有搜索词都显示「还没有已完成的行程」，
+                // 搜了个不存在的名字时这句是在骗人
                 Text(
-                    text = stringResource(CoreR.string.history_empty),
+                    text = if (state.query.isBlank()) {
+                        stringResource(CoreR.string.history_empty)
+                    } else {
+                        stringResource(CoreR.string.history_no_result, state.query)
+                    },
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -171,8 +186,18 @@ private fun HistoryListContent(
             ),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            items(grouped.size) { i ->
-                when (val item = grouped[i]) {
+            // L-16：无 key 时列表无法差分，删除一条后行内状态（展开/选中）会错位；
+            // 同项目 PlanListScreen 已有正确先例（items(items, key = { it.id })）
+            items(
+                items = grouped,
+                key = { item ->
+                    when (item) {
+                        is ListItem.Header -> "month:${item.month}"
+                        is ListItem.Trip -> "trip:${item.trip.id}"
+                    }
+                },
+            ) { item ->
+                when (item) {
                     is ListItem.Header -> Text(
                         text = item.month,
                         style = MaterialTheme.typography.titleSmall,
@@ -229,7 +254,8 @@ private fun HistoryListContent(
     deleteTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text(stringResource(CoreR.string.common_tab_history)) },
+            // L-14：弹窗标题原本复用「记录」（底部 tab 名），语义完全不对
+            title = { Text(stringResource(CoreR.string.history_delete_title)) },
             text = { Text(stringResource(CoreR.string.history_delete_confirm, target.name)) },
             confirmButton = {
                 TextButton(

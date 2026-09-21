@@ -84,11 +84,30 @@ class MediaTripMatcherTest {
         assertTrue(hits.isEmpty())
     }
 
+    /**
+     * N-42：这条测试**一直是绿的**，但它只证明了 [MediaTripMatcher] 的兜底分支正确 ——
+     * 真机上这类照片根本到不了这里。真正的坑在 `MediaDao.inTimeRange`：
+     * SQL 是 `dateTakenMs BETWEEN ? AND ?`，而 `NULL BETWEEN a AND b` 求值为 NULL，
+     * 行直接被过滤，于是本分支成了永远走不到的死代码（截图 / 下载图 / 不写 EXIF 的相机
+     * 拍的照片永远关联不上）。DAO 已改为 `COALESCE(dateTakenMs, dateModifiedMs)`。
+     *
+     * ⚠ 本测试**无法**守住那个回归：它是纯函数测试，碰不到 SQL。若有人把 DAO 改回去，
+     * 这里依然全绿 —— 需要在真机/插桩测试里验证「无 DATE_TAKEN 的照片能被关联」。
+     */
     @Test
     fun `photo without dateTaken falls back to dateModified`() {
         val fallback = photo(1, dateTaken = null).copy(dateModifiedMs = t0)
         val hits = MediaTripMatcher.match(track, listOf(fallback), t0, tEnd)
         assertEquals(listOf(0), hits)
+    }
+
+    /** 与上条配套：兜底时间在窗口外时同样要被拒绝（兜底不是「无条件命中」） */
+    @Test
+    fun `photo without dateTaken outside window is still rejected`() {
+        val tooEarly = photo(1, dateTaken = null).copy(dateModifiedMs = t0 - MediaTripMatcher.WINDOW_MS - 1)
+        val tooLate = photo(2, dateTaken = null).copy(dateModifiedMs = tEnd + MediaTripMatcher.WINDOW_MS + 1)
+        val hits = MediaTripMatcher.match(track, listOf(tooEarly, tooLate), t0, tEnd)
+        assertTrue(hits.isEmpty())
     }
 
     @Test

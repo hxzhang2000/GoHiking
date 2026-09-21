@@ -51,6 +51,12 @@ class TtsSpeaker(context: Context) {
         val locale = appContext.resources.configuration.locales[0]
         val result = engine.setLanguage(locale)
         languageSet = result !in setOf(TextToSpeech.LANG_MISSING_DATA, TextToSpeech.LANG_NOT_SUPPORTED)
+        // N-31：语言不可用时语音根本不会开始，UtteranceProgressListener 也就不会有任何回调
+        // → 音频焦点永久被占用（用户的后台音乐/导航被持续压声）。这里直接归还焦点并返回。
+        if (!languageSet) {
+            audioManager?.abandonAudioFocusRequest(focusRequest)
+            return
+        }
         val id = "gohiking-alert-${System.currentTimeMillis()}"
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) = Unit
@@ -62,8 +68,17 @@ class TtsSpeaker(context: Context) {
             override fun onError(utteranceId: String?) {
                 audioManager?.abandonAudioFocusRequest(focusRequest)
             }
+
+            // N-31：QUEUE_FLUSH 会顶掉上一条未播完的语音，那条语音的终态回调是 onStop。
+            // 不覆写它 → 被顶掉的那次永远不归还焦点。
+            override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                audioManager?.abandonAudioFocusRequest(focusRequest)
+            }
         })
-        engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, id)
+        // N-31：speak 返回 ERROR 时同样不会有终态回调，必须就地归还焦点
+        if (engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, id) == TextToSpeech.ERROR) {
+            audioManager?.abandonAudioFocusRequest(focusRequest)
+        }
     }
 
     fun shutdown() {

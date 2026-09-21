@@ -10,7 +10,15 @@ import androidx.room.PrimaryKey
  * 枚举列一律存 TEXT（String），domain 层映射见 DEV §3.3；
  * [status] 只取 RECORDING / PAUSED / FINISHED（DEV 决策 13），只有 FINISHED 进列表与统计。
  */
-@Entity(tableName = "trip")
+@Entity(
+    tableName = "trip",
+    // N-34：列表/统计/查重三条查询此前全表扫描，见 MIGRATION_2_3
+    indices = [
+        Index(value = ["startTime"]),
+        Index(value = ["status", "startTime"]),
+        Index(value = ["name", "startTime"]),
+    ],
+)
 data class TripEntity(
     @PrimaryKey val id: String, // UUID
     val name: String,
