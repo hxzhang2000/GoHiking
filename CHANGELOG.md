@@ -27,6 +27,10 @@
 - 高程缓存精确回配（文档审阅 D3）：配对逻辑抽纯函数 `ElevationCacheMatcher`，消除 `IN(lat) AND IN(lng)` 笛卡尔积造成的跨点错配，补 4 条单测（D-28）
 - `AltitudeFuser` 接口化 + 测试替身（文档审阅 H-3 / D10）：`AltitudeFusion` 接口与 Real/Fake 工厂，`RecordingSession` 每场新建实例（D-29）
 
+### Changed
+- 计划线路爬升标注「估算」（文档审阅 X8 / F-PLAN-46）：原型 P-04 推荐列表、P-06 保存页汇总、P-07 计划线路列表三处的爬升值补 `(估算)` / `(est.)`；P-11 记录详情页为实测值，保持原样
+- `avgPaceSecPerKm` 明确为派生字段（文档审阅 X7）：DEV §4.12 注明其由 `movingDurationSec` 与 `distanceM` 派生、随汇总统计落库、`< 50 m` 写 `null`（D-30）
+
 ### Fixed
 - 《代码审查报告-2026-09-20》修复落地：保存失败不再留白屏（C-01）、崩溃恢复真正接线（C-02）、定位 SDK 隐私合规 Gate（C-03）、系统返回键分发（C-04）
 - 导入冲突 ASK 决策真正生效、单位/体重设置不再是死设置（H-01/H-02）、定位降级可恢复（H-03）、计步监听配对注销（H-04）

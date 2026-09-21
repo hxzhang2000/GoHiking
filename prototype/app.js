@@ -79,7 +79,7 @@ var STR = {
     p03_tip_poi:'兴趣点', p03_tip_bus:'公交线路（不支持）', p03_tip_kw:'关键词',
 
     p04_t:'推荐线路', p04_a:'方案 A · 最优', p04_b:'方案 B · 最短', p04_c:'方案 C · 缓坡',
-    p04_est:'预计', p04_asc:'爬升', p04_dist:'距离', p04_diff:'难度',
+    p04_est:'预计', p04_asc:'爬升', p04_dist:'距离', p04_diff:'难度', p04_est_tag:'(估算)',
     p04_re:'重新规划', p04_manual:'手动打点', p04_choose:'选择此线路',
     p04_src:'高德步行路径规划 + 自建海拔爬升评估（高德无「登山」模式）',
 
@@ -172,7 +172,7 @@ var STR = {
     p03_tip_poi:'Place', p03_tip_bus:'Bus line (unsupported)', p03_tip_kw:'Keyword',
 
     p04_t:'Suggested routes', p04_a:'Option A · Best', p04_b:'Option B · Shortest', p04_c:'Option C · Gentle',
-    p04_est:'Est.', p04_asc:'Ascent', p04_dist:'Distance', p04_diff:'Difficulty',
+    p04_est:'Est.', p04_asc:'Ascent', p04_dist:'Distance', p04_diff:'Difficulty', p04_est_tag:'(est.)',
     p04_re:'Re-plan', p04_manual:'Add points manually', p04_choose:'Use this route',
     p04_src:'AMap walking routing + our own ascent model (AMap has no hiking mode)',
 
@@ -599,7 +599,8 @@ pages.p04 = function () {
         '<div class="kv" style="display:flex;gap:14px;font-size:12px;color:var(--text-2);margin-top:6px">' +
           '<span>' + t('p04_dist') + ' <b style="color:var(--text)">' + fmtDist(c.d) + '</b></span>' +
           '<span>' + t('p04_est') + ' <b style="color:var(--text)">' + fmtDurShort(c.m * 60) + '</b></span>' +
-          '<span>' + t('p04_asc') + ' <b style="color:var(--text)">' + fmtAltN(c.a) + ' ' + altUnit() + '</b></span>' +
+          '<span>' + t('p04_asc') + ' <b style="color:var(--text)">' + fmtAltN(c.a) + ' ' + altUnit() + '</b>' +
+            ' <span style="color:var(--text-2)">' + t('p04_est_tag') + '</span></span>' +
         '</div></div>' +
         (on ? '<span style="color:var(--primary)">' + ic('check') + '</span>' : '') +
         '</div></div>';
@@ -660,9 +661,11 @@ pages.p06 = function () {
       '<div class="sec-title" style="padding:16px 2px 6px">' + t('p06_sum') + '</div>' +
       '<div class="card" style="margin:0">' +
         '<div class="rowline"><div class="lb"><div class="t">' + t('p11_out') + '</div></div>' +
-          '<div class="vl">4.31 km · ' + fmtAltN(625) + ' ' + altUnit() + ' · 1h16m</div></div>' +
+          '<div class="vl">4.31 km · ' + fmtAltN(625) + ' ' + altUnit() + ' ' +
+          '<span style="color:var(--text-2)">' + t('p04_est_tag') + '</span> · 1h16m</div></div>' +
         '<div class="rowline"><div class="lb"><div class="t">' + t('p11_ret') + '</div></div>' +
-          '<div class="vl">4.05 km · ' + fmtAltN(600) + ' ' + altUnit() + ' · 1h10m</div></div>' +
+          '<div class="vl">4.05 km · ' + fmtAltN(600) + ' ' + altUnit() + ' ' +
+          '<span style="color:var(--text-2)">' + t('p04_est_tag') + '</span> · 1h10m</div></div>' +
         '<div class="rowline"><div class="lb"><div class="t">' + t('p04_diff') + '</div></div>' +
           '<div class="vl"><span class="tag g">' + dif('MODERATE') + '</span></div></div>' +
       '</div>' +
@@ -694,7 +697,8 @@ pages.p07 = function () {
         '<div class="main"><div class="nm">' + esc(nm(r)) + '</div>' +
         '<div class="sub">' + r.created + '</div>' +
         '<div class="kv"><span>' + t('p04_dist') + ' <b>' + fmtDist(r.dist) + '</b></span>' +
-        '<span>' + t('p04_asc') + ' <b>' + fmtAltN(r.asc) + ' ' + altUnit() + '</b></span>' +
+        '<span>' + t('p04_asc') + ' <b>' + fmtAltN(r.asc) + ' ' + altUnit() + '</b>' +
+          ' <span style="color:var(--text-2)">' + t('p04_est_tag') + '</span></span>' +
         '<span>' + t('p04_diff') + ' <b>' + dif(r.diff) + '</b></span></div></div>' +
         ic('chevR', 'chev') + '</div>';
     }).join('') + '</div>' +
