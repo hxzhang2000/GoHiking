@@ -1589,8 +1589,10 @@ android {
         applicationId = "com.gohiking.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"          // 与 PRD 7.3 的 generator.versionName 一致
+        // ↓ 版本唯一事实源 = gradle.properties（D-19），此处只读取、不硬编码
+        versionCode = (project.findProperty("gohiking.versionCode") as String?)?.toInt() ?: 1
+        versionName = (project.findProperty("gohiking.versionName") as String?) ?: "0.5.0"
+        // 导出 JSON 的 generator.versionName / versionCode 取 BuildConfig（运行时同源于此，见 §4.10）
         // ⚠ 冲突提示：限定 locale 会连带影响伪本地化，而 F-I18N-40 明确要求用 en-XA 检查硬编码文案。
         //    必须实测「限定 locale 后，en-XA 伪语言在 debug 变体下是否仍可切换」，否则本行需改为
         //    「仅 release 限定、debug 放开」。另：AGP 新版本已用 androidResources.localeFilters 取代本 API，
