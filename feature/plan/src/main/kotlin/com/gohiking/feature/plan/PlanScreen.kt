@@ -1,21 +1,32 @@
 package com.gohiking.feature.plan
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
@@ -36,10 +47,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -59,6 +74,7 @@ import com.amap.api.maps.model.Polyline
 import com.amap.api.maps.model.PolylineOptions
 import com.gohiking.core.map.overlay.PolylineArrowTexture
 import com.gohiking.core.common.format.Formatters
+import com.gohiking.core.designsystem.theme.GhColors
 import com.gohiking.core.database.dao.PlannedRouteDao
 import com.gohiking.core.elevation.ElevationRepository
 import com.gohiking.core.location.LocationProvider
@@ -379,28 +395,88 @@ private fun PlanContent(
                 .statusBarsPadding()
                 .padding(16.dp),
         ) {
+            // ---- P-03 appbar：返回 + 标题 + 起终点互换 ----
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(GhColors.Surface)
+                        .clickable(onClick = onBack),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(CoreR.string.plan_back),
+                        tint = GhColors.TextPrimary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = stringResource(CoreR.string.plan_select_title),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GhColors.TextPrimary,
+                    modifier = Modifier.weight(1f),
+                )
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(GhColors.Surface)
+                        .clickable(enabled = state.chosenRouteId == null) { viewModel.swapPoints() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.SwapHoriz,
+                        contentDescription = stringResource(CoreR.string.plan_swap),
+                        tint = GhColors.TextPrimary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
             Surface(
-                tonalElevation = 4.dp,
                 shadowElevation = 2.dp,
                 shape = RoundedCornerShape(12.dp),
+                color = GhColors.Surface,
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = state.activeTarget == SelectTarget.START,
-                            onClick = { viewModel.setActiveTarget(SelectTarget.START) },
-                            label = {
-                                Text("$startLabel: ${state.start?.name ?: startUnset}")
-                            },
-                        )
-                        FilterChip(
-                            selected = state.activeTarget == SelectTarget.END,
-                            onClick = { viewModel.setActiveTarget(SelectTarget.END) },
-                            label = {
-                                Text("$endLabel: ${state.end?.name ?: endUnset}")
-                            },
-                        )
+                Column(modifier = Modifier.padding(10.dp)) {
+                    // 起点终点 seg（原型 pickbar 的 seg 控件）
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(GhColors.Surface2)
+                            .padding(3.dp),
+                    ) {
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            SegButton(
+                                label = startLabel,
+                                selected = state.activeTarget == SelectTarget.START,
+                                onClick = { viewModel.setActiveTarget(SelectTarget.START) },
+                                modifier = Modifier.weight(1f),
+                            )
+                            SegButton(
+                                label = endLabel,
+                                selected = state.activeTarget == SelectTarget.END,
+                                onClick = { viewModel.setActiveTarget(SelectTarget.END) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                     }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = (if (state.activeTarget == SelectTarget.START) startLabel else endLabel) + " · " +
+                            (
+                                (if (state.activeTarget == SelectTarget.START) state.start else state.end)?.name
+                                    ?: stringResource(CoreR.string.plan_pick_hint)
+                                ),
+                        fontSize = 12.sp,
+                        color = GhColors.TextSecondary,
+                        maxLines = 1,
+                    )
                     OutlinedTextField(
                         value = query,
                         onValueChange = {
@@ -409,6 +485,7 @@ private fun PlanContent(
                         },
                         placeholder = { Text(stringResource(CoreR.string.plan_search_hint)) },
                         singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
                         trailingIcon = {
                             if (state.searching) {
                                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -539,56 +616,134 @@ private fun PlanContent(
             }
         }
 
-        // 底部：当前位置为起点（F-PLAN-07）+ 重选 + 返回
+        // 底部：选点 pickbar（P-03）/ 候选列表（P-04）/ 手动打点 pickbar（P-05）
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (state.planning) {
+            if (state.manualMode) {
+                // ---- P-05：手动打点 pickbar（提示/计数/直线-吸附/撤销-生成）----
                 Surface(
-                    tonalElevation = 4.dp,
                     shadowElevation = 2.dp,
                     shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(12.dp),
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Text(
-                            stringResource(CoreR.string.plan_planning),
-                            modifier = Modifier.padding(start = 8.dp),
-                        )
-                    }
-                }
-            } else if (state.planFailed) {
-                Surface(
-                    tonalElevation = 4.dp,
-                    shadowElevation = 2.dp,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
+                    color = GhColors.Surface,
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
-                        Text(stringResource(CoreR.string.plan_route_failed))
-                        // F-PLAN-20：自动规划失败 → 引导手动打点兜底
-                        Button(
-                            onClick = { viewModel.enterManualMode() },
-                            modifier = Modifier.padding(top = 8.dp),
+                        Text(
+                            stringResource(CoreR.string.plan_manual_hint),
+                            fontSize = 12.sp,
+                            color = GhColors.TextSecondary,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(CoreR.string.plan_waypoint_count, state.manualWaypoints.size),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(GhColors.Surface2)
+                                .padding(3.dp),
                         ) {
-                            Text(stringResource(CoreR.string.plan_manual_entry))
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                SegButton(
+                                    label = stringResource(CoreR.string.plan_manual_connect_straight),
+                                    selected = state.manualConnect == ManualConnect.STRAIGHT,
+                                    onClick = { viewModel.setManualConnect(ManualConnect.STRAIGHT) },
+                                    modifier = Modifier.weight(1f),
+                                )
+                                SegButton(
+                                    label = stringResource(CoreR.string.plan_manual_connect_snap),
+                                    selected = state.manualConnect == ManualConnect.SNAP,
+                                    onClick = { viewModel.setManualConnect(ManualConnect.SNAP) },
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
+                        if (state.manualSnapping) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    stringResource(CoreR.string.plan_manual_connect_snap),
+                                    fontSize = 12.sp,
+                                    color = GhColors.TextSecondary,
+                                )
+                            }
+                        }
+                        val mm = state.manualMetrics
+                        if (mm != null) {
+                            // F-PLAN-29：距离/耗时即时，爬升「估算」（F-PLAN-46）后台补齐
+                            val ascent = mm.ascentM // 跨模块属性不能 smart cast，先取局部值
+                            Text(
+                                text = Formatters.distanceText(mm.distanceM) +
+                                    " · " + Formatters.durationText(mm.estimatedDurationSec),
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                            Text(
+                                text = if (ascent != null) {
+                                    stringResource(CoreR.string.plan_estimated_ascent, ascent.toInt())
+                                } else {
+                                    stringResource(CoreR.string.common_stat_unknown)
+                                } + " · " + (state.manualDifficulty?.let { difficultyLabel(it) }
+                                    ?: stringResource(CoreR.string.common_stat_unknown)),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        if (state.manualLimitHit) {
+                            Text(
+                                stringResource(CoreR.string.plan_manual_waypoint_limit),
+                                color = GhColors.Danger,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { viewModel.undoWaypoint() },
+                                enabled = state.manualWaypoints.isNotEmpty(), // F-PLAN-25
+                            ) {
+                                Text(stringResource(CoreR.string.plan_manual_undo))
+                            }
+                            TextButton(
+                                onClick = { viewModel.clearManual() },
+                                enabled = state.manualWaypoints.isNotEmpty(),
+                            ) {
+                                Text(stringResource(CoreR.string.plan_manual_clear))
+                            }
+                            Button(
+                                onClick = { showSaveDialog = true }, // F-PLAN-40 命名保存
+                                enabled = state.manualSegments.isNotEmpty() && state.manualSavedRouteId == null,
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text(
+                                    stringResource(
+                                        if (state.manualSavedRouteId != null) CoreR.string.plan_saved
+                                        else CoreR.string.plan_manual_save,
+                                    ),
+                                )
+                            }
+                        }
+                        TextButton(
+                            onClick = { viewModel.exitManualMode() },
+                            modifier = Modifier.align(Alignment.CenterHorizontally),
+                        ) {
+                            Text(stringResource(CoreR.string.plan_back))
                         }
                     }
                 }
-            }
-            if (state.candidates.isNotEmpty()) {
-                // F-PLAN-12/14：候选卡片列表（点击高亮 / 选择落库）
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth(),
+            } else if (state.candidates.isNotEmpty()) {
+                // ---- P-04：候选线路纵向列表（点击选定，选中卡蓝描边+对勾）----
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.heightIn(max = 250.dp),
                 ) {
                     items(state.candidates.size) { i ->
                         CandidateCard(
@@ -601,15 +756,33 @@ private fun PlanContent(
                         )
                     }
                 }
+                // P-04 操作区：手动打点 / 选择此线路
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedButton(onClick = { viewModel.enterManualMode() }) {
+                        Text(stringResource(CoreR.string.plan_manual_entry))
+                    }
+                    Button(
+                        onClick = {
+                            viewModel.chooseCandidate(
+                                if (state.chosenIndex >= 0) state.chosenIndex else state.highlightIndex.coerceAtLeast(0),
+                            )
+                        },
+                        enabled = !state.planning && state.chosenRouteId == null,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(stringResource(CoreR.string.plan_choose_this))
+                    }
+                }
                 if (state.confirming) {
                     // F-PLAN-34/38：确认面板——原路返回开关 + 全程汇总
                     Surface(
-                        tonalElevation = 4.dp,
                         shadowElevation = 2.dp,
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
+                        color = GhColors.Surface,
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Row(
@@ -659,72 +832,83 @@ private fun PlanContent(
                         }
                     }
                 }
-            } else if (state.start != null && state.end != null) {
+            } else {
+                // ---- P-03：选点 pickbar ----
+                if (state.planning) {
+                    Surface(
+                        shadowElevation = 2.dp,
+                        shape = RoundedCornerShape(12.dp),
+                        color = GhColors.Surface,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(12.dp)) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Text(stringResource(CoreR.string.plan_planning), modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
+                } else if (state.planFailed) {
+                    Surface(
+                        shadowElevation = 2.dp,
+                        shape = RoundedCornerShape(12.dp),
+                        color = GhColors.Surface,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(stringResource(CoreR.string.plan_route_failed))
+                            // F-PLAN-20：自动规划失败 → 引导手动打点兜底
+                            Button(
+                                onClick = { viewModel.enterManualMode() },
+                                modifier = Modifier.padding(top = 8.dp),
+                            ) {
+                                Text(stringResource(CoreR.string.plan_manual_entry))
+                            }
+                        }
+                    }
+                }
+                if (state.start != null && state.end != null) {
+                    Surface(
+                        shadowElevation = 2.dp,
+                        shape = RoundedCornerShape(12.dp),
+                        color = GhColors.Surface,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(CoreR.string.plan_both_set), modifier = Modifier.padding(12.dp))
+                    }
+                }
+                // pickbar：当前位置 / 重新规划·重置 / 下一步（原型 P-03）
                 Surface(
-                    tonalElevation = 4.dp,
                     shadowElevation = 2.dp,
                     shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
+                    color = GhColors.Surface,
                 ) {
-                    Text(
-                        stringResource(CoreR.string.plan_both_set),
-                        modifier = Modifier.padding(12.dp),
-                    )
-                }
-            }
-            if (state.manualMode) {
-                // F-PLAN-25/27/40：手动模式操作组
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                ) {
-                    OutlinedButton(
-                        onClick = { viewModel.undoWaypoint() },
-                        enabled = state.manualWaypoints.isNotEmpty(), // F-PLAN-25
-                    ) {
-                        Text(stringResource(CoreR.string.plan_manual_undo))
-                    }
-                    OutlinedButton(
-                        onClick = { viewModel.clearManual() },
-                        enabled = state.manualWaypoints.isNotEmpty(),
-                    ) {
-                        Text(stringResource(CoreR.string.plan_manual_clear))
-                    }
-                    Button(
-                        onClick = { showSaveDialog = true }, // F-PLAN-40 命名保存
-                        enabled = state.manualSegments.isNotEmpty() && state.manualSavedRouteId == null,
-                    ) {
-                        Text(
-                            stringResource(
-                                if (state.manualSavedRouteId != null) CoreR.string.plan_saved
-                                else CoreR.string.plan_manual_save,
-                            ),
-                        )
-                    }
-                }
-                OutlinedButton(onClick = { viewModel.exitManualMode() }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                    Text(stringResource(CoreR.string.plan_back))
-                }
-            } else {
-                Button(
-                    onClick = { viewModel.useCurrentLocationAsStart() },
-                    enabled = !state.locating,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                ) {
-                    Text(stringResource(CoreR.string.plan_use_current))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                    OutlinedButton(
-                        onClick = { viewModel.replan() },
-                        enabled = state.start != null && state.end != null, // F-PLAN-16 重新规划
-                    ) {
-                        Text(stringResource(CoreR.string.plan_replan))
-                    }
-                    OutlinedButton(onClick = { viewModel.reset() }) {
-                        Text(stringResource(CoreR.string.plan_reset))
-                    }
-                    OutlinedButton(onClick = onBack) {
-                        Text(stringResource(CoreR.string.plan_back))
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        OutlinedButton(
+                            onClick = { viewModel.useCurrentLocationAsStart() },
+                            enabled = !state.locating,
+                        ) {
+                            Icon(Icons.Filled.MyLocation, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(CoreR.string.plan_use_current))
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { viewModel.replan() },
+                                enabled = state.start != null && state.end != null, // F-PLAN-16 重新规划
+                            ) {
+                                Text(stringResource(CoreR.string.plan_replan))
+                            }
+                            OutlinedButton(onClick = { viewModel.reset() }) {
+                                Text(stringResource(CoreR.string.plan_reset))
+                            }
+                            Button(
+                                onClick = { viewModel.replan() },
+                                enabled = state.start != null && state.end != null,
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text(stringResource(CoreR.string.plan_next))
+                            }
+                        }
                     }
                 }
             }
@@ -772,25 +956,73 @@ private fun PlanContent(
         )
     }
 
-    // F-PLAN-40：手动线路保存命名（默认取最后一个有名称的途经点）
+    // F-PLAN-40：保存命名 + 备注（P-06：线路名称 / 备注 / 全程汇总）
     if (showSaveDialog) {
         var nameInput by rememberSaveable { mutableStateOf(state.manualWaypoints.lastOrNull()?.name.orEmpty()) }
+        var noteInput by rememberSaveable { mutableStateOf("") }
+        val outbound = state.candidates.getOrNull(state.chosenIndex)
+        val mm = state.manualMetrics
+        val rp = state.returnPath
         AlertDialog(
             onDismissRequest = { showSaveDialog = false },
             title = { Text(stringResource(CoreR.string.plan_manual_save_dialog_title)) },
             text = {
-                OutlinedTextField(
-                    value = nameInput,
-                    onValueChange = { nameInput = it },
-                    placeholder = { Text(stringResource(CoreR.string.plan_manual_name_hint)) },
-                    singleLine = true,
-                )
+                Column {
+                    OutlinedTextField(
+                        value = nameInput,
+                        onValueChange = { nameInput = it },
+                        placeholder = { Text(stringResource(CoreR.string.plan_manual_name_hint)) },
+                        singleLine = true,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = noteInput,
+                        onValueChange = { noteInput = it },
+                        placeholder = { Text(stringResource(CoreR.string.plan_note_hint)) },
+                        minLines = 2,
+                    )
+                    if (!state.manualMode && outbound != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(CoreR.string.plan_leg_out) + "：" +
+                                Formatters.distanceText(outbound.path.distanceM.toDouble()) + " · " +
+                                Formatters.durationText(outbound.path.durationS),
+                            fontSize = 12.sp,
+                            color = GhColors.TextSecondary,
+                        )
+                        if (state.returnEnabled && rp != null) {
+                            Text(
+                                text = stringResource(CoreR.string.plan_leg_ret) + "：" +
+                                    Formatters.distanceText(rp.distanceM.toDouble()) + " · " +
+                                    Formatters.durationText(rp.durationS),
+                                fontSize = 12.sp,
+                                color = GhColors.TextSecondary,
+                            )
+                        }
+                        Text(
+                            text = stringResource(CoreR.string.plan_difficulty_label) + "：" +
+                                (outbound.difficulty?.let { difficultyLabel(it) }
+                                    ?: stringResource(CoreR.string.common_stat_unknown)),
+                            fontSize = 12.sp,
+                            color = GhColors.TextSecondary,
+                        )
+                    } else if (mm != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = Formatters.distanceText(mm.distanceM) +
+                                " · " + Formatters.durationText(mm.estimatedDurationSec),
+                            fontSize = 12.sp,
+                            color = GhColors.TextSecondary,
+                        )
+                    }
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
                     showSaveDialog = false
                     val name = nameInput.trim().ifEmpty { null }
-                    if (state.manualMode) viewModel.saveManual(name) else viewModel.savePlan(name)
+                    val note = noteInput.trim().ifEmpty { null }
+                    if (state.manualMode) viewModel.saveManual(name, note) else viewModel.savePlan(name, note)
                 }) { Text(stringResource(CoreR.string.common_action_confirm)) }
             },
             dismissButton = {
@@ -800,7 +1032,6 @@ private fun PlanContent(
             },
         )
     }
-
     // F-PLAN-27：删除指定途经点确认
     deleteWaypointIdx?.let { idx ->
         AlertDialog(
@@ -832,7 +1063,7 @@ private fun markerOptions(point: PlanPoint, fallbackTitle: String, hue: Float): 
 private fun mapCenterOf(mapView: MapView): LatLng? =
     mapView.map.cameraPosition?.target
 
-/** F-PLAN-12/14：单张候选卡片——距离/耗时恒显示，爬升/难度后台评估补齐（MA-1 首条 ≤3s 上屏） */
+/** F-PLAN-12/14：单张候选卡片（P-04 原型：白卡、选中蓝描边+对勾、难度标签、距离/耗时/爬升行） */
 @Composable
 private fun CandidateCard(
     candidate: RouteCandidate,
@@ -843,55 +1074,79 @@ private fun CandidateCard(
     onClick: () -> Unit,
 ) {
     Surface(
-        tonalElevation = 4.dp,
-        shadowElevation = 2.dp,
         shape = RoundedCornerShape(12.dp),
+        color = GhColors.Surface,
+        border = BorderStroke(2.dp, if (chosen) GhColors.Primary else Color.Transparent),
         modifier = Modifier
-            .widthIn(min = 168.dp)
+            .fillMaxWidth()
             .clickable(onClick = onClick),
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = Formatters.distanceText(candidate.path.distanceM.toDouble()),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = Formatters.durationText(candidate.path.durationS),
-                style = MaterialTheme.typography.bodySmall,
-            )
-            val ascent = candidate.metrics?.ascentM
-            Text(
-                // F-PLAN-46：高程为 DEM/远程估算，必须标注「估算」；不可用显示「—」，绝不编造
-                text = if (ascent != null) {
-                    stringResource(CoreR.string.plan_estimated_ascent, ascent.toInt())
-                } else {
-                    stringResource(CoreR.string.common_stat_unknown)
-                },
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Text(
-                text = candidate.difficulty?.let { difficultyLabel(it) }
-                    ?: stringResource(CoreR.string.common_stat_unknown),
-                style = MaterialTheme.typography.bodySmall,
-            )
+        Column(modifier = Modifier.padding(horizontal = 13.dp, vertical = 11.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = Formatters.distanceText(candidate.path.distanceM.toDouble()),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = GhColors.TextPrimary,
+                    modifier = Modifier.weight(1f),
+                )
+                candidate.difficulty?.let { d ->
+                    val hard = d == Difficulty.HARD || d == Difficulty.CHALLENGING
+                    Text(
+                        text = difficultyLabel(d),
+                        fontSize = 10.sp,
+                        color = if (hard) GhColors.TagOrangeFg else GhColors.TagGreenFg,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (hard) GhColors.TagOrangeBg else GhColors.TagGreenBg)
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
+                if (chosen && !saved) {
+                    Spacer(Modifier.width(8.dp))
+                    Icon(
+                        Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = GhColors.Primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Row {
+                Text(
+                    text = Formatters.durationText(candidate.path.durationS),
+                    fontSize = 12.sp,
+                    color = GhColors.TextSecondary,
+                )
+                Spacer(Modifier.width(12.dp))
+                val ascent = candidate.metrics?.ascentM
+                Text(
+                    // F-PLAN-46：高程为 DEM/远程估算，必须标注「估算」；不可用显示「—」，绝不编造
+                    text = if (ascent != null) {
+                        stringResource(CoreR.string.plan_estimated_ascent, ascent.toInt())
+                    } else {
+                        stringResource(CoreR.string.common_stat_unknown)
+                    },
+                    fontSize = 12.sp,
+                    color = GhColors.TextSecondary,
+                )
+            }
             if (saved) {
                 Text(
                     text = stringResource(CoreR.string.plan_saved),
-                    style = MaterialTheme.typography.labelLarge,
+                    fontSize = 12.sp,
+                    color = GhColors.Primary,
+                    modifier = Modifier.padding(top = 4.dp),
                 )
             } else if (chosen) {
-                Button(onClick = onSave) {
+                TextButton(onClick = onSave) {
                     Text(stringResource(CoreR.string.plan_save_plan))
-                }
-            } else {
-                Button(onClick = onSelect) {
-                    Text(stringResource(CoreR.string.plan_select_this))
                 }
             }
         }
     }
 }
-
 @Composable
 private fun difficultyLabel(d: Difficulty): String = when (d) {
     Difficulty.EASY -> stringResource(CoreR.string.diff_easy)
@@ -944,3 +1199,28 @@ private fun numberedMarkerBitmap(number: Int): android.graphics.Bitmap {
     return bitmap
 }
 
+/** P-03/P-05 原型 seg 控件（Surface2 底、选中白底浮起）。 */
+@Composable
+private fun SegButton(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (selected) GhColors.Surface else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            color = if (selected) GhColors.TextPrimary else GhColors.TextSecondary,
+            maxLines = 1,
+        )
+    }
+}

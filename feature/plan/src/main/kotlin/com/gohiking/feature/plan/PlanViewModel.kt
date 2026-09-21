@@ -194,6 +194,30 @@ class PlanViewModel(
         }
     }
 
+    /** P-03 原型 appbar「互换」：起终点对调；已有候选时清掉并按新方向重新规划 */
+    fun swapPoints() {
+        val s = _state.value
+        if (s.chosenRouteId != null) return // 已落库不互换
+        _state.update {
+            it.copy(
+                start = it.end,
+                end = it.start,
+                candidates = emptyList(),
+                highlightIndex = -1,
+                chosenIndex = -1,
+                confirming = false,
+                planFailed = false,
+                returnEnabled = true,
+                returnPath = null,
+                returnMetrics = null,
+                returnDifficulty = null,
+                returnPlanning = false,
+            )
+        }
+        val after = _state.value
+        if (after.start != null && after.end != null) planRoutes()
+    }
+
     fun setActiveTarget(target: SelectTarget) {
         _state.update { it.copy(activeTarget = target) }
     }
@@ -321,14 +345,14 @@ class PlanViewModel(
     }
 
     /** 确认态保存计划（F-PLAN-40 命名由 UI 对话框传入；OUTBOUND + RETURN 两段同事务落库） */
-    fun savePlan(name: String?) {
+    fun savePlan(name: String?, note: String? = null) {
         val s = _state.value
         val c = s.candidates.getOrNull(s.chosenIndex) ?: return
         if (s.chosenRouteId != null || s.saving) return // M-05：已落库或正在保存 → 忽略重复点击
         _state.update { it.copy(saving = true) }
         viewModelScope.launch {
             try {
-                savePlanInternal(c, s, name)
+                savePlanInternal(c, s, name, note)
             } finally {
                 _state.update { it.copy(saving = false) }
             }
@@ -339,6 +363,7 @@ class PlanViewModel(
         c: RouteCandidate,
         s: PlanUiState,
         name: String?,
+        note: String?,
     ) {
             val routeId = UUID.randomUUID().toString()
             val legs = ArrayList<PlannedLegEntity>(2)
@@ -384,7 +409,7 @@ class PlanViewModel(
             val route = PlannedRouteEntity(
                 id = routeId,
                 name = name ?: routeName(s),
-                note = null,
+                note = note?.trim()?.ifEmpty { null },
                 source = "AUTO",
                 createdAt = System.currentTimeMillis(),
                 totalDistanceM = legs.sumOf { it.distanceM },
@@ -473,7 +498,7 @@ class PlanViewModel(
     }
 
     /** 手动线路保存为计划（F-PLAN-29/40；source=MANUAL，C1 先单段 OUTBOUND） */
-    fun saveManual(name: String?) {
+    fun saveManual(name: String?, note: String? = null) {
         val s = _state.value
         val segs = s.manualSegments
         if (!s.manualMode || segs.isEmpty() || s.manualSavedRouteId != null) return
@@ -501,7 +526,7 @@ class PlanViewModel(
             val route = PlannedRouteEntity(
                 id = routeId,
                 name = name ?: manualRouteName(s),
-                note = null,
+                note = note?.trim()?.ifEmpty { null },
                 source = "MANUAL",
                 createdAt = System.currentTimeMillis(),
                 totalDistanceM = dist,

@@ -6,6 +6,9 @@
 
     <!-- 通用动作 common_action_* -->
     <string name="common_action_confirm">Confirm</string>
+    <string name="common_layer">Layers</string>
+    <string name="common_zoom_in">Zoom in</string>
+    <string name="common_locate">Locate</string>
     <string name="common_action_cancel">Cancel</string>
     <string name="common_action_save">Save</string>
     <string name="common_action_delete">Delete</string>
@@ -25,19 +28,36 @@
     <string name="common_privacy_decline">Exit</string>
 
     <!-- M0 地图验证页 -->
-    <string name="map_verify_badge">M0 map verification</string>
-    <string name="map_test_switch_language">Switch map language</string>
-    <string name="map_test_hint">Tap a base-map POI or any spot to test the POI-click conflict; use the button to test setMapLanguage.</string>
     <string name="map_test_log_poi">POI clicked: %1$s</string>
     <string name="map_test_log_map">Map clicked: %1$s, %2$s</string>
     <string name="map_test_log_both">⚠ onPOIClick + OnMapClickListener fired together</string>
-    <string name="map_test_log_language">Map language switched (re-tessellating tiles…)</string>
 
     <!-- 记录（M1 切片） -->
     <string name="home_start_record">Start hike</string>
+    <!-- P-01 权限引导页 / P-02 首页（prototype 对齐） -->
+    <string name="guide_title">Permissions needed</string>
+    <string name="guide_subtitle">GoHiking is local-first — all data stays on your device. Each permission is explained below and can be changed later in Settings.</string>
+    <string name="guide_loc">Precise location (GPS)</string>
+    <string name="guide_loc_desc">For recording the full track, altitude and distance. Denying this disables core features.</string>
+    <string name="guide_notif">Notifications</string>
+    <string name="guide_notif_desc">For the persistent recording notification you can see while the screen is off.</string>
+    <string name="guide_sensor">Activity recognition (steps)</string>
+    <string name="guide_sensor_desc">For step counting. If denied, falls back to an accelerometer algorithm.</string>
+    <string name="guide_media">Photos and videos</string>
+    <string name="guide_media_desc">To cluster photos on the map by where they were taken. Denying this disables Photo Map.</string>
+    <string name="guide_tag_need_location">Needs location first</string>
+    <string name="guide_allow">Allow</string>
+    <string name="guide_allowed">Allowed</string>
+    <string name="guide_allow_all">Allow all</string>
+    <string name="guide_later">Set later</string>
+    <string name="home_search_hint">Search mountain, trailhead, parking</string>
+    <string name="home_map_hint">Tap the map · Search a place · Tap a map label</string>
+    <string name="home_locating">Locating…</string>
     <string name="rec_need_permission">Location permission is required to record a track.</string>
     <string name="rec_status_recording">Recording</string>
     <string name="rec_status_paused">Paused</string>
+    <string name="rec_alert_tag">Alerts</string>
+    <string name="rec_stop_hold_short">Hold to stop</string>
     <string name="rec_stat_distance">Distance</string>
     <string name="rec_stat_duration">Moving time</string>
     <string name="rec_stat_climb">Ascent</string>
@@ -59,6 +79,8 @@
     <!-- 记录列表（P-10，M1 切片） -->
     <string name="history_search_hint">Search trip name</string>
     <string name="history_empty">No finished trips yet</string>
+    <string name="hist_stat_count">Trips</string>
+    <string name="history_empty_desc">Finish your first hike and it will show up here.</string>
     <!-- L-14：搜索无结果 ≠ 一条记录都没有，两者文案必须分开 -->
     <string name="history_no_result">No trips match "%1$s"</string>
     <string name="history_delete_title">Delete trip</string>
@@ -124,6 +146,16 @@
     <string name="plan_entry">Plan route</string>
     <string name="plan_back">Back</string>
     <string name="plan_search_hint">Search start or end place</string>
+    <string name="plan_select_title">Pick start / end</string>
+    <string name="plan_swap">Swap start &amp; end</string>
+    <string name="plan_next">Next</string>
+    <string name="plan_pick_hint">Tap the map, search, or a POI label to pick</string>
+    <string name="plan_waypoint_count">Added %1$d / 50</string>
+    <string name="plan_choose_this">Use this route</string>
+    <string name="plan_note_hint">Note (optional)</string>
+    <string name="plan_leg_out">Outbound</string>
+    <string name="plan_leg_ret">Return</string>
+    <string name="plan_difficulty_label">Difficulty</string>
     <string name="plan_target_start">Start</string>
     <string name="plan_target_end">End</string>
     <string name="plan_point_unset">Not set</string>
@@ -163,6 +195,9 @@
     <string name="plan_save_plan">Save plan</string>
     <string name="plan_replan_return">Replan return</string>
     <string name="plan_list_title">Planned routes</string>
+    <string name="plan_new_route">New route</string>
+    <string name="plan_list_empty_title">No planned routes yet</string>
+    <string name="plan_list_empty_desc">Pick a start and end on the map — we will suggest routes for you.</string>
     <string name="plan_list_empty">No planned routes yet. Create one from the map.</string>
     <string name="plan_list_rename">Rename route</string>
     <string name="plan_unnamed_route">Unnamed route</string>

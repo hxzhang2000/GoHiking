@@ -1,13 +1,18 @@
 package com.gohiking.feature.history
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,6 +22,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Landscape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -33,6 +41,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -40,6 +56,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.gohiking.core.data.repository.TripRepository
+import com.gohiking.core.designsystem.theme.GhColors
 import com.gohiking.core.resources.R as CoreR
 
 /**
@@ -51,6 +68,7 @@ fun HistoryListScreen(
     tripRepository: TripRepository,
     onBack: () -> Unit,
     onOpenTrip: (String) -> Unit = {}, // M1 详情页接入；默认空实现保持兼容
+    onStartRecording: (() -> Unit)? = null, // P-10 空态「开始记录」→ 回首页
     modifier: Modifier = Modifier,
 ) {
     val viewModel: HistoryListViewModel = viewModel(
@@ -62,6 +80,7 @@ fun HistoryListScreen(
         viewModel = viewModel,
         onBack = onBack,
         onOpenTrip = onOpenTrip,
+        onStartRecording = onStartRecording,
         modifier = modifier,
     )
 }
@@ -71,6 +90,7 @@ private fun HistoryListContent(
     viewModel: HistoryListViewModel,
     onBack: () -> Unit,
     onOpenTrip: (String) -> Unit,
+    onStartRecording: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -109,24 +129,20 @@ private fun HistoryListContent(
             )
         }
 
+        // P-10 汇总卡：次数 / 总距离 / 总时长 / 总爬升 四列指标
         Surface(
-            tonalElevation = 3.dp,
             shape = RoundedCornerShape(12.dp),
+            color = GhColors.Surface,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp),
         ) {
-            Text(
-                text = stringResource(
-                    CoreR.string.history_summary_format,
-                    state.summary.totalDistanceText,
-                    state.summary.totalDurationText,
-                    state.summary.totalAscentText,
-                    state.summary.count,
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            )
+            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+                SummaryCell(stringResource(CoreR.string.hist_stat_count), state.summary.count.toString(), Modifier.weight(1f))
+                SummaryCell(stringResource(CoreR.string.rec_stat_distance), state.summary.totalDistanceText, Modifier.weight(1f))
+                SummaryCell(stringResource(CoreR.string.rec_stat_duration), state.summary.totalDurationText, Modifier.weight(1f))
+                SummaryCell(stringResource(CoreR.string.rec_stat_climb), state.summary.totalAscentText, Modifier.weight(1f))
+            }
         }
 
         OutlinedTextField(
@@ -140,6 +156,7 @@ private fun HistoryListContent(
         )
 
         if (state.empty) {
+            // P-10 空态：居中图标 + 标题 + 说明 + 开始记录入口
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -147,17 +164,65 @@ private fun HistoryListContent(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                // L-14：原实现无论有没有搜索词都显示「还没有已完成的行程」，
-                // 搜了个不存在的名字时这句是在骗人
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(RoundedCornerShape(36.dp))
+                        .background(GhColors.Surface2),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.Landscape,
+                        contentDescription = null,
+                        tint = GhColors.TextTertiary,
+                        modifier = Modifier.size(34.dp),
+                    )
+                }
+                Spacer(Modifier.height(14.dp))
                 Text(
+                    // L-14：有搜索词时显示「无结果」，不骗人说「还没有行程」
                     text = if (state.query.isBlank()) {
                         stringResource(CoreR.string.history_empty)
                     } else {
                         stringResource(CoreR.string.history_no_result, state.query)
                     },
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
                 )
+                if (state.query.isBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(CoreR.string.history_empty_desc),
+                        fontSize = 12.sp,
+                        color = GhColors.TextSecondary,
+                        textAlign = TextAlign.Center,
+                    )
+                    if (onStartRecording != null) {
+                        Spacer(Modifier.height(22.dp))
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(GhColors.Danger)
+                                .clickable(onClick = onStartRecording)
+                                .padding(horizontal = 18.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Filled.PlayArrow,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = stringResource(CoreR.string.home_start_record),
+                                color = Color.White,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                            )
+                        }
+                    }
+                }
             }
             return@Column
         }
@@ -207,43 +272,55 @@ private fun HistoryListContent(
 
                     is ListItem.Trip -> Surface(
                         onClick = { onOpenTrip(item.trip.id) },
-                        tonalElevation = 2.dp,
                         shape = RoundedCornerShape(12.dp),
+                        color = GhColors.Surface,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            TripThumb(modifier = Modifier.padding(start = 12.dp).size(52.dp))
                             Column(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    .padding(horizontal = 10.dp, vertical = 10.dp),
                             ) {
                                 Text(
                                     text = item.trip.name,
-                                    style = MaterialTheme.typography.titleMedium,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
                                 )
                                 Text(
                                     text = item.trip.dateText,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp,
+                                    color = GhColors.TextTertiary,
                                 )
-                                Spacer(Modifier.width(4.dp))
+                                Spacer(Modifier.height(4.dp))
                                 Text(
                                     text = listOf(
-                                        item.trip.distanceText,
                                         item.trip.durationText,
-                                        "↑${item.trip.ascentText}",
+                                        item.trip.distanceText,
+                                        "+" + item.trip.ascentText,
                                         item.trip.paceText ?: stringResource(CoreR.string.common_stat_unknown),
                                     ).joinToString(" · "),
-                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 11.sp,
+                                    color = GhColors.TextSecondary,
+                                    maxLines = 1,
                                 )
                             }
                             IconButton(onClick = { deleteTarget = item.trip }) {
                                 Icon(
                                     Icons.Filled.Delete,
                                     contentDescription = stringResource(CoreR.string.common_action_delete),
+                                    tint = GhColors.TextTertiary,
+                                    modifier = Modifier.size(18.dp),
                                 )
                             }
+                            Icon(
+                                Icons.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = GhColors.TextTertiary,
+                                modifier = Modifier.padding(end = 8.dp).size(20.dp),
+                            )
                         }
                     }
                 }
@@ -278,4 +355,44 @@ private fun HistoryListContent(
 private sealed interface ListItem {
     data class Header(val month: String) : ListItem
     data class Trip(val trip: TripRowUi) : ListItem
+}
+
+/** P-10 汇总卡单元（值 + 标签，居中）。 */
+@Composable
+private fun SummaryCell(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = GhColors.TextPrimary,
+            maxLines = 1,
+        )
+        Text(text = label, fontSize = 10.sp, color = GhColors.TextSecondary, maxLines = 1)
+    }
+}
+
+/** P-10 行程缩略图：简化轨迹（红实线，原型 miniTrack 同款走势）。 */
+@Composable
+private fun TripThumb(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val pts = listOf(
+            Offset(0.10f * w, 0.88f * h),
+            Offset(0.26f * w, 0.72f * h),
+            Offset(0.44f * w, 0.60f * h),
+            Offset(0.58f * w, 0.46f * h),
+            Offset(0.72f * w, 0.34f * h),
+            Offset(0.88f * w, 0.20f * h),
+        )
+        drawPath(
+            path = Path().apply {
+                moveTo(pts[0].x, pts[0].y)
+                pts.drop(1).forEach { lineTo(it.x, it.y) }
+            },
+            color = GhColors.Track,
+            style = Stroke(width = 2.5.dp.toPx()),
+        )
+    }
 }

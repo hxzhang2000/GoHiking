@@ -2,7 +2,10 @@ package com.gohiking.feature.recording
 
 import android.app.Activity
 import android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
@@ -11,14 +14,27 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +53,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
@@ -48,7 +66,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -63,6 +83,7 @@ import com.amap.api.maps.model.PolylineOptions
 import com.gohiking.core.common.format.Formatters
 import com.gohiking.core.common.geo.PolylineJson
 import com.gohiking.core.map.overlay.PolylineArrowTexture
+import com.gohiking.core.designsystem.theme.GhColors
 import com.gohiking.core.data.alert.AlertVoice
 import com.gohiking.core.data.recording.RecordingSession
 import com.gohiking.core.data.recording.SessionState
@@ -222,62 +243,133 @@ fun RecordingScreen(
         }
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    Column(modifier = modifier.fillMaxSize().background(GhColors.Bg)) {
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
         ) {
             AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
-            // F-REC-17：暂停浮层
+
+            // ---- P-08 appbar（浮层）：记录名 + 提醒开关标签 ----
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = GhColors.Surface,
+                    shadowElevation = 2.dp,
+                    modifier = Modifier.weight(1f, fill = false),
+                ) {
+                    Text(
+                        text = active?.name?.trim()?.ifEmpty { null }
+                            ?: stringResource(CoreR.string.rec_start_dialog_title),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                if (active != null) {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = if (active.alertsEnabled) GhColors.TagBlueBg else GhColors.Surface2,
+                    ) {
+                        Text(
+                            text = stringResource(CoreR.string.rec_alert_tag) + ": " +
+                                stringResource(
+                                    if (active.alertsEnabled) CoreR.string.rec_alert_on else CoreR.string.rec_alert_off,
+                                ),
+                            fontSize = 12.sp,
+                            color = if (active.alertsEnabled) GhColors.TagBlueFg else GhColors.TextSecondary,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        )
+                    }
+                }
+            }
+
+            // F-REC-17：暂停浮层（原型：顶部居中深色胶囊）
             if (active != null && !active.isRecording) {
                 Surface(
-                    tonalElevation = 6.dp,
-                    shadowElevation = 4.dp,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.align(Alignment.Center),
+                    shape = RoundedCornerShape(999.dp),
+                    color = Color(0xCC1B1F24),
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 64.dp),
                 ) {
                     Text(
                         text = stringResource(CoreR.string.rec_status_paused),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                     )
                 }
             }
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.background)
-                // N-11：targetSdk 35 起强制 edge-to-edge，导航栏会盖住底部内容。这里的
-                // 停止按钮是 1.5 秒长按手势，被遮挡后用户无法结束记录。背景延伸到导航栏、
-                // 内容上移。
-                .navigationBarsPadding()
-                .padding(16.dp)
-                .graphicsLayer { alpha = if (active?.isRecording != false) 1f else 0.45f }, // F-REC-17
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(
-                text = stringResource(
-                    if (active?.isRecording != false) CoreR.string.rec_status_recording else CoreR.string.rec_status_paused,
-                ),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-            )
-            if (active != null) {
-                Text(
-                    text = stringResource(
-                        if (active.alertsEnabled) CoreR.string.rec_alert_on else CoreR.string.rec_alert_off,
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        if (active != null) {
+            // ---- P-08 recstats：大数字两列 + 分隔 + 三列 ----
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = GhColors.Surface,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                    Row {
+                        BigStat(
+                            label = stringResource(CoreR.string.rec_stat_distance),
+                            value = Formatters.distanceText(active.distanceM),
+                            modifier = Modifier.weight(1f),
+                        )
+                        Box(
+                            Modifier
+                                .width(1.dp)
+                                .height(40.dp)
+                                .background(GhColors.Line2),
+                        )
+                        BigStat(
+                            label = stringResource(CoreR.string.rec_stat_duration),
+                            value = Formatters.durationText(active.movingDurationSec),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    HorizontalDivider(color = GhColors.Line2, thickness = 1.dp, modifier = Modifier.padding(vertical = 8.dp))
+                    Row {
+                        SmallStat(
+                            label = stringResource(CoreR.string.rec_stat_altitude),
+                            value = active.currentAltitudeM?.let { Formatters.metersText(it) }
+                                ?: stringResource(CoreR.string.common_stat_unknown), // fuser 不可用显示「—」，绝不编造（PRD 6.1）
+                            modifier = Modifier.weight(1f),
+                        )
+                        SmallStat(
+                            label = stringResource(CoreR.string.rec_stat_climb),
+                            value = "+" + Formatters.metersText(active.ascentM),
+                            modifier = Modifier.weight(1f),
+                        )
+                        SmallStat(
+                            label = stringResource(CoreR.string.rec_stat_steps),
+                            value = if (active.stepCount >= 0) active.stepCount.toString() else stringResource(CoreR.string.common_stat_unknown),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
             }
 
-            if (active != null) {
-                // F-PLAN-44：关联计划入口（显示当前关联，点击选择/更换/取消）
+            // F-PLAN-44：关联计划入口 + 采样点数（弱化为一行次要信息）
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 TextButton(onClick = { showPlanPicker = true }) {
                     Text(
                         text = active.plannedRouteId?.let { id ->
@@ -286,64 +378,71 @@ fun RecordingScreen(
                                 savedPlans.firstOrNull { it.route.id == id }?.route?.name ?: "",
                             )
                         } ?: stringResource(CoreR.string.rec_plan_associate),
+                        fontSize = 12.sp,
                     )
                 }
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = stringResource(CoreR.string.rec_stat_points) + " " + active.pointCount,
+                    fontSize = 10.sp,
+                    color = GhColors.TextTertiary,
+                )
+            }
 
-                listOf(
-                    stringResource(CoreR.string.rec_stat_distance) to Formatters.distanceText(active.distanceM),
-                    stringResource(CoreR.string.rec_stat_duration) to Formatters.durationText(active.movingDurationSec),
-                    stringResource(CoreR.string.rec_stat_climb) to Formatters.metersText(active.ascentM),
-                    stringResource(CoreR.string.rec_stat_altitude) to (active.currentAltitudeM?.let { Formatters.metersText(it) }
-                        ?: stringResource(CoreR.string.common_stat_unknown)), // fuser 不可用显示「—」，绝不编造（PRD 6.1）
-                    stringResource(CoreR.string.rec_stat_steps) to (if (active.stepCount >= 0) active.stepCount.toString() else stringResource(CoreR.string.common_stat_unknown)),
-                    stringResource(CoreR.string.rec_stat_points) to active.pointCount.toString(),
-                ).chunked(2).forEach { row ->
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        row.forEach { (label, value) ->
-                            StatCell(label, value, Modifier.weight(1f))
-                        }
-                    }
-                }
-
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(
-                        onClick = { if (active.isRecording) session.pause() else session.resume() },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(
-                            stringResource(
-                                if (active.isRecording) CoreR.string.rec_action_pause else CoreR.string.rec_action_resume,
-                            ),
-                            maxLines = 1,
-                        )
-                    }
-                    Button(
-                        onClick = { session.markSummit(null) },
-                        modifier = Modifier.weight(1f),
-                        enabled = active.isRecording,
-                    ) {
-                        Text(stringResource(CoreR.string.rec_action_summit), maxLines = 1)
-                    }
-                    Button(
-                        onClick = { showMarkerDialog = true },
-                        modifier = Modifier.weight(1f),
-                        enabled = active.isRecording,
-                    ) {
-                        Text(stringResource(CoreR.string.rec_action_marker), maxLines = 1)
-                    }
-                }
+            // ---- P-08 recctrl：标记 / 暂停·继续 / 登顶 / 停止 ----
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 12.dp)
+                    .graphicsLayer { alpha = if (active.isRecording) 1f else 0.45f }, // F-REC-17
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CtrlButton(
+                    icon = Icons.Filled.Edit,
+                    label = stringResource(CoreR.string.rec_action_marker),
+                    enabled = active.isRecording,
+                    container = GhColors.Surface,
+                    content = GhColors.TextPrimary,
+                    border = BorderStroke(1.dp, GhColors.Line),
+                    onClick = { showMarkerDialog = true },
+                    modifier = Modifier.weight(1f),
+                )
+                CtrlButton(
+                    icon = if (active.isRecording) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    label = stringResource(
+                        if (active.isRecording) CoreR.string.rec_action_pause else CoreR.string.rec_action_resume,
+                    ),
+                    enabled = true,
+                    container = GhColors.Primary,
+                    content = Color.White,
+                    onClick = { if (active.isRecording) session.pause() else session.resume() },
+                    modifier = Modifier.weight(1.25f),
+                )
+                CtrlButton(
+                    icon = Icons.Filled.Flag,
+                    label = stringResource(CoreR.string.rec_action_summit),
+                    enabled = active.isRecording,
+                    container = GhColors.Surface,
+                    content = GhColors.TextPrimary,
+                    border = BorderStroke(1.dp, GhColors.Line),
+                    onClick = { session.markSummit(null) },
+                    modifier = Modifier.weight(1f),
+                )
 
                 // F-REC-06：停止需长按 1.5 秒，避免误触
-                val errorColor = MaterialTheme.colorScheme.error
-                val onErrorColor = MaterialTheme.colorScheme.onError
                 val stopLabel = stringResource(CoreR.string.rec_action_stop)
-                Box(
+                CtrlButton(
+                    icon = Icons.Filled.Stop,
+                    label = stringResource(
+                        if (holdingStop) CoreR.string.rec_stop_holding else CoreR.string.rec_stop_hold_short,
+                    ),
+                    enabled = true,
+                    container = GhColors.Danger,
+                    content = Color.White,
+                    onClick = { /* 长按触发；点击不动作（防误触） */ },
                     modifier = Modifier
-                        .fillMaxWidth()
-                        // L-06：height(52.dp) 在字体放大/横屏时无伸缩余量，改最小高度
-                        .heightIn(min = 52.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(errorColor)
+                        .weight(1f)
                         // L-15：停止只有「长按 1.5 秒」一条路径，TalkBack 用户完全无法触发。
                         // 补一个无障碍侧的等价动作（双击即停止），触摸行为保持不变。
                         .semantics {
@@ -376,34 +475,64 @@ fun RecordingScreen(
                                 }
                             }
                         },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = stringResource(
-                            if (holdingStop) CoreR.string.rec_stop_holding else CoreR.string.rec_stop_hint,
-                        ),
-                        color = onErrorColor,
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                }
+                )
             }
         }
     }
 
-    // F-REC-07：停止后保存确认，展示总距离 / 总时长 / 爬升 / 步数
+    // F-REC-07：停止后保存确认（P-09：汇总卡 + 名称/备注）
     draftToConfirm?.let { draft ->
         val trip = draft.trip
+        var nameInput by remember(trip.id) { mutableStateOf(trip.name) }
+        var noteInput by remember(trip.id) { mutableStateOf(trip.note.orEmpty()) }
         AlertDialog(
             onDismissRequest = { },
             title = { Text(stringResource(CoreR.string.rec_stop_confirm)) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(stringResource(CoreR.string.rec_stat_distance) + ": " + Formatters.distanceText(trip.distanceM))
-                    Text(stringResource(CoreR.string.hist_overview_total_duration) + ": " + Formatters.durationText(trip.durationSec))
-                    Text(stringResource(CoreR.string.rec_stat_climb) + ": " + Formatters.metersText(trip.totalAscentM))
-                    Text(
-                        stringResource(CoreR.string.rec_stat_steps) + ": " +
-                            (if (trip.steps >= 0) trip.steps.toString() else stringResource(CoreR.string.common_stat_unknown)),
+                Column {
+                    // P-09 汇总卡：2×2 指标
+                    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+                            SmallStat(
+                                label = stringResource(CoreR.string.rec_stat_distance),
+                                value = Formatters.distanceText(trip.distanceM),
+                                modifier = Modifier.weight(1f),
+                            )
+                            SmallStat(
+                                label = stringResource(CoreR.string.rec_stat_duration),
+                                value = Formatters.durationText(trip.movingDurationSec),
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+                            SmallStat(
+                                label = stringResource(CoreR.string.rec_stat_climb),
+                                value = "+" + Formatters.metersText(trip.totalAscentM),
+                                modifier = Modifier.weight(1f),
+                            )
+                            SmallStat(
+                                label = stringResource(CoreR.string.rec_stat_steps),
+                                value = if (trip.steps >= 0) trip.steps.toString() else stringResource(CoreR.string.common_stat_unknown),
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = nameInput,
+                        onValueChange = { nameInput = it },
+                        placeholder = { Text(stringResource(CoreR.string.rec_start_name_hint)) },
+                        singleLine = true,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = noteInput,
+                        onValueChange = { noteInput = it },
+                        placeholder = { Text(stringResource(CoreR.string.plan_note_hint)) },
+                        minLines = 2,
                     )
                     // C-01：保存失败时必须让用户看见，否则只会看到按钮悄悄失效
                     if (saveFailed) {
@@ -415,14 +544,20 @@ fun RecordingScreen(
                     }
                 }
             },
-
             confirmButton = {
                 TextButton(
                     onClick = {
                         scope.launch {
                             saving = true
                             // C-01：save() 失败时不许关弹窗，否则 state 停在 Finished 而 draft 已丢 → 死界面
-                            val ok = session.save(draft)
+                            // P-09：名称/备注以 UI 输入为准（空名称回落原名）
+                            val edited = draft.copy(
+                                trip = trip.copy(
+                                    name = nameInput.trim().ifEmpty { trip.name },
+                                    note = noteInput.trim().ifEmpty { null },
+                                ),
+                            )
+                            val ok = session.save(edited)
                             saving = false
                             saveFailed = !ok
                             if (ok) pendingDraft = null
@@ -519,11 +654,74 @@ fun RecordingScreen(
 }
 
 @Composable
-private fun StatCell(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier.padding(horizontal = 3.dp)) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+private fun BigStat(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value,
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold,
+            color = GhColors.TextPrimary,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+        )
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            color = GhColors.TextSecondary,
+        )
+    }
+}
+
+@Composable
+private fun SmallStat(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = GhColors.TextPrimary,
+            maxLines = 1,
+        )
+        Text(
+            text = label,
+            fontSize = 10.sp,
+            color = GhColors.TextSecondary,
+        )
+    }
+}
+
+/** P-08 recctrl 按钮（图标+文案纵排；主键实底、其余描边/红底）。 */
+@Composable
+private fun CtrlButton(
+    icon: ImageVector,
+    label: String,
+    enabled: Boolean,
+    container: Color,
+    content: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    border: BorderStroke? = null,
+) {
+    val shape = RoundedCornerShape(14.dp)
+    Box(
+        modifier = modifier
+            .heightIn(min = 56.dp)
+            .clip(shape)
+            .background(if (enabled) container else container.copy(alpha = 0.55f))
+            .then(if (border != null) Modifier.border(border, shape) else Modifier)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = label,
+                color = content,
+                fontSize = 11.sp,
+                maxLines = 1,
+            )
         }
     }
 }

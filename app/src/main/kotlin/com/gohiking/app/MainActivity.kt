@@ -14,8 +14,16 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,8 +31,23 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Landscape
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Button
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -44,9 +67,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -78,6 +106,7 @@ import com.gohiking.core.datastore.SettingsRepository
 import com.gohiking.core.datastore.readLanguageBlocking
 import com.gohiking.core.database.dao.PlannedRouteDao
 import com.gohiking.core.elevation.ElevationRepository
+import com.gohiking.core.designsystem.theme.GhColors
 import com.gohiking.core.designsystem.theme.GhTheme
 import com.gohiking.core.location.LocationProvider
 import com.gohiking.core.map.route.RouteSearchClient
@@ -187,7 +216,8 @@ private fun Root(
     var showPlan by rememberSaveable { mutableStateOf(false) }
     var showPlanList by rememberSaveable { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
-    var showPhotoMap by rememberSaveable { mutableStateOf(false) } // P-12 照片地图（M4-B2）
+    var showPhotoMap by rememberSaveable { mutableStateOf(false) }
+    var showPermGuide by rememberSaveable { mutableStateOf(false) } // P-01 权限引导页 // P-12 照片地图（M4-B2）
     val sessionState by session.state.collectAsStateWithLifecycle()
     val searchClient = remember { AmapSearchClient(context) }
     val routeClient = remember { RouteSearchClient(context) }
@@ -377,6 +407,7 @@ private fun Root(
         PrivacyGate(
             onAgree = {
                 agreed = true
+                showPermGuide = true // P-01：首次同意后展示权限引导
                 // C-03：定位 SDK 的合规调用必须由明确的用户同意驱动
                 com.gohiking.core.location.PrivacyConsent.markAgreed()
                 scope.launch { settingsRepository.setPrivacyAgreed(true) }
@@ -393,6 +424,7 @@ private fun Root(
 
     fun goBack() {
         when {
+            showPermGuide -> showPermGuide = false
             openTripId != null -> openTripId = null
             showPlanList -> showPlanList = false
             showPlan -> showPlan = false
@@ -455,7 +487,9 @@ private fun Root(
         )
     }
 
-    if (sessionState !is SessionState.Idle) {
+    if (showPermGuide) {
+        PermissionGuideScreen(onDone = { showPermGuide = false })
+    } else if (sessionState !is SessionState.Idle) {
         RecordingScreen(
             session = session,
             tripRepository = tripRepository,
@@ -479,6 +513,7 @@ private fun Root(
         PlanListScreen(
             plannedRouteDao = plannedRouteDao,
             onBack = { showPlanList = false },
+            onNewRoute = { showPlanList = false; showPlan = true }, // P-07「+」→ 选点页 P-03
             onExportRoute = { routeId, routeName ->
                 pendingRouteExport = routeId
                 routeExportDoc.launch(FileNamer.routeFileName(routeName, System.currentTimeMillis()))
@@ -527,6 +562,7 @@ private fun Root(
             tripRepository = tripRepository,
             onBack = { showHistory = false },
             onOpenTrip = { openTripId = it },
+            onStartRecording = { showHistory = false }, // P-10 空态「开始记录」→ 回首页
             modifier = modifier,
         )
     } else {
@@ -682,20 +718,22 @@ private fun MapVerifyScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // 事件日志（新事件插到最前），最多保留 6 条
-    val events = remember { mutableStateListOf<String>() }
-    var isChinese by rememberSaveable { mutableStateOf(true) }
+    // P-02：左下角提示 chip 复用为最近一条地图事件（保留 M0 点击冲突回归观测点）
+    var lastEvent by remember { mutableStateOf<String?>(null) }
+    var satellite by rememberSaveable { mutableStateOf(false) } // 图层切换（正常/卫星）
+    var centerOnMyLocation by remember { mutableStateOf(false) } // 定位按钮 → 蓝点就绪后居中一次
     var lastPoiAtMs by remember { mutableLongStateOf(0L) }
     var lastMapClickAtMs by remember { mutableLongStateOf(0L) }
     var showStartDialog by rememberSaveable { mutableStateOf(false) } // F-REC-02：开始前可选命名
     var startName by rememberSaveable { mutableStateOf("") }
-    // L-28：此前是只写不读的 State（每次授权回调都触发一次无用的重组），改为局部变量
+
+    // L-28：权限状态为局部变量（每次授权回调只触发一次重组）
     fun locationGranted(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
 
     var showPermissionHint by remember { mutableStateOf(false) }
-    // H-05：权限回调处于 ON_START 阶段，此时 startForegroundService 在 Android 12+ 可能被拒。
+    // H-05：权限回调共享 ON_START 阶段，此时 startForegroundService 在 Android 12+ 可能被拒。
     // 延到下一个组合帧（ON_RESUME 之后）再启动，降级为「服务起不来但不崩」。
     var pendingServiceStart by remember { mutableStateOf(false) }
     LaunchedEffect(pendingServiceStart) {
@@ -706,23 +744,21 @@ private fun MapVerifyScreen(
     }
 
     fun log(text: String) {
-        events.add(0, text)
-        if (events.size > 6) events.removeAt(events.lastIndex)
+        lastEvent = text
     }
 
-    // 隐私合规必须【早于 MapView 创建】调用（3D SDK ≥8.1.0 强制，否则白屏不渲染瓦片）。
-    // 放在 remember 里恰好保证：①先于地图创建；②进程内只调一次；③rememberSaveable 记住同意状态的
-    // 二次启动也覆盖（此时不走弹窗，但「已同意」状态成立，红线只要求同意后调用）。
+    // 隐私合规必须【早于 MapView 创建】调用（3D SDK ≥9.1.0 强制，否则白屏不渲染瓦片）。
+    // 放在 remember 里恰好保证：①先于地图创建；②进程内只调一次。
     val mapView = remember {
         MapsInitializer.updatePrivacyShow(context, true, true)
         MapsInitializer.updatePrivacyAgree(context, true)
         MapView(context).apply {
             onCreate(null)
-            map.uiSettings.isZoomControlsEnabled = true
-            // 默认视角：中国全域；定位到当前位置由记录页/蓝点接入后处理
+            map.uiSettings.isZoomControlsEnabled = false // P-02：缩放由右侧地图按钮承担
+            // 默认视角：中国全域；定位到当前位置由「蓝点接入」后处理
             map.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(35.86, 104.19), 3.8f))
 
-            // M0 实测②：POI 点击时 OnMapClickListener 是否同触发（已真机通过 2026-09-20，保留供回归）
+            // M0 实测①：POI 点击时 OnMapClickListener 是否同触发（已真机通过 2026-09-20，保留供回归）
             map.setOnMapClickListener { latLng ->
                 lastMapClickAtMs = System.currentTimeMillis()
                 log(
@@ -738,6 +774,14 @@ private fun MapVerifyScreen(
                 log(context.getString(CoreR.string.map_test_log_poi, poi.name ?: context.getString(CoreR.string.plan_poi_unnamed)))
                 if (lastMapClickAtMs > 0 && kotlin.math.abs(lastPoiAtMs - lastMapClickAtMs) < 600) {
                     log(context.getString(CoreR.string.map_test_log_both))
+                }
+            }
+            map.setOnMyLocationChangeListener { location ->
+                if (centerOnMyLocation && location != null) {
+                    centerOnMyLocation = false
+                    map.moveCamera(
+                        CameraUpdateFactory.newLatLngZoom(LatLng(location.latitude, location.longitude), 15f),
+                    )
                 }
             }
         }
@@ -778,93 +822,113 @@ private fun MapVerifyScreen(
     Box(modifier = modifier.fillMaxSize()) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
 
-        Surface(
-            tonalElevation = 4.dp,
-            shadowElevation = 2.dp,
-            shape = RoundedCornerShape(16.dp),
+        // ---- P-02 顶部：搜索条（点击进入选点页 P-03） + 照片地图入口 ----
+        Row(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                // M-09：edge-to-edge 下不能被状态栏遮挡
+                .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(top = 8.dp),
+                .padding(start = 12.dp, end = 12.dp, top = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(GhColors.Surface)
+                    .clickable(onClick = onOpenPlan)
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Filled.Search,
+                    contentDescription = null,
+                    tint = GhColors.TextSecondary,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = stringResource(CoreR.string.home_search_hint),
+                    color = GhColors.TextTertiary,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            MapButton(icon = Icons.Filled.Image, contentDescriptionRes = CoreR.string.photo_map_title, onClick = onOpenPhotoMap)
+        }
+
+        // ---- P-02 右侧：图层 / 放大 / 定位 ----
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .statusBarsPadding()
+                .padding(top = 62.dp, end = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            MapButton(icon = Icons.Filled.Layers, contentDescriptionRes = CoreR.string.common_layer) {
+                satellite = !satellite
+                mapView.map.mapType = if (satellite) AMap.MAP_TYPE_SATELLITE else AMap.MAP_TYPE_NORMAL
+            }
+            MapButton(icon = Icons.Filled.Add, contentDescriptionRes = CoreR.string.common_zoom_in) {
+                mapView.map.moveCamera(CameraUpdateFactory.zoomIn())
+            }
+            MapButton(icon = Icons.Filled.MyLocation, contentDescriptionRes = CoreR.string.common_locate) {
+                if (!locationGranted()) {
+                    showPermissionHint = true
+                } else {
+                    centerOnMyLocation = true
+                    runCatching { mapView.map.isMyLocationEnabled = true }
+                        .onFailure { Timber.w(it, "isMyLocationEnabled 失败") }
+                }
+            }
+        }
+
+        // ---- P-02 左下：提示 chip（有事件时显示最近事件）----
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .navigationBarsPadding()
+                .padding(start = 12.dp, bottom = 72.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(Color.White.copy(alpha = 0.86f))
+                .padding(horizontal = 8.dp, vertical = 4.dp),
         ) {
             Text(
-                text = stringResource(CoreR.string.map_verify_badge),
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                text = lastEvent ?: stringResource(CoreR.string.home_map_hint),
+                fontSize = 10.sp,
+                color = Color(0xFF5A616B),
+                maxLines = 1,
             )
         }
 
-        Column(
+        // ---- P-02 底部：计划线路（白）/ 开始记录（红）----
+        Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Surface(
-                tonalElevation = 4.dp,
-                shadowElevation = 2.dp,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(stringResource(CoreR.string.map_test_hint), modifier = Modifier.padding(bottom = 4.dp))
-                    events.forEachIndexed { index, line ->
-                        Text(
-                            text = line,
-                            modifier = Modifier.padding(top = if (index == 0) 4.dp else 0.dp),
-                        )
-                    }
-                }
-            }
-            Button(
+            GhPillButton(
+                text = stringResource(CoreR.string.plan_entry),
+                icon = Icons.Filled.Route,
+                container = GhColors.Surface,
+                content = GhColors.TextPrimary,
+                border = BorderStroke(1.dp, GhColors.Line),
+                onClick = onOpenPlanList, // 原型 data-go="p07"：计划线路列表
+                modifier = Modifier.weight(1f),
+            )
+            GhPillButton(
+                text = stringResource(CoreR.string.home_start_record),
+                icon = Icons.Filled.PlayArrow,
+                container = GhColors.Danger,
+                content = Color.White,
                 onClick = { showStartDialog = true }, // F-REC-02：先弹可选命名，不阻塞
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            ) {
-                Text(stringResource(CoreR.string.home_start_record))
-            }
-            Button(
-                onClick = {
-                    isChinese = !isChinese
-                    // M0 实测①：setMapLanguage 真机已验证可切换（2026-09-20），保留供回归
-                    mapView.map.setMapLanguage(if (isChinese) AMap.CHINESE else AMap.ENGLISH)
-                    log(context.getString(CoreR.string.map_test_log_language))
-                },
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            ) {
-                Text(stringResource(CoreR.string.map_test_switch_language))
-            }
-            Button(
-                onClick = onOpenHistory,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            ) {
-                Text(stringResource(CoreR.string.common_tab_history))
-            }
-            Button(
-                onClick = onOpenPlan,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            ) {
-                Text(stringResource(CoreR.string.plan_entry))
-            }
-            Button(
-                onClick = onOpenPlanList, // F-PLAN-41 计划列表管理
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            ) {
-                Text(stringResource(CoreR.string.plan_list_title))
-            }
-            Button(
-                onClick = onOpenPhotoMap, // P-12 照片地图（M4-B2）
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            ) {
-                Text(stringResource(CoreR.string.photo_map_title))
-            }
-            Button(
-                onClick = onOpenSettings, // P-14 设置页（M3-C）
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            ) {
-                Text(stringResource(CoreR.string.set_title))
-            }
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 
@@ -888,10 +952,7 @@ private fun MapVerifyScreen(
                         add(Manifest.permission.ACCESS_FINE_LOCATION)
                         add(Manifest.permission.ACCESS_COARSE_LOCATION)
                         if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
-                        // N-28：API 29+ 起 ACTIVITY_RECOGNITION 是运行时权限，而清单声明了它
-                        // 却从未申请。未授权时 SensorManager 的 registerListener **静默无效**
-                        // （不抛异常），而 getDefaultSensor 仍返回非 null —— 计步源会被「选中」
-                        // 却一个步数都收不到，比不走降级路径更糟。
+                        // N-28：API 29+ 起 ACTIVITY_RECOGNITION 是运行时权限，未授权时计步源会被「选中」但收不到数据
                         if (Build.VERSION.SDK_INT >= 29) add(Manifest.permission.ACTIVITY_RECOGNITION)
                     }.toTypedArray()
                     permissionLauncher.launch(permissions)
@@ -917,5 +978,314 @@ private fun MapVerifyScreen(
                 }
             },
         )
+    }
+}
+
+/** P-02 地图右上的圆形工具按钮（44dp 白底 12dp 圆角，20dp 图标）。 */
+@Composable
+private fun MapButton(
+    icon: ImageVector,
+    contentDescriptionRes: Int,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(GhColors.Surface)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon,
+            contentDescription = stringResource(contentDescriptionRes),
+            tint = GhColors.TextPrimary,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+/** P-01/P-02 通用胶囊按钮（原型 .btn.pri/.red/.gray：高 48dp、圆角 12dp、图标+文案）。 */
+@Composable
+private fun GhPillButton(
+    text: String,
+    icon: ImageVector?,
+    container: Color,
+    content: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    border: BorderStroke? = null,
+) {
+    val shape = RoundedCornerShape(12.dp)
+    Box(
+        modifier = modifier
+            .height(48.dp)
+            .clip(shape)
+            .background(container)
+            .then(
+                if (border != null) {
+                    Modifier.border(border, shape)
+                } else {
+                    Modifier
+                },
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (icon != null) {
+                Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(
+                text = text,
+                color = content,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+/**
+ * P-01 权限引导页（prototype 对齐）：品牌头 + 逐项权限说明卡 + 「全部允许 / 稍后设置」。
+ * 仅在首次同意隐私政策后展示一次；定位权限仍会在开始记录时兜底申请（F-REC-53）。
+ */
+@Composable
+private fun PermissionGuideScreen(onDone: () -> Unit) {
+    val context = LocalContext.current
+    var granted by remember { mutableStateOf(setOf<String>()) }
+
+    fun refresh() {
+        fun has(p: String) = ContextCompat.checkSelfPermission(context, p) == PackageManager.PERMISSION_GRANTED
+        granted = buildSet {
+            if (has(Manifest.permission.ACCESS_FINE_LOCATION) || has(Manifest.permission.ACCESS_COARSE_LOCATION)) {
+                add("loc")
+            }
+            if (Build.VERSION.SDK_INT < 33 || has(Manifest.permission.POST_NOTIFICATIONS)) add("notif")
+            if (Build.VERSION.SDK_INT < 29 || has(Manifest.permission.ACTIVITY_RECOGNITION)) add("sensor")
+            if (Build.VERSION.SDK_INT >= 33) {
+                if (has(Manifest.permission.READ_MEDIA_IMAGES)) add("media")
+            } else if (has(Manifest.permission.READ_EXTERNAL_STORAGE)) {
+                add("media")
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        refresh()
+        onDispose { }
+    }
+
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { refresh() }
+
+    data class GuideRow(val key: String, val title: Int, val desc: Int, val required: Boolean, val perms: List<String>)
+
+    val rows = remember {
+        buildList {
+            add(
+                GuideRow(
+                    "loc", CoreR.string.guide_loc, CoreR.string.guide_loc_desc, true,
+                    listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                ),
+            )
+            add(
+                GuideRow(
+                    "notif", CoreR.string.guide_notif, CoreR.string.guide_notif_desc, false,
+                    if (Build.VERSION.SDK_INT >= 33) listOf(Manifest.permission.POST_NOTIFICATIONS) else emptyList(),
+                ),
+            )
+            add(
+                GuideRow(
+                    "sensor", CoreR.string.guide_sensor, CoreR.string.guide_sensor_desc, false,
+                    if (Build.VERSION.SDK_INT >= 29) listOf(Manifest.permission.ACTIVITY_RECOGNITION) else emptyList(),
+                ),
+            )
+            add(
+                GuideRow(
+                    "media", CoreR.string.guide_media, CoreR.string.guide_media_desc, false,
+                    if (Build.VERSION.SDK_INT >= 33) {
+                        listOf(Manifest.permission.READ_MEDIA_IMAGES)
+                    } else {
+                        listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+                    },
+                ),
+            )
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(GhColors.Bg)
+            .verticalScroll(rememberScrollState())
+            .navigationBarsPadding(),
+    ) {
+        // 品牌头
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 34.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(
+                Icons.Filled.Landscape,
+                contentDescription = null,
+                tint = GhColors.Primary,
+                modifier = Modifier.size(64.dp),
+            )
+            Spacer(Modifier.height(14.dp))
+            Text(
+                text = stringResource(CoreR.string.app_name),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(text = "GoHiking", fontSize = 13.sp, color = GhColors.TextSecondary)
+        }
+
+        Text(
+            text = stringResource(CoreR.string.guide_title),
+            fontSize = 13.sp,
+            color = GhColors.TextSecondary,
+            modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 4.dp),
+        )
+        Text(
+            text = stringResource(CoreR.string.guide_subtitle),
+            fontSize = 12.sp,
+            color = GhColors.TextSecondary,
+            lineHeight = 19.sp,
+            modifier = Modifier
+                .padding(horizontal = 18.dp)
+                .padding(bottom = 12.dp),
+        )
+
+        // 权限卡
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = GhColors.Surface,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp),
+        ) {
+            Column {
+                rows.forEachIndexed { index, row ->
+                    if (index > 0) HorizontalDivider(color = GhColors.Line2, thickness = 1.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 13.dp, vertical = 11.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(text = stringResource(row.title), fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                                if (row.required) {
+                                    Spacer(Modifier.width(4.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(GhColors.TagRedBg)
+                                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                                    ) {
+                                        Text(
+                                            text = stringResource(CoreR.string.guide_tag_need_location),
+                                            fontSize = 10.sp,
+                                            color = GhColors.TagRedFg,
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                text = stringResource(row.desc),
+                                fontSize = 12.sp,
+                                color = GhColors.TextSecondary,
+                                lineHeight = 17.sp,
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        val isGranted = row.key in granted || row.perms.isEmpty()
+                        val btnShape = RoundedCornerShape(10.dp)
+                        Box(
+                            modifier = Modifier
+                                .clip(btnShape)
+                                .background(if (isGranted) GhColors.Surface2 else GhColors.Surface)
+                                .then(
+                                    if (isGranted) {
+                                        Modifier
+                                    } else {
+                                        Modifier.border(BorderStroke(1.dp, GhColors.Line), btnShape)
+                                    },
+                                )
+                                .then(
+                                    if (isGranted || row.perms.isEmpty()) {
+                                        Modifier
+                                    } else {
+                                        Modifier.clickable { launcher.launch(row.perms.toTypedArray()) }
+                                    },
+                                )
+                                .padding(horizontal = 12.dp, vertical = 9.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (isGranted) {
+                                    Icon(
+                                        Icons.Filled.Check,
+                                        contentDescription = null,
+                                        tint = GhColors.Ok,
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                }
+                                Text(
+                                    text = stringResource(
+                                        if (isGranted) CoreR.string.guide_allowed else CoreR.string.guide_allow,
+                                    ),
+                                    fontSize = 13.sp,
+                                    color = if (isGranted) GhColors.TextTertiary else GhColors.TextPrimary,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 操作区：全部允许 / 稍后设置
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 22.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            GhPillButton(
+                text = stringResource(CoreR.string.guide_allow_all),
+                icon = null,
+                container = GhColors.Primary,
+                content = Color.White,
+                onClick = {
+                    fun isPermGranted(pp: String) = ContextCompat.checkSelfPermission(context, pp) == PackageManager.PERMISSION_GRANTED
+                    val pending = rows.flatMap { it.perms }.filterNot { isPermGranted(it) }.toTypedArray()
+                    if (pending.isEmpty()) {
+                        onDone()
+                    } else {
+                        launcher.launch(pending)
+                    }
+                },
+                modifier = Modifier.weight(1f),
+            )
+            GhPillButton(
+                text = stringResource(CoreR.string.guide_later),
+                icon = null,
+                container = GhColors.Surface,
+                content = GhColors.TextPrimary,
+                border = BorderStroke(1.dp, GhColors.Line),
+                onClick = onDone,
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }

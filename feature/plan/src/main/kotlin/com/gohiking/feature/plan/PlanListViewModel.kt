@@ -19,6 +19,8 @@ data class PlanListItem(
     val totalAscentM: Double?,
     val createdAt: Long,
     val legCount: Int,
+    // P-07 原型列表展示难度（取去程段；高程不可用时为 null）
+    val difficulty: String?,
 )
 
 class PlanListViewModel(
@@ -53,4 +55,5 @@ private fun PlannedRouteWithLegs.toItem() = PlanListItem(
     totalAscentM = route.totalAscentM,
     createdAt = route.createdAt,
     legCount = legs.size,
+    difficulty = legs.firstOrNull { it.legType == "OUTBOUND" }?.difficulty,
 )

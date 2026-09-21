@@ -5,6 +5,9 @@
 
     <!-- 通用动作 common_action_* -->
     <string name="common_action_confirm">确认</string>
+    <string name="common_layer">图层</string>
+    <string name="common_zoom_in">放大</string>
+    <string name="common_locate">定位</string>
     <string name="common_action_cancel">取消</string>
     <string name="common_action_save">保存</string>
     <string name="common_action_delete">删除</string>
@@ -24,19 +27,36 @@
     <string name="common_privacy_decline">退出</string>
 
     <!-- M0 地图验证页 -->
-    <string name="map_verify_badge">M0 地图验证页</string>
-    <string name="map_test_switch_language">切换地图语言</string>
-    <string name="map_test_hint">点底图 POI 或任意位置验证点击冲突；按钮测试 setMapLanguage。</string>
     <string name="map_test_log_poi">点击到 POI：%1$s</string>
     <string name="map_test_log_map">点击地图：%1$s, %2$s</string>
     <string name="map_test_log_both">⚠ onPOIClick 与 OnMapClickListener 同时触发</string>
-    <string name="map_test_log_language">已切换地图语言（瓦片重绘中…）</string>
 
     <!-- 记录（M1 切片） -->
     <string name="home_start_record">开始记录</string>
+    <!-- P-01 权限引导页 / P-02 首页（prototype 对齐） -->
+    <string name="guide_title">需要以下权限</string>
+    <string name="guide_subtitle">去爬山是本地优先的应用，所有数据只存在你的手机里。以下权限逐项说明用途，可稍后在设置中修改。</string>
+    <string name="guide_loc">精确位置（GPS）</string>
+    <string name="guide_loc_desc">用于记录完整轨迹、海拔与距离。拒绝则核心功能不可用。</string>
+    <string name="guide_notif">通知</string>
+    <string name="guide_notif_desc">用于记录状态常驻通知栏，锁屏时也能看到进度。</string>
+    <string name="guide_sensor">身体活动（计步）</string>
+    <string name="guide_sensor_desc">用于统计步数。拒绝则降级为加速度计算法估算。</string>
+    <string name="guide_media">照片与视频</string>
+    <string name="guide_media_desc">用于按拍摄位置把照片聚合到地图上。拒绝则照片地图不可用。</string>
+    <string name="guide_tag_need_location">需要先授予定位权限</string>
+    <string name="guide_allow">允许</string>
+    <string name="guide_allowed">已允许</string>
+    <string name="guide_allow_all">全部允许</string>
+    <string name="guide_later">稍后设置</string>
+    <string name="home_search_hint">搜索山名、登山口、停车场</string>
+    <string name="home_map_hint">点击地图选点 · 搜索地名 · 点选地图标记</string>
+    <string name="home_locating">正在定位…</string>
     <string name="rec_need_permission">需要定位权限才能记录轨迹。</string>
     <string name="rec_status_recording">正在记录</string>
     <string name="rec_status_paused">已暂停</string>
+    <string name="rec_alert_tag">提醒</string>
+    <string name="rec_stop_hold_short">长按停止</string>
     <string name="rec_stat_distance">距离</string>
     <string name="rec_stat_duration">运动时长</string>
     <string name="rec_stat_climb">累计爬升</string>
@@ -58,6 +78,8 @@
     <!-- 记录列表（P-10，M1 切片） -->
     <string name="history_search_hint">搜索行程名称</string>
     <string name="history_empty">还没有已完成的行程</string>
+    <string name="hist_stat_count">次数</string>
+    <string name="history_empty_desc">完成第一次徒步后，记录会出现在这里。</string>
     <!-- L-14：搜索无结果 ≠ 一条记录都没有，两者文案必须分开 -->
     <string name="history_no_result">没有匹配「%1$s」的行程</string>
     <string name="history_delete_title">删除行程</string>
@@ -123,6 +145,16 @@
     <string name="plan_entry">计划线路</string>
     <string name="plan_back">返回</string>
     <string name="plan_search_hint">搜索起点或终点地名</string>
+    <string name="plan_select_title">选择起终点</string>
+    <string name="plan_swap">互换起终点</string>
+    <string name="plan_next">下一步</string>
+    <string name="plan_pick_hint">点击地图、搜索或点底图标记选择</string>
+    <string name="plan_waypoint_count">已添加 %1$d / 50 个</string>
+    <string name="plan_choose_this">选择此线路</string>
+    <string name="plan_note_hint">备注（可选）</string>
+    <string name="plan_leg_out">去程</string>
+    <string name="plan_leg_ret">返程</string>
+    <string name="plan_difficulty_label">难度</string>
     <string name="plan_target_start">起点</string>
     <string name="plan_target_end">终点</string>
     <string name="plan_point_unset">未设置</string>
@@ -162,6 +194,9 @@
     <string name="plan_save_plan">保存计划</string>
     <string name="plan_replan_return">重新规划返程</string>
     <string name="plan_list_title">计划线路</string>
+    <string name="plan_new_route">新建线路</string>
+    <string name="plan_list_empty_title">还没有计划线路</string>
+    <string name="plan_list_empty_desc">先在地图上选好起点和终点，系统会推荐合适的线路。</string>
     <string name="plan_list_empty">还没有计划线路，去地图上创建一个吧</string>
     <string name="plan_list_rename">重命名线路</string>
     <string name="plan_unnamed_route">未命名线路</string>
