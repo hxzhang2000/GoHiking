@@ -144,6 +144,7 @@ dependencies {
     implementation(project(":core:datastore")) // readLanguageBlocking（F-I18N-11 语言重启生效）
     implementation(project(":core:map"))
     implementation(project(":core:location")) // LocationProvider 注入（F-PLAN-07 计划页当前位置）
+    implementation(project(":core:model")) // PolylineJson.decode 返回 LatLngValue（开始记录弹窗最近计划）
     implementation(project(":core:database")) // PlannedRouteDao 注入（F-PLAN-14 计划线路落库）
     implementation(project(":core:elevation")) // ElevationRepository 注入（F-PLAN-11/46 高程评估）
     implementation(project(":core:resources"))

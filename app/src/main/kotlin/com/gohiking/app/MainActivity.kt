@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -57,6 +58,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -89,8 +91,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.amap.api.maps.AMap
 import com.amap.api.maps.CameraUpdateFactory
+import com.amap.api.maps.LocationSource
 import com.amap.api.maps.MapView
 import com.amap.api.maps.MapsInitializer
+import com.amap.api.maps.model.MyLocationStyle
 import com.amap.api.maps.model.LatLng
 import com.gohiking.core.data.io.BackupBuilder
 import com.gohiking.core.data.io.ConflictPolicy
@@ -106,6 +110,8 @@ import com.gohiking.core.data.recording.RecordingSession
 import com.gohiking.core.data.recording.SessionState
 import com.gohiking.core.data.repository.TripRepository
 import com.gohiking.core.common.format.DisplayUnitProvider
+import com.gohiking.core.common.format.Formatters
+import com.gohiking.core.common.geo.PolylineJson
 import com.gohiking.core.common.format.DisplayUnits
 import com.gohiking.core.datastore.AppSettings
 import com.gohiking.core.datastore.SettingsRepository
@@ -578,6 +584,7 @@ private fun Root(
                 )
                 else -> MapVerifyScreen(
                     locationProvider = locationProvider,
+                    plannedRouteDao = plannedRouteDao,
                     session = session,
                     bottomInset = TAB_BAR_HEIGHT,
                     onOpenPlan = { showPlan = true },
@@ -729,7 +736,8 @@ private fun MapVerifyScreen(
     onOpenPlan: () -> Unit = {},
     onOpenPlanTab: () -> Unit = {}, // P-02 homebar「计划线路」→ 计划 Tab（原型 data-go=p07）
     onOpenPhotoMap: () -> Unit = {}, // P-12 照片地图（M4-B2）
-    locationProvider: LocationProvider, // P-02 定位按钮：复用全局 SwitchingLocationProvider
+    locationProvider: LocationProvider, // P-02 定位按钮/蓝点：复用全局 SwitchingLocationProvider
+    plannedRouteDao: PlannedRouteDao, // 开始记录弹窗：计划列表 + 最近推荐
     bottomInset: Dp = 0.dp, // Tab 模式：底部 tabbar 高度（homebar/chip 抬升）
 ) {
     val context = LocalContext.current
@@ -741,6 +749,7 @@ private fun MapVerifyScreen(
     var mapType by remember { mutableStateOf(AMap.MAP_TYPE_NORMAL) } // P-02 图层：普通/卫星/夜间/导航
     var showLayerMenu by remember { mutableStateOf(false) }
     var locating by remember { mutableStateOf(false) }
+    var myLocOn by remember { mutableStateOf(false) } // 蓝点图层开关（定位授权后常显）
     var lastPoiAtMs by remember { mutableLongStateOf(0L) }
     var lastMapClickAtMs by remember { mutableLongStateOf(0L) }
     var showStartDialog by rememberSaveable { mutableStateOf(false) } // F-REC-02：开始前可选命名
@@ -773,6 +782,15 @@ private fun MapVerifyScreen(
         MapsInitializer.updatePrivacyAgree(context, true)
         MapView(context).apply {
             onCreate(null)
+            // 需求 1：当前位置蓝点（高德 App 同款：蓝点 + 白边 + 淡蓝精度圈 + 方向旋转），
+            // 定位源接全局 LocationProvider，避免另起一条 AMap 定位链（合规/省电双重考虑）
+            map.setLocationSource(ProviderLocationSource(locationProvider, scope))
+            map.myLocationStyle = MyLocationStyle().apply {
+                myLocationType(MyLocationStyle.LOCATION_TYPE_LOCATION_ROTATE_NO_CENTER) // 蓝点常显+方向，不自动挪图
+                radiusFillColor(android.graphics.Color.argb(18, 47, 128, 237))
+                strokeColor(android.graphics.Color.argb(70, 47, 128, 237))
+                strokeWidth(2f)
+            }
             map.uiSettings.isZoomControlsEnabled = false // P-02：缩放由右侧地图按钮承担
             // 默认视角：中国全域；定位到当前位置由「蓝点接入」后处理
             map.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(35.86, 104.19), 3.8f))
@@ -814,19 +832,57 @@ private fun MapVerifyScreen(
             mapView.onDestroy()
         }
     }
+    // 蓝点图层随页面存亡（已授权才开；记录页覆盖首页时自动随 dispose 关闭，定位让给会话）
+    DisposableEffect(Unit) {
+        if (locationGranted()) {
+            runCatching { mapView.map.isMyLocationEnabled = true }
+                .onFailure { Timber.w(it, "isMyLocationEnabled 失败") }
+            myLocOn = true
+        }
+        onDispose {
+            runCatching { mapView.map.isMyLocationEnabled = false }
+            myLocOn = false
+        }
+    }
 
     // 定位权限（F-REC-53 首层：FINE+COARSE；BACKGROUND 在开始记录引导，M1 下一批）
+    // 需求 2：开始记录弹窗的待启动参数（权限通过后回填启动）
+    var pendingPlanId by rememberSaveable { mutableStateOf<String?>(null) } // null = 随意记录
+    var pendingStartName by rememberSaveable { mutableStateOf("") }
+
+    fun doStart() {
+        session.start(pendingStartName.trim(), plannedRouteId = pendingPlanId) // 空名 → stop() 日期时间命名（F-REC-08）
+        pendingPlanId = null
+        pendingStartName = ""
+        pendingServiceStart = true // H-05：延后到 ON_RESUME 之后
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { grants ->
         val granted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         if (granted) {
-            session.start(startName.trim(), plannedRouteId = null) // 空名 → stop() 日期时间命名（F-REC-08）
-            startName = ""
-            pendingServiceStart = true // H-05：延后到 ON_RESUME 之后
+            doStart()
         } else {
             showPermissionHint = true
+        }
+    }
+
+    fun launchStart(planId: String?, name: String) {
+        pendingPlanId = planId
+        pendingStartName = name
+        if (locationGranted()) {
+            doStart()
+        } else {
+            val permissions = buildList {
+                add(Manifest.permission.ACCESS_FINE_LOCATION)
+                add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+                // N-28：API 29+ 起 ACTIVITY_RECOGNITION 是运行时权限，未授权时计步源会被「选中」但收不到数据
+                if (Build.VERSION.SDK_INT >= 29) add(Manifest.permission.ACTIVITY_RECOGNITION)
+            }.toTypedArray()
+            permissionLauncher.launch(permissions)
         }
     }
 
@@ -924,19 +980,15 @@ private fun MapVerifyScreen(
                 if (!locationGranted()) {
                     showPermissionHint = true
                 } else if (!locating) {
-                    // P-02：复用全局 SwitchingLocationProvider 拿首个 fix 居中（8s 超时）
+                    // P-02：定位按钮 = 居中到当前位置（蓝点常显；蓝点未开时临时起一次定位）
                     locating = true
                     Toast.makeText(context, context.getString(CoreR.string.home_locating), Toast.LENGTH_SHORT).show()
                     scope.launch {
-                        var fix: com.gohiking.core.location.LocationFix? = null
-                        try {
-                            locationProvider.start(1000)
-                            fix = withTimeoutOrNull(8_000) { locationProvider.fixes.first() }
-                        } catch (e: Exception) {
-                            Timber.w(e, "首页定位失败")
-                        } finally {
-                            runCatching { locationProvider.stop() }
-                        }
+                        val fix = runCatching {
+                            if (!myLocOn) locationProvider.start(1000)
+                            withTimeoutOrNull(8_000) { locationProvider.fixes.first() }
+                        }.getOrNull()
+                        if (!myLocOn) runCatching { locationProvider.stop() }
                         locating = false
                         if (fix != null) {
                             mapView.map.moveCamera(
@@ -997,37 +1049,117 @@ private fun MapVerifyScreen(
         }
     }
 
-    // F-REC-02：开始前可选命名；关联计划线路属 F-PLAN，M2 接入
+    // 需求 2：开始记录 = 列出计划（按定位推荐最近）或随意记录（F-REC-02 命名保留）
     if (showStartDialog) {
+        val savedPlans by plannedRouteDao.observeAllWithLegs()
+            .collectAsStateWithLifecycle(initialValue = emptyList())
+        var selectedPlanId by rememberSaveable { mutableStateOf<String?>(null) } // null = 随意记录
+        var defaultPlanId by rememberSaveable { mutableStateOf<String?>(null) }
+        var nameInput by rememberSaveable { mutableStateOf("") }
+        var planDistances by remember { mutableStateOf<Map<String, Float>>(emptyMap()) }
+        var locatingPlan by remember { mutableStateOf(false) }
+
+        // 打开弹窗：已授权则取一次定位，为每个计划算「outbound 首点距您距离」，最近者默认选中
+        LaunchedEffect(showStartDialog, savedPlans.size) {
+            if (!showStartDialog || !locationGranted() || locatingPlan) return@LaunchedEffect
+            locatingPlan = true
+            val fix = runCatching {
+                if (!myLocOn) locationProvider.start(1000)
+                withTimeoutOrNull(6_000) { locationProvider.fixes.first() }
+            }.getOrNull()
+            if (fix != null && savedPlans.isNotEmpty()) {
+                val dists = savedPlans.associate { plan ->
+                    plan.route.id to nearestDistanceMeters(fix, plan)
+                }
+                planDistances = dists
+                defaultPlanId = dists.minByOrNull { it.value }?.key
+                selectedPlanId = defaultPlanId
+                defaultPlanId?.let { pid ->
+                    savedPlans.firstOrNull { it.route.id == pid }?.let { nameInput = it.route.name }
+                }
+            }
+            if (!myLocOn) runCatching { locationProvider.stop() } // 蓝点没开时回收临时定位
+            locatingPlan = false
+        }
+
         AlertDialog(
             onDismissRequest = { showStartDialog = false },
             title = { Text(stringResource(CoreR.string.rec_start_dialog_title)) },
             text = {
-                OutlinedTextField(
-                    value = startName,
-                    onValueChange = { startName = it },
-                    placeholder = { Text(stringResource(CoreR.string.rec_start_name_hint)) },
-                    singleLine = true,
-                )
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        text = stringResource(CoreR.string.rec_start_pick_plan),
+                        fontSize = 12.sp,
+                        color = GhColors.TextSecondary,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    if (savedPlans.isEmpty()) {
+                        Text(
+                            text = stringResource(CoreR.string.rec_start_plans_empty),
+                            fontSize = 12.sp,
+                            color = GhColors.TextSecondary,
+                        )
+                    } else {
+                        if (locatingPlan) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = stringResource(CoreR.string.rec_start_locating_plan),
+                                    fontSize = 11.sp,
+                                    color = GhColors.TextSecondary,
+                                )
+                            }
+                            Spacer(Modifier.height(4.dp))
+                        }
+                        PlanPickRow(
+                            title = stringResource(CoreR.string.rec_start_free),
+                            subtitle = null,
+                            badge = null,
+                            selected = selectedPlanId == null,
+                            onClick = {
+                                selectedPlanId = null
+                                nameInput = ""
+                            },
+                        )
+                        savedPlans.forEach { plan ->
+                            val dist = planDistances[plan.route.id]
+                            PlanPickRow(
+                                title = plan.route.name,
+                                subtitle = Formatters.distanceText(plan.route.totalDistanceM),
+                                badge = when {
+                                    plan.route.id == defaultPlanId -> stringResource(CoreR.string.rec_start_nearest)
+                                    dist != null -> stringResource(CoreR.string.rec_start_distance, Formatters.distanceText(dist.toDouble()))
+                                    else -> null
+                                },
+                                selected = selectedPlanId == plan.route.id,
+                                onClick = {
+                                    selectedPlanId = plan.route.id
+                                    nameInput = plan.route.name // 关联计划默认以计划命名（可改）
+                                },
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = nameInput,
+                        onValueChange = { nameInput = it },
+                        placeholder = { Text(stringResource(CoreR.string.rec_start_name_hint)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
                     showStartDialog = false
-                    val permissions = buildList {
-                        add(Manifest.permission.ACCESS_FINE_LOCATION)
-                        add(Manifest.permission.ACCESS_COARSE_LOCATION)
-                        if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
-                        // N-28：API 29+ 起 ACTIVITY_RECOGNITION 是运行时权限，未授权时计步源会被「选中」但收不到数据
-                        if (Build.VERSION.SDK_INT >= 29) add(Manifest.permission.ACTIVITY_RECOGNITION)
-                    }.toTypedArray()
-                    permissionLauncher.launch(permissions)
+                    launchStart(selectedPlanId, nameInput)
                 }) { Text(stringResource(CoreR.string.common_action_confirm)) }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    showStartDialog = false
-                    startName = ""
-                }) { Text(stringResource(CoreR.string.common_action_cancel)) }
+                TextButton(onClick = { showStartDialog = false }) {
+                    Text(stringResource(CoreR.string.common_action_cancel))
+                }
             },
         )
     }
@@ -1409,3 +1541,117 @@ private fun MainTabBar(
         }
     }
 }
+
+/** 需求 2：开始记录弹窗的行（计划 / 随意记录），选中态蓝底。 */
+@Composable
+private fun PlanPickRow(
+    title: String,
+    subtitle: String?,
+    badge: String?,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (selected) GhColors.TagBlueBg else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 9.dp),
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Spacer(Modifier.width(8.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontSize = 14.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                maxLines = 1,
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    fontSize = 11.sp,
+                    color = GhColors.TextSecondary,
+                    maxLines = 1,
+                )
+            }
+        }
+        if (badge != null) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(GhColors.TagBlueBg)
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            ) {
+                Text(text = badge, fontSize = 10.sp, color = GhColors.TagBlueFg)
+            }
+        }
+    }
+}
+
+/** 需求 2：计划 outbound 首点到当前位置的距离（推荐「最近」计划的依据）。 */
+private fun nearestDistanceMeters(
+    fix: com.gohiking.core.location.LocationFix,
+    plan: com.gohiking.core.database.entity.PlannedRouteWithLegs,
+): Float {
+    val leg = plan.legs.firstOrNull { it.legType == "OUTBOUND" } ?: plan.legs.firstOrNull()
+    val first = leg?.let { leg ->
+        runCatching { PolylineJson.decode(leg.polylineJson) }.getOrNull()
+    }?.firstOrNull() ?: return Float.MAX_VALUE
+    return distanceMeters(fix.lat, fix.lng, first.latitude, first.longitude).toFloat()
+}
+
+/** Haversine 球面距离（米）。GCJ-02 同系坐标直接算，误差远小于「最近」判据粒度。 */
+private fun distanceMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
+    val r = 6371000.0
+    val p1 = Math.toRadians(lat1)
+    val p2 = Math.toRadians(lat2)
+    val dp = Math.toRadians(lat2 - lat1)
+    val dl = Math.toRadians(lng2 - lng1)
+    val a = Math.pow(Math.sin(dp / 2), 2.0) + Math.cos(p1) * Math.cos(p2) * Math.pow(Math.sin(dl / 2), 2.0)
+    return 2 * r * Math.asin(Math.sqrt(a))
+}
+
+/**
+ * 需求 1：把全局 LocationProvider 流桥接到高德「我的位置」图层——
+ * 蓝点/精度圈样式由 MyLocationStyle 承担（高德 App 同款），定位源只有一条链
+ * （SwitchingLocationProvider），避免 SDK 默认源另起 AMapLocationClient 双份耗电。
+ */
+private class ProviderLocationSource(
+    private val provider: LocationProvider,
+    private val scope: kotlinx.coroutines.CoroutineScope,
+) : LocationSource {
+    private var listener: LocationSource.OnLocationChangedListener? = null
+    private var job: kotlinx.coroutines.Job? = null
+
+    override fun activate(l: LocationSource.OnLocationChangedListener?) {
+        listener = l
+        job?.cancel()
+        job = scope.launch {
+            runCatching { provider.start(1000) }
+            provider.fixes.collect { fix ->
+                listener?.onLocationChanged(fix.toAndroidLocation())
+            }
+        }
+    }
+
+    override fun deactivate() {
+        job?.cancel()
+        job = null
+        listener = null
+        runCatching { provider.stop() }
+    }
+}
+
+private fun com.gohiking.core.location.LocationFix.toAndroidLocation(): android.location.Location =
+    android.location.Location("GoHiking").apply {
+        latitude = this@toAndroidLocation.lat
+        longitude = this@toAndroidLocation.lng
+        altitude = this@toAndroidLocation.altitudeM ?: 0.0
+        accuracy = this@toAndroidLocation.accuracyM
+        bearing = this@toAndroidLocation.bearing
+        speed = this@toAndroidLocation.speedMps
+        time = this@toAndroidLocation.timestampMs
+    }

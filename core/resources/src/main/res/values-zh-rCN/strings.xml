@@ -106,6 +106,12 @@
     <string name="rec_marker_dialog_title">添加标记</string>
     <string name="rec_marker_note_hint">备注（如：补水点、危险路段）</string>
     <string name="rec_start_dialog_title">开始记录</string>
+    <string name="rec_start_pick_plan">选择计划</string>
+    <string name="rec_start_free">不关联计划，随意记录</string>
+    <string name="rec_start_nearest">最近</string>
+    <string name="rec_start_distance">距您 %1$s</string>
+    <string name="rec_start_plans_empty">还没有计划线路，可直接随意记录。</string>
+    <string name="rec_start_locating_plan">正在定位以推荐最近计划…</string>
     <string name="rec_start_name_hint">行程名称（可选）</string>
     <string name="rec_stop_hint">长按停止（1.5 秒）</string>
     <string name="rec_stop_holding">继续按住…</string>

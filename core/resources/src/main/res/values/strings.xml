@@ -107,6 +107,12 @@
     <string name="rec_marker_dialog_title">Drop a marker</string>
     <string name="rec_marker_note_hint">Note (e.g. water spot, hazard)</string>
     <string name="rec_start_dialog_title">Start recording</string>
+    <string name="rec_start_pick_plan">Pick a plan</string>
+    <string name="rec_start_free">No plan — record freely</string>
+    <string name="rec_start_nearest">Nearest</string>
+    <string name="rec_start_distance">%1$s away</string>
+    <string name="rec_start_plans_empty">No planned routes yet — record freely.</string>
+    <string name="rec_start_locating_plan">Locating to suggest the nearest plan…</string>
     <string name="rec_start_name_hint">Trip name (optional)</string>
     <string name="rec_stop_hint">Hold to stop (1.5 s)</string>
     <string name="rec_stop_holding">Keep holding…</string>
