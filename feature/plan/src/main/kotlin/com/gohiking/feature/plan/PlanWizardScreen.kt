@@ -42,6 +42,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,6 +70,7 @@ import com.amap.api.maps.model.LatLng
 import com.amap.api.maps.model.LatLngBounds
 import com.amap.api.maps.model.Marker
 import com.amap.api.maps.model.MarkerOptions
+import com.amap.api.maps.model.Polyline
 import com.amap.api.maps.model.PolylineOptions
 import com.gohiking.core.common.format.Formatters
 import com.gohiking.core.database.dao.PlannedRouteDao
@@ -141,18 +143,32 @@ fun PlanWizardScreen(
         }
     }
 
-    // 折线渲染：候选浅蓝 / 选中深蓝粗 / 手动段（吸附实线 直线虚线）/ 定稿去程 / 返程虚线；失效半透明
+    val currentState = rememberUpdatedState(state)
+    val markerRefs = remember { mutableListOf<Marker>() }
+    val markerTarget = remember { mutableStateOf<MutableMap<Marker, SelectTarget>>(mutableMapOf()) }
+    val markerWpIndex = remember { mutableStateOf<MutableMap<Marker, Int>>(mutableMapOf()) }
+    val polylineRefs = remember { mutableListOf<Polyline>() }
+
+    // 单一渲染 effect：clear 后同帧重建全部折线与 marker（消除两 effect 互相 clear 的竞态）
     LaunchedEffect(
+        state.start, state.end, state.manualWaypoints, state.returnWaypoints,
         state.candidates, state.chosenIndex, state.manualSegments, state.smartMode,
-        state.outboundPoints, state.outboundStale, state.returnPoints, state.returnStale,
+        state.outboundPoints, state.outboundStale, state.outboundReady,
+        state.returnPoints, state.returnStale,
         trackWidthPx, candWidthPx,
     ) {
         val aMap = mapView.map
-        aMap.clear()
+        polylineRefs.forEach { it.remove() }
+        polylineRefs.clear()
+        markerRefs.forEach { it.remove() }
+        markerRefs.clear()
+        markerTarget.value = mutableMapOf()
+        markerWpIndex.value = mutableMapOf()
+        // 智能候选（浅蓝细线；选中深蓝粗线）
         state.candidates.forEachIndexed { i, c ->
             if (c.path.points.size >= 2) {
                 val selected = i == state.chosenIndex
-                aMap.addPolyline(
+                polylineRefs += aMap.addPolyline(
                     PolylineOptions()
                         .addAll(c.path.points)
                         .width(if (selected) trackWidthPx else candWidthPx)
@@ -161,9 +177,10 @@ fun PlanWizardScreen(
                 )
             }
         }
+        // 手动段（吸附实线蓝 / 直线虚线灰蓝）
         state.manualSegments.forEach { seg ->
             if (seg.points.size >= 2) {
-                aMap.addPolyline(
+                polylineRefs += aMap.addPolyline(
                     PolylineOptions()
                         .addAll(seg.points)
                         .width(candWidthPx)
@@ -173,8 +190,9 @@ fun PlanWizardScreen(
                 )
             }
         }
+        // 定稿去程（蓝实线；失效半透明）
         if (state.outboundPoints.size >= 2 && state.outboundReady) {
-            aMap.addPolyline(
+            polylineRefs += aMap.addPolyline(
                 PolylineOptions()
                     .addAll(state.outboundPoints)
                     .width(trackWidthPx)
@@ -182,8 +200,9 @@ fun PlanWizardScreen(
                     .zIndex(5f),
             )
         }
+        // 返程（深蓝虚线；失效半透明）
         if (state.returnPoints.size >= 2) {
-            aMap.addPolyline(
+            polylineRefs += aMap.addPolyline(
                 PolylineOptions()
                     .addAll(state.returnPoints)
                     .width(candWidthPx * 1.5f)
@@ -192,6 +211,37 @@ fun PlanWizardScreen(
                     .zIndex(4f),
             )
         }
+        // markers：起点绿 / 终点红（可拖）；途经点紫序号（可拖/点击删除）
+        state.start?.let { p ->
+            val mk = aMap.addMarker(
+                MarkerOptions().position(p.latLng)
+                    .title(context.getString(CoreR.string.plan_target_start))
+                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN))
+                    .draggable(true),
+            )
+            markerRefs += mk
+            markerTarget.value[mk] = SelectTarget.START
+        }
+        state.end?.let { p ->
+            val mk = aMap.addMarker(
+                MarkerOptions().position(p.latLng)
+                    .title(context.getString(CoreR.string.plan_target_end))
+                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
+                    .draggable(true),
+            )
+            markerRefs += mk
+            markerTarget.value[mk] = SelectTarget.END
+        }
+        state.manualWaypoints.forEachIndexed { i, wp ->
+            val mk = aMap.addMarker(
+                MarkerOptions().position(wp.latLng).title((i + 1).toString())
+                    .icon(BitmapDescriptorFactory.fromBitmap(numberedWizardBitmap(i + 1)))
+                    .draggable(true),
+            )
+            markerRefs += mk
+            markerWpIndex.value[mk] = i
+        }
+        // 相机：包含全部兴趣点
         val pts = state.candidates.flatMap { it.path.points } +
             state.manualSegments.flatMap { it.points } +
             state.outboundPoints + state.returnPoints +
@@ -204,68 +254,45 @@ fun PlanWizardScreen(
         }
     }
 
-    // markers：起点绿 / 终点红（可拖，拖动触发失效联动）；途经点紫序号（可拖/点击删除）
-    val markerRefs = remember { mutableListOf<Marker>() }
-    LaunchedEffect(state.start, state.end, state.manualWaypoints, state.returnWaypoints) {
+    // 交互监听：注册一次，经 rememberUpdatedState 读取最新状态（避免闭包过期）
+    DisposableEffect(Unit) {
         val aMap = mapView.map
-        markerRefs.forEach { it.remove() }
-        markerRefs.clear()
-        state.start?.let { p ->
-            markerRefs += aMap.addMarker(
-                MarkerOptions().position(p.latLng)
-                    .title(context.getString(CoreR.string.plan_target_start))
-                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN))
-                    .draggable(true),
-            )
-        }
-        state.end?.let { p ->
-            markerRefs += aMap.addMarker(
-                MarkerOptions().position(p.latLng)
-                    .title(context.getString(CoreR.string.plan_target_end))
-                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
-                    .draggable(true),
-            )
-        }
-        state.manualWaypoints.forEachIndexed { i, wp ->
-            markerRefs += aMap.addMarker(
-                MarkerOptions().position(wp.latLng).title((i + 1).toString())
-                    .icon(BitmapDescriptorFactory.fromBitmap(numberedWizardBitmap(i + 1)))
-                    .draggable(true),
-            )
+        aMap.setOnMapClickListener { latLng ->
+            val s = currentState.value
+            when (s.step) {
+                WizardStep.START -> viewModel.pickStart(PlanPoint(null, latLng))
+                WizardStep.END -> viewModel.pickEnd(PlanPoint(null, latLng))
+                WizardStep.OUTBOUND -> if (!s.smartMode) viewModel.addWaypoint(latLng)
+                WizardStep.RETURN -> if (s.returnMode == WizardReturnMode.MANUAL) viewModel.addReturnWaypoint(latLng)
+                else -> Unit
+            }
         }
         aMap.setOnMarkerDragListener(object : AMap.OnMarkerDragListener {
             override fun onMarkerDragStart(marker: Marker) = Unit
             override fun onMarkerDrag(marker: Marker) = Unit
             override fun onMarkerDragEnd(marker: Marker) {
-                when (marker.title) {
-                    context.getString(CoreR.string.plan_target_start) -> viewModel.pickStart(PlanPoint(null, marker.position))
-                    context.getString(CoreR.string.plan_target_end) -> viewModel.pickEnd(PlanPoint(null, marker.position))
-                    else -> {
-                        val idx = state.manualWaypoints.indexOfFirst { it.latLng == marker.position }
-                        if (idx >= 0) viewModel.moveWaypoint(idx, marker.position)
-                    }
+                when (markerTarget.value[marker]) {
+                    SelectTarget.START -> viewModel.pickStart(PlanPoint(null, marker.position))
+                    SelectTarget.END -> viewModel.pickEnd(PlanPoint(null, marker.position))
+                    else -> markerWpIndex.value[marker]?.let { idx -> viewModel.moveWaypoint(idx, marker.position) }
                 }
             }
         })
         aMap.setOnMarkerClickListener { marker ->
-            val idx = state.manualWaypoints.indexOfFirst { it.latLng == marker.position }
-            if (idx >= 0 && marker.title != context.getString(CoreR.string.plan_target_start) && marker.title != context.getString(CoreR.string.plan_target_end)) {
-                deleteWpIndex = idx
+            if (markerWpIndex.value.containsKey(marker)) {
+                deleteWpIndex = markerWpIndex.value[marker]
                 true
             } else {
                 false
             }
         }
-        aMap.setOnMapClickListener { latLng ->
-            when (state.step) {
-                WizardStep.START -> viewModel.pickStart(PlanPoint(null, latLng))
-                WizardStep.END -> viewModel.pickEnd(PlanPoint(null, latLng))
-                WizardStep.OUTBOUND -> if (!state.smartMode) viewModel.addWaypoint(latLng)
-                WizardStep.RETURN -> if (state.returnMode == WizardReturnMode.MANUAL) viewModel.addReturnWaypoint(latLng)
-                else -> Unit
-            }
+        onDispose {
+            aMap.setOnMapClickListener(null)
+            aMap.setOnMarkerDragListener(null)
+            aMap.setOnMarkerClickListener(null)
         }
     }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -497,7 +524,11 @@ private fun PointPickPanel(
     Column {
         Text(
             text = stringResource(if (step == WizardStep.START) CoreR.string.plan_target_start else CoreR.string.plan_target_end) +
-                " · " + (selected?.name ?: stringResource(CoreR.string.plan_point_unset)),
+                " · " + (
+                    selected?.let { p ->
+                        p.name ?: String.format(java.util.Locale.ROOT, "%.5f, %.5f", p.latLng.latitude, p.latLng.longitude)
+                    } ?: stringResource(CoreR.string.plan_point_unset)
+                ),
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
             color = GhColors.TextPrimary,

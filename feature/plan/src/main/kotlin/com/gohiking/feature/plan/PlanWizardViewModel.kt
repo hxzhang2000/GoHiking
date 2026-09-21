@@ -206,6 +206,7 @@ class PlanWizardViewModel(
                         outboundPoints = kept.first().points,
                         outboundDistM = kept.first().distanceM.toDouble(),
                         outboundDurS = kept.first().durationS,
+                        outboundStale = false,
                     )
                 }
             } else {
@@ -223,6 +224,7 @@ class PlanWizardViewModel(
                         outboundPoints = merged.points,
                         outboundDistM = merged.distanceM.toDouble(),
                         outboundDurS = merged.durationS,
+                        outboundStale = false,
                     )
                 }
             }
@@ -233,7 +235,7 @@ class PlanWizardViewModel(
         val s = _state.value
         val c = s.candidates.getOrNull(index) ?: return
         _state.update {
-            it.copy(chosenIndex = index, outboundPoints = c.path.points, outboundDistM = c.path.distanceM.toDouble(), outboundDurS = c.path.durationS)
+            it.copy(chosenIndex = index, outboundPoints = c.path.points, outboundDistM = c.path.distanceM.toDouble(), outboundDurS = c.path.durationS, outboundStale = false)
         }
     }
 
