@@ -75,8 +75,11 @@ class RouteSearchClient(context: Context) {
                         if (rCode != RCODE_OK) Log.w(TAG, "高德步行规划 V2 rCode=$rCode")
                         if (cont.isActive) {
                             cont.resume(
-                                if (rCode == RCODE_OK && result != null) result.paths.map { it.toPlannedPath() }
-                                else emptyList(),
+                                if (rCode == RCODE_OK && result != null) {
+                                    // 部分路线（过短/不可步行）会返回 distance 有值但 steps/polyline 为空——
+                                    // 必须剔除，否则「假成功」一路走到 chips/保存/详情，全线无声无线
+                                    result.paths.map { it.toPlannedPath() }.filter { it.points.size >= 2 }
+                                } else emptyList(),
                             )
                         }
                     }
@@ -107,8 +110,11 @@ class RouteSearchClient(context: Context) {
                         if (rCode != RCODE_OK) Log.w(TAG, "高德步行规划 V1 rCode=$rCode")
                         if (cont.isActive) {
                             cont.resume(
-                                if (rCode == RCODE_OK && result != null) result.paths.map { it.toPlannedPath() }
-                                else emptyList(),
+                                if (rCode == RCODE_OK && result != null) {
+                                    // 部分路线（过短/不可步行）会返回 distance 有值但 steps/polyline 为空——
+                                    // 必须剔除，否则「假成功」一路走到 chips/保存/详情，全线无声无线
+                                    result.paths.map { it.toPlannedPath() }.filter { it.points.size >= 2 }
+                                } else emptyList(),
                             )
                         }
                     }
