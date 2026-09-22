@@ -188,19 +188,24 @@ fun RecordingScreen(
         }
     }
 
+    val trackRefs = remember { mutableListOf<Polyline>() }
     // 轨迹绘制：先拉历史点（崩溃恢复 / 重进页面 F-REC-09），再订阅实时采样。
     // 只画 quality==0 点——与统计口径一致，避免「画出的线与保存的数据不一样」。
     LaunchedEffect(active?.tripId) {
         val tripId = active?.tripId ?: return@LaunchedEffect
         val aMap = mapView.map
-        aMap.clear()
+        // 自持轨迹折线引用：不能用 aMap.clear()——会连带清掉 F-PLAN-44 计划蓝线
+        trackRefs.forEach { it.remove() }
+        trackRefs.clear()
         val polylines = HashMap<Int, Polyline>()
         fun appendPoint(seg: Int, ll: LatLng, follow: Boolean) {
             val existing = polylines[seg]
             if (existing == null) {
-                polylines[seg] = aMap.addPolyline(
+                val pl = aMap.addPolyline(
                     PolylineOptions().add(ll).width(trackWidthPx).color(TRACK_RED).zIndex(10f),
                 )
+                polylines[seg] = pl
+                trackRefs += pl
             } else {
                 val pts = ArrayList(existing.points)
                 pts.add(ll)

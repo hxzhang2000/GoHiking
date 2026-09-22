@@ -135,12 +135,14 @@ fun PlanDetailScreen(
         }
     }
 
-    // 折线：去程蓝实线 + 返程深蓝虚线（同 P-03/P-08 配色语义）
+    // 折线：去程蓝实线 + 返程深蓝虚线（自持引用，不用 aMap.clear() 以免清掉 markers）
+    val polylineRefs = remember { mutableListOf<Polyline>() }
     LaunchedEffect(state.outboundPoints, state.returnPoints, trackWidthPx, planWidthPx) {
         val aMap = mapView.map
-        aMap.clear()
+        polylineRefs.forEach { it.remove() }
+        polylineRefs.clear()
         if (state.outboundPoints.size >= 2) {
-            aMap.addPolyline(
+            polylineRefs += aMap.addPolyline(
                 PolylineOptions()
                     .addAll(state.outboundPoints)
                     .width(trackWidthPx)
@@ -149,7 +151,7 @@ fun PlanDetailScreen(
             )
         }
         if (state.returnPoints.size >= 2) {
-            aMap.addPolyline(
+            polylineRefs += aMap.addPolyline(
                 PolylineOptions()
                     .addAll(state.returnPoints)
                     .width(planWidthPx)
@@ -210,13 +212,15 @@ fun PlanDetailScreen(
                 }
             }
         })
-        // 相机：包含全部路线点（首次加载即定位到计划位置）
-        val pts = state.outboundPoints + state.returnPoints +
-            listOfNotNull(state.start, state.end) + state.waypoints
+    }
+
+    // 相机：仅随路线内容变化 fit（拖动 marker 不触发，避免视角跳走）
+    LaunchedEffect(state.outboundPoints, state.returnPoints) {
+        val pts = state.outboundPoints + state.returnPoints
         if (pts.isNotEmpty()) {
             val builder = LatLngBounds.Builder()
             pts.forEach { builder.include(it) }
-            aMap.moveCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), 120))
+            mapView.map.moveCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), 120))
         }
     }
 

@@ -199,7 +199,7 @@ class PlanWizardViewModel(
                 }
                 val kept = dedupe(paths)
                 _state.update {
-                    it.copy(
+                    var st = it.copy(
                         planning = false,
                         candidates = kept.map { p -> RouteCandidate(path = p) },
                         chosenIndex = 0,
@@ -208,6 +208,13 @@ class PlanWizardViewModel(
                         outboundDurS = kept.first().durationS,
                         outboundStale = false,
                     )
+                    // 文档 §2 联动：BACK 返程自动跟随反向；独立规划返程置失效提示
+                    if (st.returnMode == WizardReturnMode.BACK && st.returnReady) {
+                        st = st.copy(returnPoints = st.outboundPoints.reversed(), returnDistM = st.outboundDistM, returnDurS = st.outboundDurS)
+                    } else if (st.returnMode != null && st.returnMode != WizardReturnMode.SKIPPED && st.returnReady) {
+                        st = st.copy(returnStale = true)
+                    }
+                    st
                 }
             } else {
                 val chain = listOf(start) + wps.map { it.latLng } + listOf(end)
@@ -217,7 +224,7 @@ class PlanWizardViewModel(
                     return@launch
                 }
                 _state.update {
-                    it.copy(
+                    var st = it.copy(
                         planning = false,
                         candidates = emptyList(),
                         chosenIndex = -1,
@@ -226,6 +233,13 @@ class PlanWizardViewModel(
                         outboundDurS = merged.durationS,
                         outboundStale = false,
                     )
+                    // 文档 §2 联动：BACK 返程自动跟随反向；独立规划返程置失效提示
+                    if (st.returnMode == WizardReturnMode.BACK && st.returnReady) {
+                        st = st.copy(returnPoints = st.outboundPoints.reversed(), returnDistM = st.outboundDistM, returnDurS = st.outboundDurS)
+                    } else if (st.returnMode != null && st.returnMode != WizardReturnMode.SKIPPED && st.returnReady) {
+                        st = st.copy(returnStale = true)
+                    }
+                    st
                 }
             }
         }

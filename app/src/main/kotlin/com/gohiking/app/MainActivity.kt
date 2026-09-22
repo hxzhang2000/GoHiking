@@ -1014,10 +1014,14 @@ private fun MapVerifyScreen(
                     locating = true
                     Toast.makeText(context, context.getString(CoreR.string.home_locating), Toast.LENGTH_SHORT).show()
                     scope.launch {
-                        val fix = runCatching {
+                        val fix = try {
                             if (!myLocOn) locationProvider.start(1000)
                             withTimeoutOrNull(8_000) { locationProvider.fixes.first() }
-                        }.getOrNull()
+                        } catch (c: kotlinx.coroutines.CancellationException) {
+                            throw c
+                        } catch (t: Throwable) {
+                            null
+                        }
                         if (!myLocOn) runCatching { locationProvider.stop() }
                         locating = false
                         if (fix != null) {
@@ -1093,10 +1097,14 @@ private fun MapVerifyScreen(
         LaunchedEffect(showStartDialog, savedPlans.size) {
             if (!showStartDialog || !locationGranted() || locatingPlan) return@LaunchedEffect
             locatingPlan = true
-            val fix = runCatching {
+            val fix = try {
                 if (!myLocOn) locationProvider.start(1000)
                 withTimeoutOrNull(6_000) { locationProvider.fixes.first() }
-            }.getOrNull()
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                null
+            }
             if (fix != null && savedPlans.isNotEmpty()) {
                 val dists = savedPlans.associate { plan ->
                     plan.route.id to nearestDistanceMeters(fix, plan)
